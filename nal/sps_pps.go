@@ -174,7 +174,7 @@ func ParsePPS(payload []byte) (*PPS, error) {
 
 	p.PPSID = r.ReadUE()
 	p.SPSID = r.ReadUE()
-	p.EntropyCodingMode = r.ReadUE()
+	p.EntropyCodingMode = r.ReadBits(1)
 	p.BottomFieldPicOrderInFrame = r.ReadBool()
 	p.NumSliceGroups = r.ReadUE() + 1
 

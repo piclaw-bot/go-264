@@ -1,6 +1,9 @@
 package slice
 
-import "github.com/rcarmo/go-264/nal"
+import (
+	"github.com/rcarmo/go-264/entropy"
+	"github.com/rcarmo/go-264/nal"
+)
 
 // Macroblock types for I-slices (ITU-T H.264 Table 7-11)
 const (
@@ -63,8 +66,37 @@ func DecodeMBIntra(r *nal.Reader, sliceQP int32, ppsEntropy uint32) *MBIntra {
 		mb.QPDelta = r.ReadSE()
 	}
 
-	// Residual data would be decoded here via CAVLC/CABAC
-	// Placeholder: coefficients stay zero (equivalent to skip)
+	// Decode residual data via CAVLC
+	if ppsEntropy == 0 && mb.CodedBlockPattern > 0 {
+		cbpLuma := mb.CodedBlockPattern & 0xF
+		for blk := 0; blk < 16; blk++ {
+			// Check if this 8x8 group has coded coefficients
+			group := blk / 4
+			if cbpLuma&(1<<uint(group)) != 0 {
+				block, _ := entropy.DecodeCAVLCBlock(r, 0) // nC=0 simplified
+				mb.Coeffs[blk] = [16]int16(block)
+			}
+		}
+	}
+	// For I_16x16: DC coefficients are separate
+	if mb.MBType >= 1 && mb.MBType <= 24 && ppsEntropy == 0 {
+		// Decode luma DC (4x4 block of DC values)
+		dcBlock, _ := entropy.DecodeCAVLCBlock(r, 0)
+		// Distribute DC to each 4x4 block
+		for i := 0; i < 16; i++ {
+			mb.Coeffs[i][0] = dcBlock[i]
+		}
+		// Decode AC coefficients if CBP indicates
+		cbpLuma := mb.CodedBlockPattern & 0xF
+		if cbpLuma != 0 {
+			for blk := 0; blk < 16; blk++ {
+				acBlock, _ := entropy.DecodeCAVLCBlock(r, 0)
+				for j := 1; j < 16; j++ {
+					mb.Coeffs[blk][j] = acBlock[j-1]
+				}
+			}
+		}
+	}
 
 	return mb
 }

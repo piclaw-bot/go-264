@@ -14,17 +14,19 @@ type MotionVector struct {
 // stride: reference frame stride
 // Output: predicted 16x16 block
 func InterPred16x16(out []uint8, ref []uint8, stride int, mv MotionVector) {
-	// Full-pixel motion compensation (no sub-pixel for now)
-	fx := int(mv.X) >> 2 // convert quarter-pixel to full pixel
+	fx := int(mv.X) >> 2
 	fy := int(mv.Y) >> 2
+	refH := len(ref) / stride
 
 	for y := 0; y < 16; y++ {
 		for x := 0; x < 16; x++ {
 			srcX := x + fx
 			srcY := y + fy
-			if srcX >= 0 && srcY >= 0 {
-				out[y*16+x] = ref[srcY*stride+srcX]
-			}
+			if srcX < 0 { srcX = 0 }
+			if srcY < 0 { srcY = 0 }
+			if srcX >= stride { srcX = stride - 1 }
+			if srcY >= refH { srcY = refH - 1 }
+			out[y*16+x] = ref[srcY*stride+srcX]
 		}
 	}
 }

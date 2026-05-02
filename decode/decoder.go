@@ -310,11 +310,11 @@ func (d *Decoder) reconstructMBInter(f *frame.Frame, mb *slice.MBInter, mbX, mbY
 			for x := 0; x < 16; x++ {
 				srcX := int(mv.X>>2) + mbX*16 + x
 				srcY := int(mv.Y>>2) + mbY*16 + y
-				if srcX >= 0 && srcX < ref.Width && srcY >= 0 && srcY < ref.Height {
-					predicted[y*16+x] = ref.PixelY(srcX, srcY)
-				} else {
-					predicted[y*16+x] = 128
-				}
+				if srcX < 0 { srcX = 0 }
+				if srcY < 0 { srcY = 0 }
+				if srcX >= ref.Width { srcX = ref.Width - 1 }
+				if srcY >= ref.Height { srcY = ref.Height - 1 }
+				predicted[y*16+x] = ref.PixelY(srcX, srcY)
 			}
 		}
 		// Add residual and write to frame
@@ -372,21 +372,13 @@ func (d *Decoder) reconstructMBBidi(f *frame.Frame, mb *slice.MBBidi, mbX, mbY, 
 
 	for y := 0; y < 16; y++ {
 		for x := 0; x < 16; x++ {
-			sx0 := mbX*16 + x + int(mvL0.X>>2)
-			sy0 := mbY*16 + y + int(mvL0.Y>>2)
-			if sx0 >= 0 && sx0 < refL0.Width && sy0 >= 0 && sy0 < refL0.Height {
-				predL0[y*16+x] = refL0.PixelY(sx0, sy0)
-			} else {
-				predL0[y*16+x] = 128
-			}
+			sx0 := clampInt(mbX*16+x+int(mvL0.X>>2), 0, refL0.Width-1)
+			sy0 := clampInt(mbY*16+y+int(mvL0.Y>>2), 0, refL0.Height-1)
+			predL0[y*16+x] = refL0.PixelY(sx0, sy0)
 
-			sx1 := mbX*16 + x + int(mvL1.X>>2)
-			sy1 := mbY*16 + y + int(mvL1.Y>>2)
-			if sx1 >= 0 && sx1 < refL1.Width && sy1 >= 0 && sy1 < refL1.Height {
-				predL1[y*16+x] = refL1.PixelY(sx1, sy1)
-			} else {
-				predL1[y*16+x] = 128
-			}
+			sx1 := clampInt(mbX*16+x+int(mvL1.X>>2), 0, refL1.Width-1)
+			sy1 := clampInt(mbY*16+y+int(mvL1.Y>>2), 0, refL1.Height-1)
+			predL1[y*16+x] = refL1.PixelY(sx1, sy1)
 		}
 	}
 
@@ -406,4 +398,13 @@ func (d *Decoder) reconstructMBBidi(f *frame.Frame, mb *slice.MBBidi, mbX, mbY, 
 			f.SetPixelY(mbX*16+x, mbY*16+y, blended[y*16+x])
 		}
 	}
+}
+
+// DecodedFrame is an alias for frame.Frame for CLI convenience.
+type DecodedFrame = frame.Frame
+
+func clampInt(v, lo, hi int) int {
+	if v < lo { return lo }
+	if v > hi { return hi }
+	return v
 }
