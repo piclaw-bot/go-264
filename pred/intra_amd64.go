@@ -15,3 +15,8 @@ func IntraPred16x16V_ASM(pred *uint8, top *uint8)
 func IntraPred16x16H_ASM(pred *uint8, left *uint8)
 
 var HasSSE2 = true // All amd64 has SSE2
+
+func hasNEONPred() bool { return false }
+func intraPred16x16DC_NEON(pred *uint8, dc uint8) {}
+func intraPred16x16V_NEON(pred *uint8, top *uint8) {}
+func intraPred16x16H_NEON(pred *uint8, left *uint8) {}

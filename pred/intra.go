@@ -111,6 +111,8 @@ func PredIntra16x16(pred []uint8, mode int, top, left []uint8, topLeft uint8) {
 	case Intra16x16Vertical:
 		if HasSSE2 {
 			IntraPred16x16V_ASM(&pred[0], &top[0])
+		} else if hasNEONPred() {
+			intraPred16x16V_NEON(&pred[0], &top[0])
 		} else {
 			for y := 0; y < 16; y++ {
 				copy(pred[y*16:(y+1)*16], top[:16])
@@ -120,6 +122,8 @@ func PredIntra16x16(pred []uint8, mode int, top, left []uint8, topLeft uint8) {
 	case Intra16x16Horizontal:
 		if HasSSE2 {
 			IntraPred16x16H_ASM(&pred[0], &left[0])
+		} else if hasNEONPred() {
+			intraPred16x16H_NEON(&pred[0], &left[0])
 		} else {
 			for y := 0; y < 16; y++ {
 				for x := 0; x < 16; x++ {
@@ -136,6 +140,8 @@ func PredIntra16x16(pred []uint8, mode int, top, left []uint8, topLeft uint8) {
 		dc := uint8((sum + 16) >> 5)
 		if HasSSE2 {
 			IntraPred16x16DC_ASM(&pred[0], dc)
+		} else if hasNEONPred() {
+			intraPred16x16DC_NEON(&pred[0], dc)
 		} else {
 			for i := range pred[:256] {
 				pred[i] = dc

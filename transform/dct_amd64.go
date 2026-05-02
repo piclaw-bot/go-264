@@ -23,3 +23,7 @@ func detectAVX2() bool {
 
 //go:noescape
 func cpuidHasAVX2() bool
+
+var HasNEON = false
+func IDCT4x4_NEON(block *int16) { panic("no NEON on amd64") }
+func DCT4x4_NEON(block *int16) { panic("no NEON on amd64") }

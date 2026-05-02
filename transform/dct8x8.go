@@ -219,3 +219,8 @@ func IDCT8x8Scalar(block []int16) {
 		block[6*8+j] = (b2-b5+32) >> 6; block[7*8+j] = (b0-b7+32) >> 6
 	}
 }
+
+func init() {
+	// IDCT8x8 dispatch already uses HasAVX2.
+	// NEON dispatch added via build tag in dct_arm64.go.
+}

@@ -24,6 +24,10 @@ func IDCT4x4(block []int16) {
 		IDCT4x4_AVX2(&block[0])
 		return
 	}
+	if HasNEON && len(block) >= 16 {
+		IDCT4x4_NEON(&block[0])
+		return
+	}
 	IDCT4x4Scalar(block)
 }
 
@@ -31,6 +35,10 @@ func IDCT4x4(block []int16) {
 func DCT4x4(block []int16) {
 	if HasAVX2 && len(block) >= 16 {
 		DCT4x4_AVX2(&block[0])
+		return
+	}
+	if HasNEON && len(block) >= 16 {
+		DCT4x4_NEON(&block[0])
 		return
 	}
 	DCT4x4Scalar(block)
