@@ -30,13 +30,13 @@ H.264/AVC encoder and decoder in pure Go with SIMD assembly and optional GPU acc
 | **Frame / DPB** — YUV 4:2:0, reference management | ✅ | — | — | — | 4 |
 | **I-Frame Decode** — End-to-end, verified with ffmpeg | ✅ | ⬜ | ⬜ | ⬜ | 2 + 1 fuzz |
 | **P-Frame Decode** — Motion vectors + inter prediction | ✅ | ⬜ | ⬜ | ⬜ | 4 |
-| **B-Frame Decode** — Bidirectional prediction | ⬜ | ⬜ | ⬜ | ⬜ | — |
+| **B-Frame Decode** — Bidirectional prediction | ✅ | ⬜ | ⬜ | ⬜ | 2 |
 
 **Legend:** ✅ Done · 🔶 Partial · ⬜ Planned · — Not applicable
 
-**Summary:** 15/17 Go scalar · 0/17 SIMD · 0/17 GPU
-**Tests:** 44 unit + 10 fuzz targets (23.6M fuzz executions, 0 crashes)
-**Code:** 3,649 lines across 31 files, 8 packages
+**Summary:** 16/17 Go scalar · 0/17 SIMD · 0/17 GPU
+**Tests:** 47 unit + 10 fuzz targets (23.6M fuzz executions, 0 crashes)
+**Code:** 4,000 lines across 33 files, 8 packages
 
 ## Architecture
 
