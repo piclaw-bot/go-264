@@ -18,7 +18,9 @@ type Frame struct {
 
 // NewFrame allocates a YUV 4:2:0 frame.
 func NewFrame(width, height int) *Frame {
-	// Align stride to 16 pixels (macroblock boundary)
+	if width <= 0 || height <= 0 || width > 16384 || height > 16384 {
+		return &Frame{Width: width, Height: height}
+	}
 	strideY := (width + 15) &^ 15
 	strideC := strideY / 2
 	h := (height + 15) &^ 15

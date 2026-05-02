@@ -105,3 +105,50 @@ func BenchmarkIDCT4x4(b *testing.B) {
 		IDCT4x4(tmp[:])
 	}
 }
+
+func TestIDCT4x4_SIMDvsScalar(t *testing.T) {
+	if !HasAVX2 {
+		t.Skip("no AVX2")
+	}
+	// Test many random-ish inputs
+	for seed := 0; seed < 100; seed++ {
+		var blockASM, blockScalar [16]int16
+		for i := range blockASM {
+			blockASM[i] = int16(seed*17 + i*31 - 200)
+		}
+		copy(blockScalar[:], blockASM[:])
+
+		IDCT4x4_AVX2(&blockASM[0])
+		IDCT4x4Scalar(blockScalar[:])
+
+		for i := range blockASM {
+			if blockASM[i] != blockScalar[i] {
+				t.Fatalf("seed=%d pos=%d: asm=%d scalar=%d", seed, i, blockASM[i], blockScalar[i])
+			}
+		}
+	}
+	t.Log("IDCT4x4 ASM matches scalar for 100 inputs ✓")
+}
+
+func TestDCT4x4_SIMDvsScalar(t *testing.T) {
+	if !HasAVX2 {
+		t.Skip("no AVX2")
+	}
+	for seed := 0; seed < 100; seed++ {
+		var blockASM, blockScalar [16]int16
+		for i := range blockASM {
+			blockASM[i] = int16(seed*13 + i*7 - 100)
+		}
+		copy(blockScalar[:], blockASM[:])
+
+		DCT4x4_AVX2(&blockASM[0])
+		DCT4x4Scalar(blockScalar[:])
+
+		for i := range blockASM {
+			if blockASM[i] != blockScalar[i] {
+				t.Fatalf("seed=%d pos=%d: asm=%d scalar=%d", seed, i, blockASM[i], blockScalar[i])
+			}
+		}
+	}
+	t.Log("DCT4x4 ASM matches scalar for 100 inputs ✓")
+}

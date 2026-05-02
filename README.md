@@ -23,7 +23,7 @@ H.264/AVC encoder and decoder in pure Go with SIMD assembly and optional GPU acc
 | **Intra Prediction 4×4** — 9 modes (V, H, DC, diagonal…) | ✅ | ⬜ | ⬜ | ⬜ | 3 |
 | **Intra Prediction 16×16** — V, H, DC, Plane | ✅ | ⬜ | ⬜ | ⬜ | 2 |
 | **Inter Prediction** — Motion compensation, subpel filter | ✅ | ⬜ | ⬜ | ⬜ | 2 |
-| **4×4 Integer DCT** — Forward + inverse transform | ✅ | ⬜ | ⬜ | ⬜ | 2 + 1 fuzz |
+| **4×4 Integer DCT** — Forward + inverse transform | ✅ | ✅ | ⬜ | ⬜ | 4 + 1 fuzz |
 | **8×8 Integer DCT** — High profile transform | ✅ | ⬜ | ⬜ | ⬜ | 3 + bench |
 | **Quantization** — Quant + dequant, all QP levels | ✅ | — | — | — | 1 + 1 fuzz |
 | **Deblocking Filter** — Normal + strong filter, luma | ✅ | ⬜ | ⬜ | ⬜ | 2 |
@@ -34,9 +34,9 @@ H.264/AVC encoder and decoder in pure Go with SIMD assembly and optional GPU acc
 
 **Legend:** ✅ Done · 🔶 Partial · ⬜ Planned · — Not applicable
 
-**Summary:** 17/17 Go scalar · 0/17 SIMD · 0/17 GPU
-**Tests:** 47 unit + 10 fuzz (30.4M executions, 0 crashes) targets (23.6M fuzz executions, 0 crashes)
-**Code:** 4,200 lines across 34 files, 8 packages
+**Summary:** 17/17 Go scalar · 1/17 SIMD (4×4 DCT/IDCT) · 0/17 GPU
+**Tests:** 48 unit + 10 fuzz (34.3M executions, 0 crashes) targets (23.6M fuzz executions, 0 crashes)
+**Code:** 4,500 lines across 37 files, 8 packages
 
 ## Architecture
 
