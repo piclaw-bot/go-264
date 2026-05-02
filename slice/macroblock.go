@@ -1,0 +1,87 @@
+package slice
+
+import "github.com/rcarmo/go-264/nal"
+
+// Macroblock types for I-slices (ITU-T H.264 Table 7-11)
+const (
+	MBTypeINxN      = 0  // Intra_4x4 or Intra_8x8
+	MBTypeI16x16_0  = 1  // Intra_16x16 (pred=0, CBP luma=0, CBP chroma=0)
+	MBTypeI16x16_25 = 25 // last I_16x16 variant
+	MBTypeIPCM      = 25 // I_PCM (raw samples)
+)
+
+// MBIntra describes a decoded intra macroblock.
+type MBIntra struct {
+	MBType        uint32
+	IntraPredMode [16]int8 // 4x4 prediction modes (if MBTypeINxN)
+	Intra16x16PredMode int8
+	CodedBlockPattern  uint32 // CBP
+	QPDelta            int32
+	Coeffs             [16][16]int16 // 4x4 luma blocks in raster scan
+	CoeffsChroma       [2][4][16]int16 // chroma blocks [U/V][4 blocks][16 coeffs]
+}
+
+// DecodeMBIntra decodes one intra macroblock from the bitstream.
+// Returns the macroblock data needed for reconstruction.
+func DecodeMBIntra(r *nal.Reader, sliceQP int32, ppsEntropy uint32) *MBIntra {
+	mb := &MBIntra{}
+
+	mb.MBType = r.ReadUE()
+
+	if mb.MBType == 0 {
+		// I_NxN: decode 4x4 prediction modes
+		for i := 0; i < 16; i++ {
+			if r.ReadBool() { // prev_intra4x4_pred_mode_flag
+				mb.IntraPredMode[i] = -1 // use predicted mode
+			} else {
+				mb.IntraPredMode[i] = int8(r.ReadBits(3)) // rem_intra4x4_pred_mode
+			}
+		}
+	} else if mb.MBType >= 1 && mb.MBType <= 24 {
+		// I_16x16: prediction mode, CBP coded in mb_type
+		mb.Intra16x16PredMode = int8((mb.MBType - 1) % 4)
+		cbpChroma := (mb.MBType - 1) / 4 % 3
+		cbpLuma := uint32(0)
+		if (mb.MBType-1)/12 > 0 {
+			cbpLuma = 15
+		}
+		mb.CodedBlockPattern = cbpLuma | (cbpChroma << 4)
+	}
+
+	// Chroma intra pred mode (for NxN and 16x16)
+	if mb.MBType != MBTypeIPCM {
+		_ = r.ReadUE() // intra_chroma_pred_mode
+	}
+
+	// Coded block pattern (only for I_NxN, I_16x16 has it in mb_type)
+	if mb.MBType == 0 {
+		mb.CodedBlockPattern = decodeCBPIntra(r)
+	}
+
+	// QP delta
+	if mb.CodedBlockPattern > 0 || (mb.MBType >= 1 && mb.MBType <= 24) {
+		mb.QPDelta = r.ReadSE()
+	}
+
+	// Residual data would be decoded here via CAVLC/CABAC
+	// Placeholder: coefficients stay zero (equivalent to skip)
+
+	return mb
+}
+
+// decodeCBPIntra decodes coded_block_pattern for intra macroblocks.
+// Uses Table 9-4 mapping from codeNum to CBP.
+func decodeCBPIntra(r *nal.Reader) uint32 {
+	codeNum := r.ReadUE()
+	// Table 9-4: Intra CBP mapping (subset)
+	cbpIntraTable := [48]uint32{
+		47, 31, 15, 0, 23, 27, 29, 30, 7, 11, 13, 14, 39, 43, 45, 46,
+		16, 3, 5, 10, 12, 19, 21, 26, 28, 35, 37, 42, 44, 1, 2, 4,
+		8, 17, 18, 20, 24, 6, 9, 22, 25, 32, 33, 34, 36, 40, 38, 41,
+	}
+	if codeNum < 48 {
+		return cbpIntraTable[codeNum]
+	}
+	return 0
+}
+
