@@ -93,10 +93,8 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (*frame.Frame, error) {
 	}
 
 	hdr, r := slice.ParseHeader(unit.Payload, unit.Type, sps, pps)
-	if !hdr.IsIntra() {
-		// Skip P/B frames for now
-		return nil, nil
-	}
+	// P/B frames need reference frames
+	isIntra := hdr.IsIntra()
 
 	qp := hdr.QP(pps.PicInitQP)
 	f := frame.NewFrame(sps.Width, sps.Height)
@@ -112,8 +110,20 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (*frame.Frame, error) {
 		mbX := mbIdx % mbWidth
 		mbY := mbIdx / mbWidth
 
-		mb := slice.DecodeMBIntra(r, qp, pps.EntropyCodingMode)
-		d.reconstructMB(f, mb, mbX, mbY, int(qp), sps)
+		if isIntra {
+			mb := slice.DecodeMBIntra(r, qp, pps.EntropyCodingMode)
+			d.reconstructMB(f, mb, mbX, mbY, int(qp), sps)
+		} else {
+			// P/B slice: peek at mb_type to decide intra vs inter
+			mbInter := slice.DecodeMBInter(r, qp, hdr.NumRefIdxL0Active)
+			if mbInter.MBType >= 5 {
+				// Intra MB within P-slice
+				mb := &slice.MBIntra{MBType: mbInter.MBType - 5}
+				d.reconstructMB(f, mb, mbX, mbY, int(qp), sps)
+			} else {
+				d.reconstructMBInter(f, mbInter, mbX, mbY, int(qp))
+			}
+		}
 	}
 
 	return f, nil
@@ -255,6 +265,72 @@ func (d *Decoder) reconstruct4x4(f *frame.Frame, mb *slice.MBIntra, mbX, mbY, qp
 				if v < 0 { v = 0 }
 				if v > 255 { v = 255 }
 				f.SetPixelY(x0+px, y0+py, uint8(v))
+			}
+		}
+	}
+}
+
+func (d *Decoder) reconstructMBInter(f *frame.Frame, mb *slice.MBInter, mbX, mbY, qp int) {
+	// Get reference frame
+	ref := d.DPB.GetRef(0)
+	if ref == nil || len(d.DPB.Frames) == 0 {
+		// No reference available — fill with gray
+		for y := 0; y < 16; y++ {
+			for x := 0; x < 16; x++ {
+				f.SetPixelY(mbX*16+x, mbY*16+y, 128)
+			}
+		}
+		return
+	}
+	if ref == nil {
+		ref = d.DPB.Frames[len(d.DPB.Frames)-1]
+	}
+
+	// Motion compensation based on partition type
+	switch mb.MBType {
+	case slice.PMBTypeP16x16:
+		// Single 16x16 partition
+		mv := mb.MV[0]
+		pred.InterPred16x16(
+			make([]uint8, 256),
+			ref.Y,
+			ref.StrideY,
+			pred.MotionVector{X: mv.X, Y: mv.Y},
+		)
+		// Write predicted + residual to output
+		predicted := make([]uint8, 256)
+		for y := 0; y < 16; y++ {
+			for x := 0; x < 16; x++ {
+				srcX := int(mv.X>>2) + mbX*16 + x
+				srcY := int(mv.Y>>2) + mbY*16 + y
+				if srcX >= 0 && srcX < ref.Width && srcY >= 0 && srcY < ref.Height {
+					predicted[y*16+x] = ref.PixelY(srcX, srcY)
+				} else {
+					predicted[y*16+x] = 128
+				}
+			}
+		}
+		// Add residual and write to frame
+		for y := 0; y < 16; y++ {
+			for x := 0; x < 16; x++ {
+				blkIdx := (y/4)*4 + (x / 4)
+				py, px := y%4, x%4
+				v := int(predicted[y*16+x]) + int(mb.Coeffs[blkIdx][py*4+px])
+				if v < 0 { v = 0 }
+				if v > 255 { v = 255 }
+				f.SetPixelY(mbX*16+x, mbY*16+y, uint8(v))
+			}
+		}
+
+	default:
+		// For other partition types, copy from reference with zero MV as fallback
+		for y := 0; y < 16; y++ {
+			for x := 0; x < 16; x++ {
+				srcX := mbX*16 + x
+				srcY := mbY*16 + y
+				if srcX < ref.Width && srcY < ref.Height {
+					f.SetPixelY(srcX, srcY, ref.PixelY(srcX, srcY))
+				}
 			}
 		}
 	}

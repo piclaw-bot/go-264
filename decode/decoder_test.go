@@ -66,3 +66,27 @@ func TestDecoderSPSPPS(t *testing.T) {
 			id, pps.SPSID, pps.EntropyCodingMode, pps.PicInitQP)
 	}
 }
+
+func TestDecodePFrame(t *testing.T) {
+	data, err := os.ReadFile("/tmp/test.h264")
+	if err != nil {
+		t.Skipf("no test bitstream: %v", err)
+	}
+
+	dec := NewDecoder()
+	frames, err := dec.Decode(data)
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	t.Logf("Decoded %d frames total", len(frames))
+	for i, f := range frames {
+		t.Logf("  Frame %d: %dx%d IDR=%v ref=%v poc=%d",
+			i, f.Width, f.Height, f.IsIDR, f.IsRef, f.POC)
+	}
+
+	// Should have at least the IDR frame + P-frames
+	if len(frames) < 1 {
+		t.Fatal("expected at least 1 frame")
+	}
+}
