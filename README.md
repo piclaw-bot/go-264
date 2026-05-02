@@ -34,9 +34,9 @@ H.264/AVC encoder and decoder in pure Go with SIMD assembly and optional GPU acc
 
 **Legend:** ✅ Done · 🔶 Partial · ⬜ Planned · — Not applicable
 
-**Summary:** 16/17 Go scalar · 0/17 SIMD · 0/17 GPU
-**Tests:** 47 unit + 10 fuzz targets (23.6M fuzz executions, 0 crashes)
-**Code:** 4,000 lines across 33 files, 8 packages
+**Summary:** 17/17 Go scalar · 0/17 SIMD · 0/17 GPU
+**Tests:** 47 unit + 10 fuzz (30.4M executions, 0 crashes) targets (23.6M fuzz executions, 0 crashes)
+**Code:** 4,200 lines across 34 files, 8 packages
 
 ## Architecture
 

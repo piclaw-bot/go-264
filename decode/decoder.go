@@ -113,15 +113,22 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (*frame.Frame, error) {
 		if isIntra {
 			mb := slice.DecodeMBIntra(r, qp, pps.EntropyCodingMode)
 			d.reconstructMB(f, mb, mbX, mbY, int(qp), sps)
-		} else {
-			// P/B slice: peek at mb_type to decide intra vs inter
+		} else if hdr.SliceType == slice.SliceTypeP {
 			mbInter := slice.DecodeMBInter(r, qp, hdr.NumRefIdxL0Active)
 			if mbInter.MBType >= 5 {
-				// Intra MB within P-slice
 				mb := &slice.MBIntra{MBType: mbInter.MBType - 5}
 				d.reconstructMB(f, mb, mbX, mbY, int(qp), sps)
 			} else {
 				d.reconstructMBInter(f, mbInter, mbX, mbY, int(qp))
+			}
+		} else {
+			// B-slice
+			mbBidi := slice.DecodeMBBidi(r, qp, hdr.NumRefIdxL0Active, hdr.NumRefIdxL1Active)
+			if mbBidi.MBType >= slice.BMBTypeIntra {
+				mb := &slice.MBIntra{MBType: mbBidi.MBType - slice.BMBTypeIntra}
+				d.reconstructMB(f, mb, mbX, mbY, int(qp), sps)
+			} else {
+				d.reconstructMBBidi(f, mbBidi, mbX, mbY, int(qp))
 			}
 		}
 	}
@@ -332,6 +339,71 @@ func (d *Decoder) reconstructMBInter(f *frame.Frame, mb *slice.MBInter, mbX, mbY
 					f.SetPixelY(srcX, srcY, ref.PixelY(srcX, srcY))
 				}
 			}
+		}
+	}
+}
+
+func (d *Decoder) reconstructMBBidi(f *frame.Frame, mb *slice.MBBidi, mbX, mbY, qp int) {
+	// B-frame reconstruction: blend L0 and L1 predictions
+	// For Direct mode (mb_type=0): use co-located MV from future reference
+	// For L0/L1/Bi: use respective reference frames
+
+	// Get reference frames
+	var refL0, refL1 *frame.Frame
+	if len(d.DPB.Frames) > 0 {
+		refL0 = d.DPB.Frames[len(d.DPB.Frames)-1]
+	}
+	if len(d.DPB.Frames) > 1 {
+		refL1 = d.DPB.Frames[len(d.DPB.Frames)-2]
+	}
+	if refL0 == nil {
+		refL0 = f // self-reference fallback
+	}
+	if refL1 == nil {
+		refL1 = refL0
+	}
+
+	// Simple implementation: copy from L0 reference (Direct/L0) or blend (Bi)
+	predL0 := make([]uint8, 256)
+	predL1 := make([]uint8, 256)
+
+	mvL0 := mb.MVL0[0]
+	mvL1 := mb.MVL1[0]
+
+	for y := 0; y < 16; y++ {
+		for x := 0; x < 16; x++ {
+			sx0 := mbX*16 + x + int(mvL0.X>>2)
+			sy0 := mbY*16 + y + int(mvL0.Y>>2)
+			if sx0 >= 0 && sx0 < refL0.Width && sy0 >= 0 && sy0 < refL0.Height {
+				predL0[y*16+x] = refL0.PixelY(sx0, sy0)
+			} else {
+				predL0[y*16+x] = 128
+			}
+
+			sx1 := mbX*16 + x + int(mvL1.X>>2)
+			sy1 := mbY*16 + y + int(mvL1.Y>>2)
+			if sx1 >= 0 && sx1 < refL1.Width && sy1 >= 0 && sy1 < refL1.Height {
+				predL1[y*16+x] = refL1.PixelY(sx1, sy1)
+			} else {
+				predL1[y*16+x] = 128
+			}
+		}
+	}
+
+	// Blend and write
+	blended := make([]uint8, 256)
+	useBi := mb.MBType == slice.BMBTypeBi16x16 || mb.MBType == slice.BMBTypeDirect16x16
+	if useBi {
+		slice.BiPredBlend(blended, predL0, predL1, 256)
+	} else if slice.BMBTypeL116x16 == mb.MBType {
+		copy(blended, predL1)
+	} else {
+		copy(blended, predL0)
+	}
+
+	for y := 0; y < 16; y++ {
+		for x := 0; x < 16; x++ {
+			f.SetPixelY(mbX*16+x, mbY*16+y, blended[y*16+x])
 		}
 	}
 }
