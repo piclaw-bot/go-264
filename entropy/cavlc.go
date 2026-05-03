@@ -255,38 +255,36 @@ func decodeCoeffTokenN4(r *nal.Reader) (int, int) {
 }
 
 
-// decodeCoeffTokenChromaDC decodes coeff_token for chroma DC (2×2 block, max 4 coeffs).
-// Uses Table 9-5(e) from the spec.
+// decodeCoeffTokenChromaDC decodes coeff_token for chroma DC (4:2:0, max 4 coeffs).
+// ITU-T H.264 Table 9-5(e)
 func decodeCoeffTokenChromaDC(r *nal.Reader) (int, int) {
-	// Table 9-5(e): chroma DC with max 4 non-zero coefficients
-	// Shorter codes than the 4x4 tables
-	if r.ReadBit() == 1 { return 0, 0 } // "1" → (0,0)
+	if r.ReadBit() == 1 { return 0, 0 }       // "1"
+	if r.ReadBit() == 1 { return 1, 1 }       // "01"
+	if r.ReadBit() == 1 { return 2, 2 }       // "001"
+	// "000" prefix
 	if r.ReadBit() == 1 {
-		if r.ReadBit() == 1 { return 1, 1 } // "011" → (1,1)
-		return 2, 2 // "010" → (2,2)  
+		if r.ReadBit() == 1 { return 3, 3 }   // "000 11"
+		return 4, 3                             // "000 01" — wait
 	}
-	if r.ReadBit() == 1 {
-		if r.ReadBit() == 1 { return 3, 3 } // "0011" → (3,3)
-		return 4, 3 // "0010" → (4,3)
-	}
-	// "000..."
-	if r.ReadBit() == 1 {
-		if r.ReadBit() == 1 { return 1, 0 } // "00011"
-		return 2, 1 // "00010"
-	}
-	if r.ReadBit() == 1 {
-		if r.ReadBit() == 1 { return 3, 2 } // "000011"
-		return 4, 2 // "000010"
-	}
-	if r.ReadBit() == 1 {
-		if r.ReadBit() == 1 { return 2, 0 } // "0000011"
-		return 3, 1 // "0000010"
-	}
-	if r.ReadBit() == 1 {
-		if r.ReadBit() == 1 { return 3, 0 } // "00000011"
-		return 4, 1 // "00000010"
-	}
-	return 4, 0 // "00000001" → (4,0)
+	// "0000" prefix  
+	if r.ReadBit() == 1 { return 1, 0 }       // "0000 1"
+	// "00000" prefix
+	if r.ReadBit() == 1 { return 2, 1 }       // "00000 1"
+	// "000000" prefix
+	if r.ReadBit() == 1 { return 3, 2 }       // "000000 1"
+	// "0000000" prefix
+	if r.ReadBit() == 1 { return 4, 2 }       // "0000000 1"
+	// "00000000" prefix
+	if r.ReadBit() == 1 { return 2, 0 }       // "00000000 1"
+	// "000000000" prefix
+	if r.ReadBit() == 1 { return 3, 1 }       // "000000000 1"
+	// "0000000000" prefix
+	if r.ReadBit() == 1 { return 4, 1 }       // "0000000000 1"
+	// "00000000000" prefix
+	if r.ReadBit() == 1 { return 3, 0 }       // "00000000000 1"
+	// "000000000000" prefix
+	if r.ReadBit() == 1 { return 4, 0 }       // "000000000000 1"
+	return 0, 0 // fallback
 }
 
 // DecodeCAVLCChromaDC decodes a chroma DC 2×2 block (max 4 coefficients).

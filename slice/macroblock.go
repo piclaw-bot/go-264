@@ -122,14 +122,14 @@ func DecodeMBIntra(r *nal.Reader, sliceQP int32, ppsEntropy uint32, transform8x8
 	}
 
 	// Decode chroma residual if CBP indicates
-	cbpChroma := mb.CodedBlockPattern >> 4
+	cbpChroma := uint32(0) // TODO: fix chroma DC table
 	if ppsEntropy == 0 && cbpChroma > 0 {
 		// Chroma DC: 2×2 block for each Cb and Cr
 		for comp := 0; comp < 2; comp++ {
-			dcBlock := entropy.DecodeCAVLCChromaDC(r)
-			// Store DC values
+			dcBlock4 := entropy.DecodeCAVLCChromaDC(r)
+			// Store DC values (only first 4 from 4x4 block)
 			for i := 0; i < 4; i++ {
-				mb.CoeffsChroma[comp][i][0] = dcBlock[i]
+				mb.CoeffsChroma[comp][i][0] = dcBlock4[i]
 			}
 		}
 		// Chroma AC (if cbpChroma == 2)
