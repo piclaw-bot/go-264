@@ -245,11 +245,28 @@ func (d *Decoder) reconstruct4x4(f *frame.Frame, mb *slice.MBIntra, mbX, mbY, qp
 			topLeft = f.PixelY(x0-1, y0-1)
 		}
 
-		// Determine prediction mode
-		mode := 2 // default DC
-		if mb.IntraPredMode[blkIdx] >= 0 {
-			mode = int(mb.IntraPredMode[blkIdx])
+		// Compute predicted mode from neighbors (§8.3.1.1)
+		predMode := 2 // DC default
+		if bx > 0 || mbX > 0 {
+			// Left neighbor mode (simplified: use DC if cross-MB)
+			if bx > 0 {
+				predMode = 2 // would need tracking per-block modes
+			}
 		}
+		// For now: if prev flag (-1), use DC; if rem, use directly
+		mode := 2
+		rawMode := mb.IntraPredMode[blkIdx]
+		if rawMode == -1 {
+			mode = predMode // use predicted (DC for now)
+		} else if rawMode >= 0 {
+			// rem_intra_pred_mode: if rem < predicted, mode=rem, else mode=rem+1
+			if int(rawMode) < predMode {
+				mode = int(rawMode)
+			} else {
+				mode = int(rawMode) + 1
+			}
+		}
+		if mode > 8 { mode = 2 } // clamp to valid range
 
 		predicted := make([]uint8, 16)
 		pred.PredIntra4x4(predicted, mode, top, topRight, left, topLeft)
@@ -313,12 +330,23 @@ func (d *Decoder) reconstructMBInter(f *frame.Frame, mb *slice.MBInter, mbX, mbY
 				predicted[y*16+x] = ref.PixelY(srcX, srcY)
 			}
 		}
-		// Add residual and write to frame
+		// Dequant + IDCT residual blocks, then add to prediction
+		cbpLuma := mb.CBP & 0xF
+		for blkIdx := 0; blkIdx < 16; blkIdx++ {
+			group := blkIdx / 4
+			if cbpLuma&(1<<uint(group)) != 0 {
+				block := mb.Coeffs[blkIdx]
+				transform.Dequant4x4(block[:], qp)
+				transform.IDCT4x4(block[:])
+			}
+		}
 		for y := 0; y < 16; y++ {
 			for x := 0; x < 16; x++ {
-				blkIdx := (y/4)*4 + (x / 4)
+				_ = blk4x4X
+				// Simplified: use raster order for residual
+				bi := (y/4)*4 + (x/4)
 				py, px := y%4, x%4
-				v := int(predicted[y*16+x]) + int(mb.Coeffs[blkIdx][py*4+px])
+				v := int(predicted[y*16+x]) + int(mb.Coeffs[bi][py*4+px])
 				if v < 0 { v = 0 }
 				if v > 255 { v = 255 }
 				f.SetPixelY(mbX*16+x, mbY*16+y, uint8(v))

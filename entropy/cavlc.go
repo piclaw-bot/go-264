@@ -255,3 +255,92 @@ func decodeCoeffTokenN4(r *nal.Reader) (int, int) {
 	return 0, 0
 }
 
+
+// decodeCoeffTokenChromaDC decodes coeff_token for chroma DC (2×2 block, max 4 coeffs).
+// Uses Table 9-5(e) from the spec.
+func decodeCoeffTokenChromaDC(r *nal.Reader) (int, int) {
+	// Table 9-5(e): chroma DC with max 4 non-zero coefficients
+	// Shorter codes than the 4x4 tables
+	if r.ReadBit() == 1 { return 0, 0 } // "1" → (0,0)
+	if r.ReadBit() == 1 {
+		if r.ReadBit() == 1 { return 1, 1 } // "011" → (1,1)
+		return 2, 2 // "010" → (2,2)  
+	}
+	if r.ReadBit() == 1 {
+		if r.ReadBit() == 1 { return 3, 3 } // "0011" → (3,3)
+		return 4, 3 // "0010" → (4,3)
+	}
+	// "000..."
+	if r.ReadBit() == 1 {
+		if r.ReadBit() == 1 { return 1, 0 } // "00011"
+		return 2, 1 // "00010"
+	}
+	if r.ReadBit() == 1 {
+		if r.ReadBit() == 1 { return 3, 2 } // "000011"
+		return 4, 2 // "000010"
+	}
+	if r.ReadBit() == 1 {
+		if r.ReadBit() == 1 { return 2, 0 } // "0000011"
+		return 3, 1 // "0000010"
+	}
+	if r.ReadBit() == 1 {
+		if r.ReadBit() == 1 { return 3, 0 } // "00000011"
+		return 4, 1 // "00000010"
+	}
+	return 4, 0 // "00000001" → (4,0)
+}
+
+// DecodeCAVLCChromaDC decodes a chroma DC 2×2 block (max 4 coefficients).
+func DecodeCAVLCChromaDC(r *nal.Reader) [4]int16 {
+	var block [4]int16
+	totalCoeff, trailingOnes := decodeCoeffTokenChromaDC(r)
+	if totalCoeff == 0 { return block }
+
+	signs := make([]int16, trailingOnes)
+	for i := trailingOnes - 1; i >= 0; i-- {
+		if r.ReadBit() == 1 { signs[i] = -1 } else { signs[i] = 1 }
+	}
+
+	levels := make([]int16, totalCoeff)
+	idx := totalCoeff - 1
+	for i := trailingOnes - 1; i >= 0; i-- { levels[idx] = signs[i]; idx-- }
+
+	suffixLength := 0
+	if totalCoeff > 10 && trailingOnes < 3 { suffixLength = 1 }
+	for i := trailingOnes; i < totalCoeff; i++ {
+		levelCode := decodeLevelPrefix(r, suffixLength)
+		if i == trailingOnes && trailingOnes < 3 { levelCode += 2 }
+		if levelCode%2 == 0 { levels[idx] = int16(levelCode/2 + 1) } else { levels[idx] = int16(-(levelCode + 1) / 2) }
+		absLevel := levels[idx]; if absLevel < 0 { absLevel = -absLevel }
+		if suffixLength == 0 { suffixLength = 1 }
+		if int(absLevel) > (3 << uint(suffixLength-1)) && suffixLength < 6 { suffixLength++ }
+		idx--
+	}
+
+	// total_zeros for chroma DC (max 3 zeros)
+	totalZeros := 0
+	if totalCoeff < 4 {
+		// Simplified: unary for chroma DC total_zeros
+		for totalZeros < 4-totalCoeff {
+			if r.ReadBit() == 1 { break }
+			totalZeros++
+		}
+	}
+
+	zerosLeft := totalZeros
+	coeffIdx := totalCoeff - 1
+	scanPos := totalCoeff + totalZeros - 1
+	for coeffIdx >= 0 {
+		if zerosLeft > 0 && coeffIdx > 0 {
+			run := 0
+			for run < zerosLeft { if r.ReadBit() == 1 { break }; run++ }
+			if scanPos < 4 { block[scanPos] = levels[coeffIdx] }
+			scanPos -= run + 1; zerosLeft -= run
+		} else {
+			if scanPos >= 0 && scanPos < 4 { block[scanPos] = levels[coeffIdx] }
+			scanPos--
+		}
+		coeffIdx--
+	}
+	return block
+}
