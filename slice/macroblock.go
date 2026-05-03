@@ -26,18 +26,21 @@ type MBIntra struct {
 
 // DecodeMBIntra decodes one intra macroblock from the bitstream.
 // Returns the macroblock data needed for reconstruction.
-func DecodeMBIntra(r *nal.Reader, sliceQP int32, ppsEntropy uint32) *MBIntra {
+func DecodeMBIntra(r *nal.Reader, sliceQP int32, ppsEntropy uint32, transform8x8 bool) *MBIntra {
 	mb := &MBIntra{}
 
 	mb.MBType = r.ReadUE()
 
 	if mb.MBType == 0 {
-		// I_NxN: decode 4x4 prediction modes
-		for i := 0; i < 16; i++ {
-			if r.ReadBool() { // prev_intra4x4_pred_mode_flag
+		// I_NxN: decode prediction modes
+		// transform_8x8_mode_flag=1 → I_8x8 (4 modes), else I_4x4 (16 modes)
+		numModes := 16
+		if transform8x8 { numModes = 4 }
+		for i := 0; i < numModes; i++ {
+			if r.ReadBool() { // prev_intra_pred_mode_flag
 				mb.IntraPredMode[i] = -1 // use predicted mode
 			} else {
-				mb.IntraPredMode[i] = int8(r.ReadBits(3)) // rem_intra4x4_pred_mode
+				mb.IntraPredMode[i] = int8(r.ReadBits(3)) // rem_intra_pred_mode
 			}
 		}
 	} else if mb.MBType >= 1 && mb.MBType <= 24 {
@@ -87,21 +90,61 @@ func DecodeMBIntra(r *nal.Reader, sliceQP int32, ppsEntropy uint32) *MBIntra {
 				}
 			}
 		} else if mb.MBType == 0 && mb.CodedBlockPattern > 0 {
-			// I_NxN: decode each 4x4 block with proper nC context
 			cbpLuma := mb.CodedBlockPattern & 0xF
-			var nzCoeffs [16]int // track non-zero coeffs per block for nC computation
-			for blk := 0; blk < 16; blk++ {
-				group := blk / 4
-				if cbpLuma&(1<<uint(group)) != 0 {
-					nC := computeNC4x4(blk, nzCoeffs[:])
-					block, tc := entropy.DecodeCAVLCBlock(r, nC)
-					mb.Coeffs[blk] = [16]int16(block)
-					nzCoeffs[blk] = tc
+			var nzCoeffs [16]int
+			if transform8x8 {
+				// I_8x8: each 8x8 block decoded as 4 sub-blocks
+				for blk8 := 0; blk8 < 4; blk8++ {
+					if cbpLuma&(1<<uint(blk8)) != 0 {
+						// 4 sub-blocks per 8x8 block
+						for sub := 0; sub < 4; sub++ {
+							blk4 := blk8*4 + sub
+							nC := computeNC4x4(blk4, nzCoeffs[:])
+							block, tc := entropy.DecodeCAVLCBlock(r, nC)
+							mb.Coeffs[blk4] = [16]int16(block)
+							nzCoeffs[blk4] = tc
+						}
+					}
+				}
+			} else {
+				// I_4x4: decode each 4x4 block independently
+				for blk := 0; blk < 16; blk++ {
+					group := blk / 4
+					if cbpLuma&(1<<uint(group)) != 0 {
+						nC := computeNC4x4(blk, nzCoeffs[:])
+						block, tc := entropy.DecodeCAVLCBlock(r, nC)
+						mb.Coeffs[blk] = [16]int16(block)
+						nzCoeffs[blk] = tc
+					}
 				}
 			}
 		}
 	}
 
+	// Decode chroma residual if CBP indicates
+	cbpChroma := mb.CodedBlockPattern >> 4
+	if ppsEntropy == 0 && cbpChroma > 0 {
+		// Chroma DC: 2×2 block for each Cb and Cr
+		for comp := 0; comp < 2; comp++ {
+			dcBlock, _ := entropy.DecodeCAVLCBlock(r, -1) // nC=-1 for chroma DC
+			// Store DC values
+			for i := 0; i < 4; i++ {
+				mb.CoeffsChroma[comp][i][0] = dcBlock[i]
+			}
+		}
+		// Chroma AC (if cbpChroma == 2)
+		if cbpChroma == 2 {
+			for comp := 0; comp < 2; comp++ {
+				for blk := 0; blk < 4; blk++ {
+					acBlock, _ := entropy.DecodeCAVLCBlock(r, 0)
+					for j := 1; j < 16; j++ {
+						mb.CoeffsChroma[comp][blk][j] = acBlock[j-1]
+					}
+				}
+			}
+		}
+	}
+	
 	return mb
 }
 

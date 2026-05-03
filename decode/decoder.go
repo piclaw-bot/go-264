@@ -111,7 +111,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (*frame.Frame, error) {
 		mbY := mbIdx / mbWidth
 
 		if isIntra {
-			mb := slice.DecodeMBIntra(r, qp, pps.EntropyCodingMode)
+			mb := slice.DecodeMBIntra(r, qp, pps.EntropyCodingMode, pps.Transform8x8Mode)
 			d.reconstructMB(f, mb, mbX, mbY, int(qp), sps)
 		} else if hdr.SliceType == slice.SliceTypeP {
 			mbInter := slice.DecodeMBInter(r, qp, hdr.NumRefIdxL0Active)
