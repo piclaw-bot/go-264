@@ -117,7 +117,9 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 	mbWidth := int(sps.PicWidthInMbs)
 	mbHeight := int(sps.PicHeightInMapUnits)
 
-	for mbIdx := int(hdr.FirstMbInSlice); mbIdx < mbWidth*mbHeight; mbIdx++ {
+	maxMBs := mbWidth * mbHeight
+	if maxMBs > 10000 { maxMBs = 10000 } // safety limit
+	for mbIdx := int(hdr.FirstMbInSlice); mbIdx < maxMBs; mbIdx++ {
 		mbX := mbIdx % mbWidth
 		mbY := mbIdx / mbWidth
 

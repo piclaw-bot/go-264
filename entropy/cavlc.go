@@ -59,9 +59,8 @@ func DecodeCoeffToken(r *nal.Reader, nC int) (int, int) {
 
 func decodeLevelPrefix(r *nal.Reader, suffixLength int) int {
 	prefix := 0
-	for !r.EOF() {
+	for !r.EOF() && prefix < 20 {
 		if r.ReadBit() == 1 { break }; prefix++
-		if prefix > 15 { break }
 	}
 	var levelSuffixSize int
 	if prefix == 14 && suffixLength == 0 {
