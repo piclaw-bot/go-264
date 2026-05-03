@@ -77,7 +77,13 @@ func (d *Decoder) Decode(data []byte) ([]*frame.Frame, error) {
 	return frames, nil
 }
 
-func (d *Decoder) decodeSlice(unit nal.Unit) (*frame.Frame, error) {
+func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultErr error) {
+	defer func() {
+		if r := recover(); r != nil {
+			resultErr = fmt.Errorf("decode panic: %v", r)
+			resultFrame = nil
+		}
+	}()
 	// Find PPS/SPS (peek at pps_id in slice header)
 	// For simplicity, use first available PPS/SPS
 	var pps *nal.PPS
