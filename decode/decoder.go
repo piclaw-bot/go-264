@@ -177,34 +177,55 @@ func (d *Decoder) reconstruct16x16(f *frame.Frame, mb *slice.MBIntra, mbX, mbY, 
 	predicted := make([]uint8, 256)
 	pred.PredIntra16x16(predicted, mode, top, left, topLeft)
 
-	// Add residual (if CBP indicates coded blocks)
+	// I_16x16: apply Hadamard DC transform to distribute DC coefficients
+	var dcBlock [16]int16
+	for i := 0; i < 16; i++ {
+		dcBlock[i] = mb.Coeffs[i][0]
+	}
+	transform.Hadamard4x4DC(dcBlock[:], qp)
+
+	// Reconstruct each 4×4 sub-block
 	cbpLuma := mb.CodedBlockPattern & 0xF
 	for by := 0; by < 4; by++ {
 		for bx := 0; bx < 4; bx++ {
 			blkIdx := by*4 + bx
+			var block [16]int16
+
+			// DC from Hadamard transform
+			block[0] = dcBlock[blkIdx]
+
+			// AC from CAVLC (if coded)
 			if cbpLuma != 0 {
-				block := mb.Coeffs[blkIdx]
-				transform.Dequant4x4(block[:], qp)
-				transform.IDCT4x4(block[:])
-				// Add residual to prediction
-				for py := 0; py < 4; py++ {
-					for px := 0; px < 4; px++ {
-						x := bx*4 + px
-						y := by*4 + py
-						v := int(predicted[y*16+x]) + int(block[py*4+px])
-						if v < 0 { v = 0 }
-						if v > 255 { v = 255 }
-						f.SetPixelY(mbX*16+x, mbY*16+y, uint8(v))
+				for j := 1; j < 16; j++ {
+					block[j] = mb.Coeffs[blkIdx][j]
+				}
+			}
+
+			// Dequant AC coefficients (DC already dequantized by Hadamard)
+			// Only dequant AC (positions 1..15)
+			if cbpLuma != 0 {
+				for j := 1; j < 16; j++ {
+					if block[j] != 0 {
+						qpDiv6 := uint(qp / 6)
+						qpMod6 := qp % 6
+						v := int32(transform.DequantVTable()[qpMod6][transform.PosToVTable()[j]])
+						block[j] = int16(int32(block[j]) * v << qpDiv6)
 					}
 				}
-			} else {
-				// No residual: write prediction directly
-				for py := 0; py < 4; py++ {
-					for px := 0; px < 4; px++ {
-						x := bx*4 + px
-						y := by*4 + py
-						f.SetPixelY(mbX*16+x, mbY*16+y, predicted[y*16+x])
-					}
+			}
+
+			// Inverse transform
+			transform.IDCT4x4(block[:])
+
+			// Add residual to prediction and write
+			for py := 0; py < 4; py++ {
+				for px := 0; px < 4; px++ {
+					x := bx*4 + px
+					y := by*4 + py
+					v := int(predicted[y*16+x]) + int(block[py*4+px])
+					if v < 0 { v = 0 }
+					if v > 255 { v = 255 }
+					f.SetPixelY(mbX*16+x, mbY*16+y, uint8(v))
 				}
 			}
 		}

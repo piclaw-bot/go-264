@@ -113,3 +113,9 @@ var ZigZag4x4 = [16]int{
 	9, 12, 13, 10,
 	7, 11, 14, 15,
 }
+
+// DequantVTable returns the dequantization scale factor table.
+func DequantVTable() [6][3]int16 { return dequantV }
+
+// PosToVTable returns the position-to-V-index mapping.
+func PosToVTable() [16]int { return posToV }
