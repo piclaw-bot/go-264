@@ -87,13 +87,16 @@ func DecodeMBIntra(r *nal.Reader, sliceQP int32, ppsEntropy uint32) *MBIntra {
 				}
 			}
 		} else if mb.MBType == 0 && mb.CodedBlockPattern > 0 {
-			// I_NxN: decode each 4x4 block independently
+			// I_NxN: decode each 4x4 block with proper nC context
 			cbpLuma := mb.CodedBlockPattern & 0xF
+			var nzCoeffs [16]int // track non-zero coeffs per block for nC computation
 			for blk := 0; blk < 16; blk++ {
 				group := blk / 4
 				if cbpLuma&(1<<uint(group)) != 0 {
-					block, _ := entropy.DecodeCAVLCBlock(r, 0)
+					nC := computeNC4x4(blk, nzCoeffs[:])
+					block, tc := entropy.DecodeCAVLCBlock(r, nC)
 					mb.Coeffs[blk] = [16]int16(block)
+					nzCoeffs[blk] = tc
 				}
 			}
 		}
@@ -118,3 +121,38 @@ func decodeCBPIntra(r *nal.Reader) uint32 {
 	return 0
 }
 
+
+// computeNC4x4 computes the nC context for a 4x4 block within a macroblock.
+// Uses the totalCoeff of the left and top neighboring 4x4 blocks.
+// Block layout within MB (raster scan):
+//  0  1  4  5
+//  2  3  6  7
+//  8  9 12 13
+// 10 11 14 15
+func computeNC4x4(blkIdx int, nz []int) int {
+	// Map block index to (x,y) within 4x4 grid
+	// Using H.264 inverse raster scan
+	x := (blkIdx % 4)
+	y := (blkIdx / 4)
+	
+	nA, nB := -1, -1 // -1 = not available
+	
+	// Left neighbor
+	if x > 0 {
+		leftIdx := blkIdx - 1
+		nA = nz[leftIdx]
+	}
+	
+	// Top neighbor
+	if y > 0 {
+		topIdx := blkIdx - 4
+		nB = nz[topIdx]
+	}
+	
+	if nA >= 0 && nB >= 0 {
+		return (nA + nB + 1) >> 1
+	}
+	if nA >= 0 { return nA }
+	if nB >= 0 { return nB }
+	return 0
+}

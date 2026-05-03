@@ -97,3 +97,8 @@ func (r *Reader) ByteAlign() {
 		r.pos++
 	}
 }
+
+// Position returns the current bit position (byte*8 + bits consumed in current byte).
+func (r *Reader) Position() int {
+	return r.pos*8 + (7 - r.bit)
+}
