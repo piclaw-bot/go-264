@@ -63,10 +63,24 @@ func decodeLevelPrefix(r *nal.Reader, suffixLength int) int {
 		if r.ReadBit() == 1 { break }; prefix++
 		if prefix > 15 { break }
 	}
+	var levelSuffixSize int
+	if prefix == 14 && suffixLength == 0 {
+		levelSuffixSize = 4
+	} else if prefix >= 15 {
+		levelSuffixSize = prefix - 3
+	} else {
+		levelSuffixSize = suffixLength
+	}
 	levelCode := prefix << uint(suffixLength)
-	if suffixLength > 0 { levelCode += int(r.ReadBits(suffixLength)) }
-	if prefix >= 15 && suffixLength == 0 { levelCode += 15 }
-	if prefix >= 16 { levelCode += (1 << uint(prefix-3)) - 4096 }
+	if levelSuffixSize > 0 {
+		levelCode += int(r.ReadBits(levelSuffixSize))
+	}
+	if prefix >= 15 && suffixLength == 0 {
+		levelCode += 15
+	}
+	if prefix >= 16 {
+		levelCode += (1 << uint(prefix-3)) - 4096
+	}
 	return levelCode
 }
 

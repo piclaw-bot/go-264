@@ -12,6 +12,11 @@ import (
 	"github.com/rcarmo/go-264/transform"
 )
 
+
+// H.264 4x4 block position within macroblock (inverse raster scan §6.4.3)
+var blk4x4X = [16]int{0, 4, 0, 4, 8, 12, 8, 12, 0, 4, 0, 4, 8, 12, 8, 12}
+var blk4x4Y = [16]int{0, 0, 4, 4, 0, 0, 4, 4, 8, 8, 12, 12, 8, 8, 12, 12}
+
 // Decoder is an H.264 Baseline profile decoder.
 type Decoder struct {
 	SPS    map[uint32]*nal.SPS
@@ -149,84 +154,54 @@ func (d *Decoder) reconstructMB(f *frame.Frame, mb *slice.MBIntra, mbX, mbY int,
 
 func (d *Decoder) reconstruct16x16(f *frame.Frame, mb *slice.MBIntra, mbX, mbY, qp int) {
 	mode := int(mb.Intra16x16PredMode)
-
-	// Get neighbors
 	top := make([]uint8, 16)
 	left := make([]uint8, 16)
-	topLeft := uint8(128) // default if unavailable
-
+	topLeft := uint8(128)
 	if mbY > 0 {
-		for x := 0; x < 16; x++ {
-			top[x] = f.PixelY(mbX*16+x, mbY*16-1)
-		}
+		for x := 0; x < 16; x++ { top[x] = f.PixelY(mbX*16+x, mbY*16-1) }
 	} else {
 		for i := range top { top[i] = 128 }
 	}
 	if mbX > 0 {
-		for y := 0; y < 16; y++ {
-			left[y] = f.PixelY(mbX*16-1, mbY*16+y)
-		}
+		for y := 0; y < 16; y++ { left[y] = f.PixelY(mbX*16-1, mbY*16+y) }
 	} else {
 		for i := range left { left[i] = 128 }
 	}
-	if mbX > 0 && mbY > 0 {
-		topLeft = f.PixelY(mbX*16-1, mbY*16-1)
-	}
+	if mbX > 0 && mbY > 0 { topLeft = f.PixelY(mbX*16-1, mbY*16-1) }
 
-	// Predict
 	predicted := make([]uint8, 256)
 	pred.PredIntra16x16(predicted, mode, top, left, topLeft)
 
-	// I_16x16: apply Hadamard DC transform to distribute DC coefficients
+	// Hadamard DC transform
 	var dcBlock [16]int16
-	for i := 0; i < 16; i++ {
-		dcBlock[i] = mb.Coeffs[i][0]
-	}
+	for i := 0; i < 16; i++ { dcBlock[i] = mb.Coeffs[i][0] }
 	transform.Hadamard4x4DC(dcBlock[:], qp)
 
-	// Reconstruct each 4×4 sub-block
 	cbpLuma := mb.CodedBlockPattern & 0xF
-	for by := 0; by < 4; by++ {
-		for bx := 0; bx < 4; bx++ {
-			blkIdx := by*4 + bx
-			var block [16]int16
-
-			// DC from Hadamard transform
-			block[0] = dcBlock[blkIdx]
-
-			// AC from CAVLC (if coded)
-			if cbpLuma != 0 {
-				for j := 1; j < 16; j++ {
-					block[j] = mb.Coeffs[blkIdx][j]
+	for blkIdx := 0; blkIdx < 16; blkIdx++ {
+		bx := blk4x4X[blkIdx]
+		by := blk4x4Y[blkIdx]
+		var block [16]int16
+		block[0] = dcBlock[blkIdx]
+		if cbpLuma != 0 {
+			for j := 1; j < 16; j++ { block[j] = mb.Coeffs[blkIdx][j] }
+			// Dequant AC only (DC already handled by Hadamard)
+			qpDiv6 := uint(qp / 6)
+			qpMod6 := qp % 6
+			for j := 1; j < 16; j++ {
+				if block[j] != 0 {
+					v := int32(transform.DequantVTable()[qpMod6][transform.PosToVTable()[j]])
+					block[j] = int16(int32(block[j]) * v << qpDiv6)
 				}
 			}
-
-			// Dequant AC coefficients (DC already dequantized by Hadamard)
-			// Only dequant AC (positions 1..15)
-			if cbpLuma != 0 {
-				for j := 1; j < 16; j++ {
-					if block[j] != 0 {
-						qpDiv6 := uint(qp / 6)
-						qpMod6 := qp % 6
-						v := int32(transform.DequantVTable()[qpMod6][transform.PosToVTable()[j]])
-						block[j] = int16(int32(block[j]) * v << qpDiv6)
-					}
-				}
-			}
-
-			// Inverse transform
-			transform.IDCT4x4(block[:])
-
-			// Add residual to prediction and write
-			for py := 0; py < 4; py++ {
-				for px := 0; px < 4; px++ {
-					x := bx*4 + px
-					y := by*4 + py
-					v := int(predicted[y*16+x]) + int(block[py*4+px])
-					if v < 0 { v = 0 }
-					if v > 255 { v = 255 }
-					f.SetPixelY(mbX*16+x, mbY*16+y, uint8(v))
-				}
+		}
+		transform.IDCT4x4(block[:])
+		for py := 0; py < 4; py++ {
+			for px := 0; px < 4; px++ {
+				v := int(predicted[(by+py)*16+(bx+px)]) + int(block[py*4+px])
+				if v < 0 { v = 0 }
+				if v > 255 { v = 255 }
+				f.SetPixelY(mbX*16+bx+px, mbY*16+by+py, uint8(v))
 			}
 		}
 	}
@@ -235,8 +210,8 @@ func (d *Decoder) reconstruct16x16(f *frame.Frame, mb *slice.MBIntra, mbX, mbY, 
 func (d *Decoder) reconstruct4x4(f *frame.Frame, mb *slice.MBIntra, mbX, mbY, qp int) {
 	// For each 4x4 block in raster scan order
 	for blkIdx := 0; blkIdx < 16; blkIdx++ {
-		bx := (blkIdx % 4) * 4
-		by := (blkIdx / 4) * 4
+		bx := blk4x4X[blkIdx]
+		by := blk4x4Y[blkIdx]
 
 		// Get neighbors
 		top := make([]uint8, 4)
