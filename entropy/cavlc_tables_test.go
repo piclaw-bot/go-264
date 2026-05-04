@@ -26,6 +26,7 @@ func TestCoeffTokenTablesRoundtrip(t *testing.T) {
 		{"nC0", &ctLen0, &ctBits0, 0},
 		{"nC2", &ctLen1, &ctBits1, 2},
 		{"nC4", &ctLen2, &ctBits2, 4},
+		{"nC8", &ctLen3, &ctBits3, 8},
 	} {
 		for tc := 0; tc <= 16; tc++ {
 			maxTO := 3

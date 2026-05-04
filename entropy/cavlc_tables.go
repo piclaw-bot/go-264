@@ -168,31 +168,12 @@ var ctBits1 = [68]uint8{3, 0, 0, 0, 11, 2, 0, 0, 7, 7, 3, 0, 7, 10, 9, 5, 7, 6, 
 var ctLen2 = [68]uint8{4, 0, 0, 0, 6, 4, 0, 0, 6, 5, 4, 0, 6, 5, 5, 4, 7, 5, 5, 4, 7, 5, 5, 4, 7, 6, 6, 4, 7, 6, 6, 4, 8, 7, 7, 5, 8, 8, 7, 6, 9, 8, 8, 7, 9, 9, 8, 8, 9, 9, 9, 8, 10, 9, 9, 9, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10}
 var ctBits2 = [68]uint8{15, 0, 0, 0, 15, 14, 0, 0, 11, 15, 13, 0, 8, 12, 14, 12, 15, 10, 11, 11, 11, 8, 9, 10, 9, 14, 13, 9, 8, 10, 9, 8, 15, 14, 13, 13, 11, 14, 10, 12, 15, 10, 13, 12, 11, 14, 9, 12, 8, 10, 13, 8, 13, 7, 9, 12, 9, 12, 11, 10, 5, 8, 7, 6, 1, 4, 3, 2}
 
+// Table 9-5d: 8 <= nC
+var ctLen3 = [68]uint8{6, 0, 0, 0, 6, 6, 0, 0, 6, 6, 6, 0, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6}
+var ctBits3 = [68]uint8{3, 0, 0, 0, 0, 1, 0, 0, 4, 5, 6, 0, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63}
+
 // decodeCoeffTokenFromTable reads coeff_token using FFmpeg VLC tables.
 func decodeCoeffTokenFromTable(r *nal.Reader, nC int) (int, int) {
-	if nC >= 8 {
-		// Table 9-5d: fixed 6-bit code
-		code := r.ReadBits(6)
-		if code < 4 {
-			if code == 3 {
-				return 0, 0
-			}
-			// code 0→(1,0)? Actually for nC>=8:
-			// totalCoeff = code/4 + 1 isn't right for code < 4
-			// FFmpeg: suffix = code & 3, tc = code >> 2
-			// code=0: tc=0,to=0 → but tc=0,to=0 code should be 3 (0b000011)
-			// Let me just use the standard formula: to = code%4, tc = code/4
-			// And for code=3: tc=0,to=3 but (0,3) doesn't exist, so it's (0,0)
-			return 0, 0
-		}
-		to := int(code % 4)
-		tc := int(code / 4)
-		if to > tc {
-			to = tc
-		}
-		return tc, to
-	}
-
 	var ctLen *[68]uint8
 	var ctBits *[68]uint8
 	if nC < 2 {
@@ -201,9 +182,12 @@ func decodeCoeffTokenFromTable(r *nal.Reader, nC int) (int, int) {
 	} else if nC < 4 {
 		ctLen = &ctLen1
 		ctBits = &ctBits1
-	} else {
+	} else if nC < 8 {
 		ctLen = &ctLen2
 		ctBits = &ctBits2
+	} else {
+		ctLen = &ctLen3
+		ctBits = &ctBits3
 	}
 
 	pos := r.Position()

@@ -206,17 +206,18 @@ func computeNC4x4(blkIdx int, nz []int) int {
 }
 
 func computeNC4x4Ctx(blkIdx int, nz []int, leftNZ, topNZ *[16]int) int {
-	// Conservative within-MB context only. Cross-MB nC is disabled until the
-	// residual parser is fully reference-matched; using neighbour MB contexts
-	// currently causes bit cascades on real streams.
-	x := blkIdx % 4
-	y := blkIdx / 4
+	x := blk4x4ToX[blkIdx]
+	y := blk4x4ToY[blkIdx]
 	nA, nB := -1, -1
 	if x > 0 {
-		nA = nz[blkIdx-1]
+		nA = nz[xyToBlk4x4[y][x-1]]
+	} else if leftNZ != nil {
+		nA = leftNZ[xyToBlk4x4[y][3]]
 	}
 	if y > 0 {
-		nB = nz[blkIdx-4]
+		nB = nz[xyToBlk4x4[y-1][x]]
+	} else if topNZ != nil {
+		nB = topNZ[xyToBlk4x4[3][x]]
 	}
 	if nA >= 0 && nB >= 0 {
 		return (nA + nB + 1) >> 1
