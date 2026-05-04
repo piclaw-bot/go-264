@@ -657,6 +657,7 @@ func (d *Decoder) reconstructMBInter(f *frame.Frame, mb *slice.MBInter, mbX, mbY
 		predicted := make([]uint8, 256)
 		pred.InterPred16x16At(predicted, ref.Y, ref.StrideY, mbX*16, mbY*16, pred.MotionVector{X: mv.X, Y: mv.Y})
 		d.writeInterResidual(f, mb, predicted, mbX, mbY, qp)
+		d.reconstructChromaInter(f, ref, mb, mbX, mbY, qp)
 
 	case slice.PMBTypeP16x8:
 		predicted := make([]uint8, 256)
@@ -672,6 +673,7 @@ func (d *Decoder) reconstructMBInter(f *frame.Frame, mb *slice.MBInter, mbX, mbY
 			copy(predicted[(y+8)*16:(y+8)*16+16], tmp[y*16:y*16+16])
 		}
 		d.writeInterResidual(f, mb, predicted, mbX, mbY, qp)
+		d.reconstructChromaInter(f, ref, mb, mbX, mbY, qp)
 
 	case slice.PMBTypeP8x16:
 		predicted := make([]uint8, 256)
@@ -687,6 +689,7 @@ func (d *Decoder) reconstructMBInter(f *frame.Frame, mb *slice.MBInter, mbX, mbY
 			copy(predicted[y*16+8:y*16+16], tmp[y*16:y*16+8])
 		}
 		d.writeInterResidual(f, mb, predicted, mbX, mbY, qp)
+		d.reconstructChromaInter(f, ref, mb, mbX, mbY, qp)
 
 	case slice.PMBTypeP8x8, slice.PMBTypeP8x8ref0:
 		predicted := make([]uint8, 256)
@@ -712,6 +715,7 @@ func (d *Decoder) reconstructMBInter(f *frame.Frame, mb *slice.MBInter, mbX, mbY
 			}
 		}
 		d.writeInterResidual(f, mb, predicted, mbX, mbY, qp)
+		d.reconstructChromaInter(f, ref, mb, mbX, mbY, qp)
 
 	default:
 		// For other partition types, copy from reference with zero MV as fallback
@@ -721,6 +725,79 @@ func (d *Decoder) reconstructMBInter(f *frame.Frame, mb *slice.MBInter, mbX, mbY
 				srcY := mbY*16 + y
 				if srcX < ref.Width && srcY < ref.Height {
 					f.SetPixelY(srcX, srcY, ref.PixelY(srcX, srcY))
+				}
+			}
+		}
+	}
+}
+
+func (d *Decoder) reconstructChromaInter(f, ref *frame.Frame, mb *slice.MBInter, mbX, mbY, qp int) {
+	var predU, predV [64]uint8
+	// Conservative chroma MC: derive integer chroma displacement from the
+	// representative luma MV. Sub-partition chroma and fractional interpolation
+	// are future refinements, but this writes U/V planes and applies residuals.
+	mv := mb.MV[0]
+	if mb.MBType == slice.PMBTypeP8x8 || mb.MBType == slice.PMBTypeP8x8ref0 {
+		mv = mb.SubMV[0]
+	}
+	d.fillChromaInterPred(predU[:], ref.U, ref.StrideC, ref.Width/2, ref.Height/2, mbX*8, mbY*8, mv)
+	d.fillChromaInterPred(predV[:], ref.V, ref.StrideC, ref.Width/2, ref.Height/2, mbX*8, mbY*8, mv)
+	d.writeChromaInterResidual(f, mb, predU[:], 0, mbX, mbY, qp)
+	d.writeChromaInterResidual(f, mb, predV[:], 1, mbX, mbY, qp)
+}
+
+func (d *Decoder) fillChromaInterPred(dst []uint8, plane []uint8, stride, width, height, baseX, baseY int, mv slice.MotionVector) {
+	dx := int(mv.X) >> 3
+	dy := int(mv.Y) >> 3
+	for y := 0; y < 8; y++ {
+		for x := 0; x < 8; x++ {
+			sx, sy := baseX+dx+x, baseY+dy+y
+			if sx < 0 {
+				sx = 0
+			}
+			if sy < 0 {
+				sy = 0
+			}
+			if sx >= width {
+				sx = width - 1
+			}
+			if sy >= height {
+				sy = height - 1
+			}
+			dst[y*8+x] = plane[sy*stride+sx]
+		}
+	}
+}
+
+func (d *Decoder) writeChromaInterResidual(f *frame.Frame, mb *slice.MBInter, predicted []uint8, comp int, mbX, mbY, qp int) {
+	var dc [4]int16
+	for i := 0; i < 4; i++ {
+		dc[i] = mb.CoeffsChroma[comp][i][0]
+	}
+	transform.Hadamard2x2DC(dc[:], qp)
+	var residual [4][16]int16
+	for blk := 0; blk < 4; blk++ {
+		residual[blk] = mb.CoeffsChroma[comp][blk]
+		residual[blk][0] = dc[blk]
+		transform.Dequant4x4(residual[blk][:], qp)
+		transform.IDCT4x4(residual[blk][:])
+	}
+	for blk := 0; blk < 4; blk++ {
+		bx, by := (blk&1)*4, (blk>>1)*4
+		for y := 0; y < 4; y++ {
+			for x := 0; x < 4; x++ {
+				v := int(predicted[(by+y)*8+bx+x]) + int(residual[blk][y*4+x])
+				if v < 0 {
+					v = 0
+				}
+				if v > 255 {
+					v = 255
+				}
+				cx, cy := mbX*8+bx+x, mbY*8+by+y
+				if comp == 0 {
+					f.SetPixelU(cx, cy, uint8(v))
+				} else {
+					f.SetPixelV(cx, cy, uint8(v))
 				}
 			}
 		}
