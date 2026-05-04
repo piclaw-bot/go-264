@@ -233,3 +233,85 @@ func decodeCoeffTokenFromTable(r *nal.Reader, nC int) (int, int) {
 	r.Seek(pos + 1)
 	return 0, 0
 }
+
+// Chroma DC coeff_token Table 9-5(e), indexed by totalCoeff*4+trailingOnes.
+var chromaDCCoeffTokenLen = [20]uint8{2, 0, 0, 0, 6, 1, 0, 0, 6, 6, 3, 0, 6, 7, 7, 6, 6, 8, 8, 7}
+var chromaDCCoeffTokenBits = [20]uint8{1, 0, 0, 0, 7, 1, 0, 0, 4, 6, 1, 0, 3, 3, 2, 5, 2, 3, 2, 0}
+
+var chromaDCTotalZerosLen = [3][4]uint8{
+	{1, 2, 3, 3},
+	{1, 2, 2, 0},
+	{1, 1, 0, 0},
+}
+var chromaDCTotalZerosBits = [3][4]uint8{
+	{1, 1, 1, 0},
+	{1, 1, 0, 0},
+	{1, 0, 0, 0},
+}
+
+func decodeCoeffTokenChromaDCTable(r *nal.Reader) (int, int) {
+	pos := r.Position()
+	avail := r.BitsLeft()
+	peekLen := 8
+	if avail < peekLen {
+		peekLen = avail
+	}
+	if peekLen <= 0 {
+		return 0, 0
+	}
+	bits := r.PeekBits(peekLen)
+	bestLen, bestTC, bestTO := 0, 0, 0
+	for tc := 0; tc <= 4; tc++ {
+		maxTO := 3
+		if tc < maxTO {
+			maxTO = tc
+		}
+		for to := 0; to <= maxTO; to++ {
+			idx := tc*4 + to
+			l := int(chromaDCCoeffTokenLen[idx])
+			if l == 0 || l > peekLen {
+				continue
+			}
+			if bits>>uint(peekLen-l) == uint32(chromaDCCoeffTokenBits[idx]) {
+				if bestLen == 0 || l < bestLen {
+					bestLen, bestTC, bestTO = l, tc, to
+				}
+			}
+		}
+	}
+	if bestLen > 0 {
+		r.Seek(pos + bestLen)
+		return bestTC, bestTO
+	}
+	r.Seek(pos + 1)
+	return 0, 0
+}
+
+func decodeChromaDCTotalZerosTable(r *nal.Reader, totalCoeff int) int {
+	if totalCoeff <= 0 || totalCoeff >= 4 {
+		return 0
+	}
+	idx := totalCoeff - 1
+	pos := r.Position()
+	avail := r.BitsLeft()
+	peekLen := 3
+	if avail < peekLen {
+		peekLen = avail
+	}
+	if peekLen <= 0 {
+		return 0
+	}
+	bits := r.PeekBits(peekLen)
+	for val := 0; val < 4; val++ {
+		l := int(chromaDCTotalZerosLen[idx][val])
+		if l == 0 || l > peekLen {
+			continue
+		}
+		if bits>>uint(peekLen-l) == uint32(chromaDCTotalZerosBits[idx][val]) {
+			r.Seek(pos + l)
+			return val
+		}
+	}
+	r.Seek(pos + 1)
+	return 0
+}

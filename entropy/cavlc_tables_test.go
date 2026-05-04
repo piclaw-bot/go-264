@@ -68,6 +68,43 @@ func TestTotalZerosTablesRoundtrip(t *testing.T) {
 	}
 }
 
+func TestChromaDCTablesRoundtrip(t *testing.T) {
+	for tc := 0; tc <= 4; tc++ {
+		maxTO := 3
+		if tc < maxTO {
+			maxTO = tc
+		}
+		for to := 0; to <= maxTO; to++ {
+			idx := tc*4 + to
+			l := int(chromaDCCoeffTokenLen[idx])
+			if l == 0 {
+				continue
+			}
+			r := bitsToReader(uint32(chromaDCCoeffTokenBits[idx]), l)
+			gotTC, gotTO := decodeCoeffTokenChromaDCTable(r)
+			if gotTC != tc || gotTO != to || r.Position() != l {
+				t.Fatalf("chromaDC coeff tc=%d to=%d code=%0*b: got tc=%d to=%d pos=%d want pos=%d",
+					tc, to, l, chromaDCCoeffTokenBits[idx], gotTC, gotTO, r.Position(), l)
+			}
+		}
+	}
+	for tc := 1; tc < 4; tc++ {
+		idx := tc - 1
+		for totalZeros := 0; totalZeros < 4; totalZeros++ {
+			l := int(chromaDCTotalZerosLen[idx][totalZeros])
+			if l == 0 {
+				continue
+			}
+			r := bitsToReader(uint32(chromaDCTotalZerosBits[idx][totalZeros]), l)
+			got := decodeChromaDCTotalZerosTable(r, tc)
+			if got != totalZeros || r.Position() != l {
+				t.Fatalf("chromaDC totalZeros tc=%d z=%d code=%0*b: got %d pos=%d want pos=%d",
+					tc, totalZeros, l, chromaDCTotalZerosBits[idx][totalZeros], got, r.Position(), l)
+			}
+		}
+	}
+}
+
 func TestRunBeforeTablesRoundtrip(t *testing.T) {
 	for zerosLeft := 1; zerosLeft <= 15; zerosLeft++ {
 		tableIdx := zerosLeft - 1
