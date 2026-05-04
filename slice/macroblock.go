@@ -62,6 +62,12 @@ func DecodeMBIntra(r *nal.Reader, sliceQP int32, ppsEntropy uint32, transform8x8
 		mb.CodedBlockPattern = decodeCBPIntra(r)
 	}
 
+	use8x8 := false
+	if transform8x8 && mb.MBType == 0 && (mb.CodedBlockPattern & 0xF) != 0 {
+		use8x8 = r.ReadBool()
+	}
+	
+
 	// QP delta
 	if mb.CodedBlockPattern > 0 || (mb.MBType >= 1 && mb.MBType <= 24) {
 		mb.QPDelta = r.ReadSE()
@@ -90,7 +96,7 @@ func DecodeMBIntra(r *nal.Reader, sliceQP int32, ppsEntropy uint32, transform8x8
 		} else if mb.MBType == 0 && mb.CodedBlockPattern > 0 {
 			cbpLuma := mb.CodedBlockPattern & 0xF
 			var nzCoeffs [16]int
-			if transform8x8 {
+			if use8x8 {
 				// I_8x8: each 8x8 block decoded as 4 sub-blocks
 				for blk8 := 0; blk8 < 4; blk8++ {
 					if cbpLuma&(1<<uint(blk8)) != 0 {
