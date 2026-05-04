@@ -1,225 +1,223 @@
 package entropy
 
-// Complete CAVLC coeff_token, total_zeros, and run_before VLC tables.
-// ITU-T H.264 Tables 9-5 through 9-10.
+// CAVLC tables from FFmpeg h264_cavlc.c (authoritative).
 
 import "github.com/rcarmo/go-264/nal"
 
-// vlcEntry represents one VLC codeword.
-type vlcEntry struct {
-	code   uint32 // bit pattern (MSB-aligned)
-	length int    // number of bits
-	tc, to int    // totalCoeff, trailingOnes
+// Table 9-7: total_zeros VLC
+var totalZerosLen = [15][16]uint8{
+	{1, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 9},
+	{3, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 6, 6, 6, 6, 0},
+	{4, 3, 3, 3, 4, 4, 3, 3, 4, 5, 5, 6, 5, 6, 0, 0},
+	{5, 3, 4, 4, 3, 3, 3, 4, 3, 4, 5, 5, 5, 0, 0, 0},
+	{4, 4, 4, 3, 3, 3, 3, 3, 4, 5, 4, 5, 0, 0, 0, 0},
+	{6, 5, 3, 3, 3, 3, 3, 3, 4, 3, 6, 0, 0, 0, 0, 0},
+	{6, 5, 3, 3, 3, 2, 3, 4, 3, 6, 0, 0, 0, 0, 0, 0},
+	{6, 4, 5, 3, 2, 2, 3, 3, 6, 0, 0, 0, 0, 0, 0, 0},
+	{6, 6, 4, 2, 2, 3, 2, 5, 0, 0, 0, 0, 0, 0, 0, 0},
+	{5, 5, 3, 2, 2, 2, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	{4, 4, 3, 3, 1, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	{4, 4, 2, 1, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	{3, 3, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	{2, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	{1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 }
 
-// decodeFromTable tries each VLC entry (brute-force prefix match).
-// This is O(n) per decode but n is small (<64) and the inner loop is fast.
-func decodeFromTable(r *nal.Reader, table []vlcEntry) (tc, to int, ok bool) {
-	// Save position by peeking up to 20 bits
-	// Since our Reader is destructive, we need a different approach:
-	// Try entries sorted by code length (shortest first) and check prefix.
-
-	// Actually, let's use the standard approach: read bits one at a time
-	// and walk a decision tree. But for simplicity, use the leading-zeros
-	// pattern that most H.264 VLC tables follow.
-
-	// Count leading zeros
-	zeros := 0
-	for !r.EOF() && r.ReadBit() == 0 {
-		zeros++
-		if zeros > 20 {
-			return 0, 0, false
-		}
-	}
-	// We've consumed 'zeros' zero bits + 1 one bit.
-	// Now read additional suffix bits based on the table structure.
-
-	// For coeff_token table 0 (nC < 2):
-	// The pattern is: 0^n 1 <suffix>
-	// where n zeros encodes the "level" and suffix refines within that level
-	return zeros, 0, false // placeholder
+var totalZerosBits = [15][16]uint8{
+	{1, 3, 2, 3, 2, 3, 2, 3, 2, 3, 2, 3, 2, 3, 2, 1},
+	{7, 6, 5, 4, 3, 5, 4, 3, 2, 3, 2, 3, 2, 1, 0, 0},
+	{5, 7, 6, 5, 4, 3, 4, 3, 2, 3, 2, 1, 1, 0, 0, 0},
+	{3, 7, 5, 4, 6, 5, 4, 3, 3, 2, 2, 1, 0, 0, 0, 0},
+	{5, 4, 3, 7, 6, 5, 4, 3, 2, 1, 1, 0, 0, 0, 0, 0},
+	{1, 1, 7, 6, 5, 4, 3, 2, 1, 1, 0, 0, 0, 0, 0, 0},
+	{1, 1, 5, 4, 3, 3, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0},
+	{1, 1, 1, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0},
+	{1, 0, 1, 3, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	{1, 0, 1, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	{0, 1, 1, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	{0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	{0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	{0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	{0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 }
 
-// coeffTokenTable0 implements the full Table 9-5a decoder (nC = 0..1).
-// Uses the observation that codes are organized by leading zeros.
-func coeffTokenTable0Full(r *nal.Reader) (totalCoeff, trailingOnes int) {
-	// Read up to 16 bits to determine the code
-	zeros := 0
-	for !r.EOF() {
-		if r.ReadBit() == 1 {
-			break
-		}
-		zeros++
-		if zeros > 19 {
-			return 0, 0
-		}
-	}
-	// 'zeros' leading zeros consumed, plus the '1' bit.
-	// The suffix length and mapping depend on the number of leading zeros.
+var totalZerosMaxVal = [15]int{15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1}
 
-	switch zeros {
-	case 0: // code "1" → (0,0)
-		return 0, 0
-	case 1: // codes "01" → (1,1)
-		return 1, 1
-	case 2: // codes "001" → (2,2)
-		return 2, 2
-	case 3: // "0001x" → suffix determines
-		s := r.ReadBit()
-		if s == 1 { return 3, 3 } // "00011"
-		return 4, 3 // "000100" — wait, that's 6 bits total. Let me redo.
-		// Actually "000100" = 4 zeros + "100", but we consumed 3 zeros + "1" = "0001"
-		// Then need more bits.
-	}
-
-	// For longer codes, the pattern is complex.
-	// Use a table-driven approach: after reading the leading zeros + 1,
-	// read enough additional bits to disambiguate.
-
-	// Generic: after 'zeros' leading zeros + '1', read suffix
-	if zeros <= 5 {
-		// 2-bit suffix for zeros=3..5
-		suffix := r.ReadBits(2)
-		return decodeCoeffTokenByZerosSuffix(zeros, suffix)
-	}
-	if zeros <= 13 {
-		// 1-bit suffix for zeros=6..13
-		suffix := r.ReadBit()
-		// Each pair of zeros encodes (tc, to) with suffix selecting between two options
-		tc := zeros - 2
-		if suffix == 0 {
-			return tc, tc - int(r.ReadBit()) // approximate
-		}
-		return tc, int(suffix)
-	}
-	// zeros >= 14: special cases for tc=14..16
-	suffix := r.ReadBits(2)
-	return decodeHighTC(zeros, suffix)
+// Table 9-10: run_before VLC
+var runBeforeLen = [7][16]uint8{
+	{1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	{1, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	{2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	{2, 2, 2, 3, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	{2, 2, 3, 3, 3, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	{2, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	{3, 3, 3, 3, 3, 3, 3, 4, 5, 6, 7, 8, 9, 10, 11, 0},
 }
 
-func decodeCoeffTokenByZerosSuffix(zeros int, suffix uint32) (int, int) {
-	// This is simplified. The actual mapping from the spec:
-	// zeros=3: 00010 + 1bit → (1,0) or (2,1) depending on total code
-	// The real table has irregular structure.
-	// For now, return reasonable defaults:
-	switch zeros {
-	case 3:
-		switch suffix {
-		case 0: return 2, 1  // "000100"
-		case 1: return 1, 0  // "000101"
-		case 2: return 3, 2  // "000110" — wait, not right
-		case 3: return 3, 3  // "000111"
-		}
-	case 4:
-		switch suffix {
-		case 0: return 4, 3  // "0000100x"
-		case 1: return 3, 2
-		case 2: return 5, 3
-		case 3: return 3, 3
-		}
-	case 5:
-		switch suffix {
-		case 0: return 4, 2
-		case 1: return 3, 1
-		case 2: return 2, 0
-		case 3: return 3, 0
-		}
-	}
-	return 0, 0
+var runBeforeBits = [7][16]uint8{
+	{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	{1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	{3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	{3, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	{3, 2, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	{3, 0, 1, 3, 2, 5, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	{7, 6, 5, 4, 3, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0},
 }
 
-func decodeHighTC(zeros int, suffix uint32) (int, int) {
-	tc := zeros - 1
-	if tc > 16 { tc = 16 }
-	to := int(suffix & 3)
-	if to > 3 { to = 3 }
-	return tc, to
-}
-
-// Total zeros tables (ITU-T H.264 Table 9-7)
-// Indexed by totalCoeff (1..15), returns totalZeros from VLC.
-var totalZerosTable = [16][]struct{ code uint32; length, value int }{
-	{}, // totalCoeff=0 (unused)
-	// totalCoeff=1
-	{{1, 1, 0}, {0b011, 3, 1}, {0b010, 3, 2}, {0b0011, 4, 3},
-	 {0b0010, 4, 4}, {0b00011, 5, 5}, {0b00010, 5, 6}, {0b000011, 6, 7},
-	 {0b000010, 6, 8}, {0b0000011, 7, 9}, {0b0000010, 7, 10}, {0b00000011, 8, 11},
-	 {0b00000010, 8, 12}, {0b000000011, 9, 13}, {0b000000010, 9, 14}, {0b000000001, 9, 15}},
-	// totalCoeff=2
-	{{0b111, 3, 0}, {0b110, 3, 1}, {0b101, 3, 2}, {0b100, 3, 3},
-	 {0b011, 3, 4}, {0b0101, 4, 5}, {0b0100, 4, 6}, {0b0011, 4, 7},
-	 {0b0010, 4, 8}, {0b00011, 5, 9}, {0b00010, 5, 10}, {0b000011, 6, 11},
-	 {0b000010, 6, 12}, {0b000001, 6, 13}, {0b000000, 6, 14}},
-	// totalCoeff=3..15: similar tables (abbreviated for space)
-}
-
-// Run before tables (ITU-T H.264 Table 9-10)
-var runBeforeTable = [7][]struct{ code uint32; length, value int }{
-	// zerosLeft=1
-	{{1, 1, 0}, {0, 1, 1}},
-	// zerosLeft=2
-	{{1, 1, 0}, {0b01, 2, 1}, {0b00, 2, 2}},
-	// zerosLeft=3
-	{{0b11, 2, 0}, {0b10, 2, 1}, {0b01, 2, 2}, {0b00, 2, 3}},
-	// zerosLeft=4
-	{{0b11, 2, 0}, {0b10, 2, 1}, {0b01, 2, 2}, {0b001, 3, 3}, {0b000, 3, 4}},
-	// zerosLeft=5
-	{{0b11, 2, 0}, {0b10, 2, 1}, {0b011, 3, 2}, {0b010, 3, 3}, {0b001, 3, 4}, {0b000, 3, 5}},
-	// zerosLeft=6
-	{{0b11, 2, 0}, {0b000, 3, 1}, {0b001, 3, 2}, {0b011, 3, 3}, {0b010, 3, 4},
-	 {0b0001, 4, 5}, {0b0000, 4, 6}},
-	// zerosLeft >= 7
-	{{0b111, 3, 0}, {0b110, 3, 1}, {0b101, 3, 2}, {0b100, 3, 3},
-	 {0b011, 3, 4}, {0b010, 3, 5}, {0b001, 3, 6},
-	 {0b0001, 4, 7}, {0b00001, 5, 8}, {0b000001, 6, 9},
-	 {0b0000001, 7, 10}, {0b00000001, 8, 11}, {0b000000001, 9, 12},
-	 {0b0000000001, 10, 13}, {0b00000000001, 11, 14}},
-}
-
-// DecodeTotalZeros reads totalZeros for a given totalCoeff.
+// DecodeTotalZeros decodes total_zeros (Table 9-7).
 func DecodeTotalZeros(r *nal.Reader, totalCoeff int) int {
 	if totalCoeff <= 0 || totalCoeff >= 16 {
 		return 0
 	}
-	if totalCoeff <= 2 && totalCoeff < len(totalZerosTable) {
-		table := totalZerosTable[totalCoeff]
-		return decodeVLC(r, table)
-	}
-	// For totalCoeff > 2: simplified leading-zeros decoder
-	maxZeros := 16 - totalCoeff
-	zeros := 0
-	for zeros < maxZeros {
-		if r.ReadBit() == 1 {
-			return zeros
+	tableIdx := totalCoeff - 1
+	maxVal := totalZerosMaxVal[tableIdx]
+	
+	pos := r.Position()
+	avail := r.BitsLeft()
+	peekLen := 9 // max code length in total_zeros table
+	if avail < peekLen { peekLen = avail }
+	if peekLen <= 0 { return 0 }
+	bits := r.PeekBits(peekLen)
+	
+	for val := 0; val <= maxVal; val++ {
+		cLen := int(totalZerosLen[tableIdx][val])
+		cBits := uint32(totalZerosBits[tableIdx][val])
+		if cLen == 0 || cLen > peekLen { continue }
+		shift := uint(peekLen - cLen)
+		if (bits >> shift) == cBits {
+			r.Seek(pos + cLen)
+			return val
 		}
-		zeros++
 	}
-	return zeros
+	r.Seek(pos + 1) // fallback
+	return 0
 }
 
-// DecodeRunBefore reads run_before for given zerosLeft.
+// DecodeRunBefore decodes run_before (Table 9-10).
 func DecodeRunBefore(r *nal.Reader, zerosLeft int) int {
-	if zerosLeft <= 0 {
-		return 0
-	}
+	if zerosLeft <= 0 { return 0 }
+	
 	tableIdx := zerosLeft - 1
-	if tableIdx >= len(runBeforeTable) {
-		tableIdx = len(runBeforeTable) - 1
+	if tableIdx > 6 { tableIdx = 6 }
+	maxRun := zerosLeft
+	if maxRun > 15 { maxRun = 15 }
+	
+	pos := r.Position()
+	avail := r.BitsLeft()
+	peekLen := 11 // max code length in run_before table
+	if avail < peekLen { peekLen = avail }
+	if peekLen <= 0 { return 0 }
+	bits := r.PeekBits(peekLen)
+	
+	for run := 0; run <= maxRun; run++ {
+		cLen := int(runBeforeLen[tableIdx][run])
+		cBits := uint32(runBeforeBits[tableIdx][run])
+		if cLen == 0 || cLen > peekLen { continue }
+		shift := uint(peekLen - cLen)
+		if (bits >> shift) == cBits {
+			r.Seek(pos + cLen)
+			return run
+		}
 	}
-	return decodeVLC(r, runBeforeTable[tableIdx])
+	r.Seek(pos + 1)
+	return 0
 }
 
-// decodeVLC decodes from a VLC table by reading bits and matching.
-func decodeVLC(r *nal.Reader, table []struct{ code uint32; length, value int }) int {
-	// Accumulate bits and check against table entries
-	var code uint32
-	for bits := 1; bits <= 16; bits++ {
-		code = (code << 1) | r.ReadBit()
-		for _, entry := range table {
-			if entry.length == bits && entry.code == code {
-				return entry.value
+// Coeff_token VLC tables from FFmpeg (Table 9-5a/b/c)
+// Indexed as [totalCoeff*4 + trailingOnes]
+
+// Table 9-5a: 0 <= nC < 2
+var ctLen0 = [68]uint8{
+	1, 0, 0, 0,
+	6, 2, 0, 0, 8, 6, 3, 0, 9, 8, 7, 5, 10, 9, 8, 6,
+	11, 10, 9, 7, 13, 11, 10, 8, 13, 13, 11, 9, 13, 13, 13, 10,
+	14, 14, 13, 11, 14, 14, 14, 13, 15, 15, 14, 14, 15, 15, 15, 14,
+	16, 15, 15, 15, 16, 16, 16, 15, 16, 16, 16, 16, 16, 16, 16, 16,
+}
+var ctBits0 = [68]uint8{
+	1, 0, 0, 0,
+	5, 1, 0, 0, 7, 4, 1, 0, 7, 6, 5, 3, 7, 6, 5, 3,
+	7, 6, 5, 4, 15, 6, 5, 4, 11, 14, 5, 4, 8, 10, 13, 4,
+	15, 14, 9, 4, 11, 10, 13, 12, 15, 14, 9, 12, 11, 10, 13, 8,
+	15, 1, 9, 12, 11, 14, 13, 8, 7, 10, 9, 12, 4, 6, 5, 8,
+}
+
+// Table 9-5b: 2 <= nC < 4
+var ctLen1 = [68]uint8{2, 0, 0, 0, 6, 2, 0, 0, 6, 5, 3, 0, 7, 6, 6, 4, 8, 6, 6, 4, 8, 7, 7, 5, 9, 8, 8, 6, 11, 9, 9, 6, 11, 11, 11, 7, 12, 11, 11, 9, 12, 12, 12, 11, 12, 12, 12, 11, 13, 13, 13, 12, 13, 13, 13, 13, 13, 14, 13, 13, 14, 14, 14, 13, 14, 14, 14, 14}
+var ctBits1 = [68]uint8{3, 0, 0, 0, 11, 2, 0, 0, 7, 7, 3, 0, 7, 10, 9, 5, 7, 6, 5, 4, 4, 6, 5, 6, 7, 6, 5, 8, 15, 6, 5, 4, 11, 14, 13, 4, 15, 10, 9, 4, 11, 14, 13, 12, 8, 10, 9, 8, 15, 14, 13, 12, 11, 10, 9, 12, 7, 11, 6, 8, 9, 8, 10, 1, 7, 6, 5, 4}
+
+// Table 9-5c: 4 <= nC < 8
+var ctLen2 = [68]uint8{4, 0, 0, 0, 6, 4, 0, 0, 6, 5, 4, 0, 6, 5, 5, 4, 7, 5, 5, 4, 7, 5, 5, 4, 7, 6, 6, 4, 7, 6, 6, 4, 8, 7, 7, 5, 8, 8, 7, 6, 9, 8, 8, 7, 9, 9, 8, 8, 9, 9, 9, 8, 10, 9, 9, 9, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10}
+var ctBits2 = [68]uint8{15, 0, 0, 0, 15, 14, 0, 0, 11, 15, 13, 0, 8, 12, 14, 12, 15, 10, 11, 11, 11, 8, 9, 10, 9, 14, 13, 9, 8, 10, 9, 8, 15, 14, 13, 13, 11, 14, 10, 12, 15, 10, 13, 12, 11, 14, 9, 12, 8, 10, 13, 8, 13, 7, 9, 12, 9, 12, 11, 10, 5, 8, 7, 6, 1, 4, 3, 2}
+
+// decodeCoeffTokenFromTable reads coeff_token using FFmpeg VLC tables.
+func decodeCoeffTokenFromTable(r *nal.Reader, nC int) (int, int) {
+	if nC >= 8 {
+		// Table 9-5d: fixed 6-bit code
+		code := r.ReadBits(6)
+		if code < 4 {
+			if code == 3 {
+				return 0, 0
+			}
+			// code 0→(1,0)? Actually for nC>=8:
+			// totalCoeff = code/4 + 1 isn't right for code < 4
+			// FFmpeg: suffix = code & 3, tc = code >> 2
+			// code=0: tc=0,to=0 → but tc=0,to=0 code should be 3 (0b000011)
+			// Let me just use the standard formula: to = code%4, tc = code/4
+			// And for code=3: tc=0,to=3 but (0,3) doesn't exist, so it's (0,0)
+			return 0, 0
+		}
+		to := int(code % 4)
+		tc := int(code / 4)
+		if to > tc { to = tc }
+		return tc, to
+	}
+
+	var ctLen *[68]uint8
+	var ctBits *[68]uint8
+	if nC < 2 {
+		ctLen = &ctLen0
+		ctBits = &ctBits0
+	} else if nC < 4 {
+		ctLen = &ctLen1
+		ctBits = &ctBits1
+	} else {
+		ctLen = &ctLen2
+		ctBits = &ctBits2
+	}
+
+	pos := r.Position()
+	avail := r.BitsLeft()
+	peekLen := 16
+	if avail < peekLen { peekLen = avail }
+	if peekLen <= 0 { return 0, 0 }
+	bits := r.PeekBits(peekLen)
+
+	bestLen := 0
+	bestTC, bestTO := 0, 0
+	for tc := 0; tc <= 16; tc++ {
+		maxTO := 3
+		if tc < maxTO { maxTO = tc }
+		for to := 0; to <= maxTO; to++ {
+			idx := tc*4 + to
+			cLen := int(ctLen[idx])
+			cBits := uint32(ctBits[idx])
+			if cLen == 0 || cLen > peekLen { continue }
+			shift := uint(peekLen - cLen)
+			if (bits >> shift) == cBits {
+				if bestLen == 0 || cLen < bestLen {
+					bestLen = cLen
+					bestTC = tc
+					bestTO = to
+				}
 			}
 		}
 	}
-	return 0 // fallback
+
+	if bestLen > 0 {
+		r.Seek(pos + bestLen)
+		return bestTC, bestTO
+	}
+	r.Seek(pos + 1)
+	return 0, 0
 }

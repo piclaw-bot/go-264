@@ -102,3 +102,22 @@ func (r *Reader) ByteAlign() {
 func (r *Reader) Position() int {
 	return r.pos*8 + (7 - r.bit)
 }
+
+// BitsLeft returns the number of bits remaining in the stream.
+func (r *Reader) BitsLeft() int {
+	return (len(r.data)-r.pos)*8 - (7 - r.bit)
+}
+
+// PeekBits reads n bits without advancing the position.
+func (r *Reader) PeekBits(n int) uint32 {
+	savePos, saveBit := r.pos, r.bit
+	v := r.ReadBits(n)
+	r.pos, r.bit = savePos, saveBit
+	return v
+}
+
+// Seek moves to an absolute bit position.
+func (r *Reader) Seek(bitPos int) {
+	r.pos = bitPos / 8
+	r.bit = 7 - (bitPos % 8)
+}

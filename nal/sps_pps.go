@@ -194,8 +194,12 @@ func ParsePPS(payload []byte) (*PPS, error) {
 	p.ConstrainedIntraPred = r.ReadBool()
 	p.RedundantPicCntPresent = r.ReadBool()
 
-	// High profile extensions (if more data)
-	if !r.EOF() {
+	// High profile extensions — only present for High profile and above.
+	// The spec says more_rbsp_data() but we need the SPS to know the profile.
+	// We use the fact that Baseline/Main don't have these fields.
+	// We need the SPS profile to gate this. Since we don't have it here,
+	// check if there's more than just the RBSP stop bit remaining.
+	if moreRBSPData(r) {
 		p.Transform8x8Mode = r.ReadBool()
 		if r.ReadBool() { // pic_scaling_matrix_present_flag
 			n := 6
@@ -214,4 +218,29 @@ func ParsePPS(payload []byte) (*PPS, error) {
 	}
 
 	return p, nil
+}
+
+// moreRBSPData checks if there's more than the RBSP trailing bits remaining.
+// The RBSP stop bit is a 1 followed by zero-fill to byte alignment.
+// Returns true if there's real data beyond the stop bit.
+func moreRBSPData(r *Reader) bool {
+	if r.EOF() {
+		return false
+	}
+	// Save position, peek at remaining bits
+	pos := r.Position()
+	remaining := r.BitsLeft()
+	if remaining <= 0 {
+		return false
+	}
+	// If remaining <= 8 bits, check if it's just the stop bit pattern (1 followed by 0s)
+	if remaining <= 8 {
+		bits := r.PeekBits(int(remaining))
+		// Stop bit pattern: 1 followed by (remaining-1) zeros
+		// E.g. remaining=1: bits=1; remaining=3: bits=100=4
+		stopBit := uint32(1) << uint(remaining-1)
+		r.Seek(pos) // restore position
+		return bits != stopBit
+	}
+	return true
 }

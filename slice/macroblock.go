@@ -171,28 +171,38 @@ func decodeCBPIntra(r *nal.Reader) uint32 {
 
 // computeNC4x4 computes the nC context for a 4x4 block within a macroblock.
 // Uses the totalCoeff of the left and top neighboring 4x4 blocks.
-// Block layout within MB (raster scan):
+// Block layout within MB (H.264 raster scan §6.4.3):
 //  0  1  4  5
 //  2  3  6  7
 //  8  9 12 13
 // 10 11 14 15
 func computeNC4x4(blkIdx int, nz []int) int {
-	// Map block index to (x,y) within 4x4 grid
-	// Using H.264 inverse raster scan
-	x := (blkIdx % 4)
-	y := (blkIdx / 4)
+	// Map block index to (x,y) within 4×4 grid using blk4x4 tables
+	var blk4x4ToX = [16]int{0, 1, 0, 1, 2, 3, 2, 3, 0, 1, 0, 1, 2, 3, 2, 3}
+	var blk4x4ToY = [16]int{0, 0, 1, 1, 0, 0, 1, 1, 2, 2, 3, 3, 2, 2, 3, 3}
+	
+	// Reverse map: (x,y) → block index
+	var xyToBlk4x4 = [4][4]int{
+		{0, 1, 4, 5},
+		{2, 3, 6, 7},
+		{8, 9, 12, 13},
+		{10, 11, 14, 15},
+	}
+	
+	x := blk4x4ToX[blkIdx]
+	y := blk4x4ToY[blkIdx]
 	
 	nA, nB := -1, -1 // -1 = not available
 	
 	// Left neighbor
 	if x > 0 {
-		leftIdx := blkIdx - 1
+		leftIdx := xyToBlk4x4[y][x-1]
 		nA = nz[leftIdx]
 	}
 	
 	// Top neighbor
 	if y > 0 {
-		topIdx := blkIdx - 4
+		topIdx := xyToBlk4x4[y-1][x]
 		nB = nz[topIdx]
 	}
 	

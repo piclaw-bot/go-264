@@ -46,15 +46,7 @@ func DecodeCAVLCBlock(r *nal.Reader, nC int) (Block4x4, int) {
 }
 
 func DecodeCoeffToken(r *nal.Reader, nC int) (int, int) {
-	if nC >= 8 {
-		code := r.ReadBits(6)
-		to := int(code % 4); tc := int(code/4) + 1
-		if to > tc { to = tc }; if tc > 16 { tc = 16 }
-		return tc, to
-	}
-	if nC < 2 { return decodeCoeffTokenN0(r) }
-	if nC < 4 { return decodeCoeffTokenN2(r) }
-	return decodeCoeffTokenN4(r)
+	return decodeCoeffTokenFromTable(r, nC)
 }
 
 func decodeLevelPrefix(r *nal.Reader, suffixLength int) int {
