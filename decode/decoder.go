@@ -22,7 +22,10 @@ type Decoder struct {
 	SPS    map[uint32]*nal.SPS
 	PPS    map[uint32]*nal.PPS
 	DPB    *frame.DPB
-	Frames []*frame.Frame // decoded output frames
+	Frames []*frame.Frame
+	// Per-frame prediction mode map (4x4 block index → mode)
+	intraModes []int8 // [mbW*4 * mbH*4] for current frame
+	mbW, mbH   int
 }
 
 // NewDecoder creates a new H.264 decoder.
@@ -116,6 +119,10 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 
 	mbWidth := int(sps.PicWidthInMbs)
 	mbHeight := int(sps.PicHeightInMapUnits)
+	d.mbW = mbWidth
+	d.mbH = mbHeight
+	d.intraModes = make([]int8, mbWidth*4*mbHeight*4)
+	for i := range d.intraModes { d.intraModes[i] = 2 } // default DC
 
 	maxMBs := mbWidth * mbHeight
 	if maxMBs > 10000 { maxMBs = 10000 } // safety limit
@@ -148,8 +155,60 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 		}
 	}
 
+	// Apply deblocking filter
+	d.applyDeblocking(f, sps, int(qp))
+
 	return f, nil
 }
+
+func (d *Decoder) applyDeblocking(f *frame.Frame, sps *nal.SPS, qp int) {
+	mbW := int(sps.PicWidthInMbs)
+	mbH := int(sps.PicHeightInMapUnits)
+	for mbY := 0; mbY < mbH; mbY++ {
+		for mbX := 0; mbX < mbW; mbX++ {
+			// Vertical edges (between left and current MB)
+			if mbX > 0 {
+				for y := 0; y < 16; y++ {
+					x := mbX * 16
+					// Simple 4-tap filter at MB boundary
+					p1 := int(f.PixelY(x-2, mbY*16+y))
+					p0 := int(f.PixelY(x-1, mbY*16+y))
+					q0 := int(f.PixelY(x, mbY*16+y))
+					q1 := int(f.PixelY(x+1, mbY*16+y))
+					// Boundary strength 4 (intra edge) filter
+					alpha := 7 + qp // simplified threshold
+					if alpha > 255 { alpha = 255 }
+					if abs264(p0-q0) < alpha && abs264(p1-p0) < alpha/2 && abs264(q1-q0) < alpha/2 {
+						delta := clip264(-alpha/4, alpha/4, ((q0-p0)*4+(p1-q1)+4)>>3)
+						f.SetPixelY(x-1, mbY*16+y, clip1_264(p0+delta))
+						f.SetPixelY(x, mbY*16+y, clip1_264(q0-delta))
+					}
+				}
+			}
+			// Horizontal edges
+			if mbY > 0 {
+				for x := 0; x < 16; x++ {
+					y := mbY * 16
+					p1 := int(f.PixelY(mbX*16+x, y-2))
+					p0 := int(f.PixelY(mbX*16+x, y-1))
+					q0 := int(f.PixelY(mbX*16+x, y))
+					q1 := int(f.PixelY(mbX*16+x, y+1))
+					alpha := 7 + qp
+					if alpha > 255 { alpha = 255 }
+					if abs264(p0-q0) < alpha && abs264(p1-p0) < alpha/2 && abs264(q1-q0) < alpha/2 {
+						delta := clip264(-alpha/4, alpha/4, ((q0-p0)*4+(p1-q1)+4)>>3)
+						f.SetPixelY(mbX*16+x, y-1, clip1_264(p0+delta))
+						f.SetPixelY(mbX*16+x, y, clip1_264(q0-delta))
+					}
+				}
+			}
+		}
+	}
+}
+
+func abs264(x int) int { if x < 0 { return -x }; return x }
+func clip264(lo, hi, v int) int { if v < lo { return lo }; if v > hi { return hi }; return v }
+func clip1_264(v int) uint8 { if v < 0 { return 0 }; if v > 255 { return 255 }; return uint8(v) }
 
 func (d *Decoder) reconstructMB(f *frame.Frame, mb *slice.MBIntra, mbX, mbY int, qp int, sps *nal.SPS) {
 	if mb.MBType >= 1 && mb.MBType <= 24 {
@@ -256,27 +315,35 @@ func (d *Decoder) reconstruct4x4(f *frame.Frame, mb *slice.MBIntra, mbX, mbY, qp
 		}
 
 		// Compute predicted mode from neighbors (§8.3.1.1)
-		predMode := 2 // DC default
-		if bx > 0 || mbX > 0 {
-			// Left neighbor mode (simplified: use DC if cross-MB)
-			if bx > 0 {
-				predMode = 2 // would need tracking per-block modes
-			}
+		blkX := mbX*4 + bx/4
+		blkY := mbY*4 + by/4
+		modeA := int8(2) // left neighbor default
+		modeB := int8(2) // top neighbor default
+		if blkX > 0 {
+			modeA = d.intraModes[blkY*d.mbW*4+(blkX-1)]
 		}
-		// For now: if prev flag (-1), use DC; if rem, use directly
-		mode := 2
+		if blkY > 0 {
+			modeB = d.intraModes[(blkY-1)*d.mbW*4+blkX]
+		}
+		predMode := modeA
+		if modeB < predMode { predMode = modeB }
+		
+		mode := int(predMode) // default: use predicted
 		rawMode := mb.IntraPredMode[blkIdx]
 		if rawMode == -1 {
-			mode = predMode // use predicted (DC for now)
-		} else if rawMode >= 0 {
-			// rem_intra_pred_mode: if rem < predicted, mode=rem, else mode=rem+1
-			if int(rawMode) < predMode {
+			mode = int(predMode)
+		} else {
+			if int(rawMode) < int(predMode) {
 				mode = int(rawMode)
 			} else {
 				mode = int(rawMode) + 1
 			}
 		}
-		if mode > 8 { mode = 2 } // clamp to valid range
+		if mode > 8 { mode = 2 }
+		// Store the decoded mode
+		if blkY < d.mbH*4 && blkX < d.mbW*4 {
+			d.intraModes[blkY*d.mbW*4+blkX] = int8(mode)
+		}
 
 		predicted := make([]uint8, 16)
 		pred.PredIntra4x4(predicted, mode, top, topRight, left, topLeft)
@@ -302,8 +369,11 @@ func (d *Decoder) reconstruct4x4(f *frame.Frame, mb *slice.MBIntra, mbX, mbY, qp
 
 func (d *Decoder) reconstructMBInter(f *frame.Frame, mb *slice.MBInter, mbX, mbY, qp int) {
 	// Get reference frame
-	ref := d.DPB.GetRef(0)
-	if ref == nil || len(d.DPB.Frames) == 0 {
+	var ref *frame.Frame
+	if len(d.DPB.Frames) > 0 {
+		ref = d.DPB.Frames[len(d.DPB.Frames)-1]
+	}
+	if ref == nil {
 		// No reference available — fill with gray
 		for y := 0; y < 16; y++ {
 			for x := 0; x < 16; x++ {
@@ -312,9 +382,7 @@ func (d *Decoder) reconstructMBInter(f *frame.Frame, mb *slice.MBInter, mbX, mbY
 		}
 		return
 	}
-	if ref == nil {
-		ref = d.DPB.Frames[len(d.DPB.Frames)-1]
-	}
+
 
 	// Motion compensation based on partition type
 	switch mb.MBType {
