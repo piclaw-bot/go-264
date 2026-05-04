@@ -174,3 +174,29 @@ func readGrayPNG(path string) (*grayFixture, error) {
 	}
 	return &grayFixture{Pix: pix, W: w, H: h, Stride: w}, nil
 }
+
+func TestConformanceChromaPlanes(t *testing.T) {
+	data, err := os.ReadFile("/workspace/tmp/testsrc_bl.h264")
+	if err != nil {
+		t.Skip("no baseline fixture")
+	}
+	frames, err := NewDecoder().Decode(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(frames) == 0 {
+		t.Fatal("no frames")
+	}
+	f := frames[0]
+	uniqU, uniqV := map[uint8]bool{}, map[uint8]bool{}
+	for y := 0; y < f.Height/2; y++ {
+		for x := 0; x < f.Width/2; x++ {
+			uniqU[f.PixelU(x, y)] = true
+			uniqV[f.PixelV(x, y)] = true
+		}
+	}
+	if len(uniqU) < 16 || len(uniqV) < 16 {
+		t.Fatalf("chroma diversity too low: U=%d V=%d", len(uniqU), len(uniqV))
+	}
+	t.Logf("baseline chroma diversity: U=%d V=%d", len(uniqU), len(uniqV))
+}
