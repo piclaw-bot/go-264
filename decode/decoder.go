@@ -132,7 +132,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 		mbY := mbIdx / mbWidth
 
 		if isIntra {
-			mb := slice.DecodeMBIntra(r, int32(currentQP), pps.EntropyCodingMode, pps.Transform8x8Mode && sps.ProfileIDC >= 100)
+			mb := slice.DecodeMBIntra(r, int32(currentQP), pps.EntropyCodingMode, pps.Transform8x8Mode)
 			mbQPDelta := int(mb.QPDelta); currentQP = (currentQP + mbQPDelta%52 + 52) % 52
 			d.reconstructMB(f, mb, mbX, mbY, currentQP, sps)
 		} else if hdr.SliceType == slice.SliceTypeP {
