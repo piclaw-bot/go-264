@@ -12,7 +12,6 @@ import (
 	"github.com/rcarmo/go-264/transform"
 )
 
-
 // H.264 4x4 block position within macroblock (inverse raster scan §6.4.3)
 var blk4x4X = [16]int{0, 4, 0, 4, 8, 12, 8, 12, 0, 4, 0, 4, 8, 12, 8, 12}
 var blk4x4Y = [16]int{0, 0, 4, 4, 0, 0, 4, 4, 8, 8, 12, 12, 8, 8, 12, 12}
@@ -87,23 +86,20 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 			resultFrame = nil
 		}
 	}()
-	// Find PPS/SPS (peek at pps_id in slice header)
-	// For simplicity, use first available PPS/SPS
-	var pps *nal.PPS
-	var sps *nal.SPS
-	for _, p := range d.PPS {
-		pps = p
-		break
-	}
+	// Select PPS/SPS by pic_parameter_set_id from the slice header. The PPS id
+	// appears before fields that require SPS-derived lengths, so it can be
+	// safely peeked with raw Exp-Golomb reads.
+	peek := nal.NewReader(unit.Payload)
+	_ = peek.ReadUE() // first_mb_in_slice
+	_ = peek.ReadUE() // slice_type
+	ppsID := peek.ReadUE()
+	pps := d.PPS[ppsID]
 	if pps == nil {
-		return nil, fmt.Errorf("no PPS available")
+		return nil, fmt.Errorf("PPS %d not available", ppsID)
 	}
-	for _, s := range d.SPS {
-		sps = s
-		break
-	}
+	sps := d.SPS[pps.SPSID]
 	if sps == nil {
-		return nil, fmt.Errorf("no SPS available")
+		return nil, fmt.Errorf("SPS %d not available", pps.SPSID)
 	}
 
 	hdr, r := slice.ParseHeader(unit.Payload, unit.Type, sps, pps)
@@ -122,24 +118,33 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 	d.mbW = mbWidth
 	d.mbH = mbHeight
 	d.intraModes = make([]int8, mbWidth*4*mbHeight*4)
-	for i := range d.intraModes { d.intraModes[i] = 2 } // default DC
+	for i := range d.intraModes {
+		d.intraModes[i] = 2
+	} // default DC
 
 	maxMBs := mbWidth * mbHeight
-	if maxMBs > 10000 { maxMBs = 10000 } // safety limit
+	if maxMBs > 10000 {
+		maxMBs = 10000
+	} // safety limit
 	currentQP := int(qp)
 	nzCtx := make([][16]int, maxMBs) // CAVLC totalCoeff context per decoded MB
-	skipRun := 0 // CAVLC P/B-slice mb_skip_run state
+	skipRun := 0                     // CAVLC P/B-slice mb_skip_run state
 	for mbIdx := int(hdr.FirstMbInSlice); mbIdx < maxMBs; mbIdx++ {
 		mbX := mbIdx % mbWidth
 		mbY := mbIdx / mbWidth
 
 		var leftNZ, topNZ *[16]int
-		if mbX > 0 { leftNZ = &nzCtx[mbIdx-1] }
-		if mbY > 0 { topNZ = &nzCtx[mbIdx-mbWidth] }
+		if mbX > 0 {
+			leftNZ = &nzCtx[mbIdx-1]
+		}
+		if mbY > 0 {
+			topNZ = &nzCtx[mbIdx-mbWidth]
+		}
 
 		if isIntra {
 			mb := slice.DecodeMBIntraCtx(r, int32(currentQP), pps.EntropyCodingMode, pps.Transform8x8Mode, leftNZ, topNZ)
-			mbQPDelta := int(mb.QPDelta); currentQP = (currentQP + mbQPDelta%52 + 52) % 52
+			mbQPDelta := int(mb.QPDelta)
+			currentQP = (currentQP + mbQPDelta%52 + 52) % 52
 			d.reconstructMB(f, mb, mbX, mbY, currentQP, sps)
 			nzCtx[mbIdx] = mb.TotalCoeff
 		} else if hdr.SliceType == slice.SliceTypeP {
@@ -158,13 +163,16 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 				}
 			}
 			mbInter := slice.DecodeMBInterCtx(r, int32(currentQP), hdr.NumRefIdxL0Active, leftNZ, topNZ)
-			currentQP = (currentQP + int(mbInter.QPDelta)%52 + 52) % 52
 			if mbInter.MBType >= 5 {
-				// P-slice intra MB syntax is not fully delegated yet; reconstruct as
-				// intra type with no residual rather than corrupting the bitstream.
-				mb := &slice.MBIntra{MBType: mbInter.MBType - 5}
+				// P-slice intra MB: mb_type has already been consumed by
+				// DecodeMBInterCtx, so decode the remaining intra payload with the
+				// intra type offset (Table 7-13).
+				mb := slice.DecodeMBIntraCtxWithType(r, mbInter.MBType-5, int32(currentQP), pps.EntropyCodingMode, pps.Transform8x8Mode, leftNZ, topNZ)
+				currentQP = (currentQP + int(mb.QPDelta)%52 + 52) % 52
 				d.reconstructMB(f, mb, mbX, mbY, currentQP, sps)
+				nzCtx[mbIdx] = mb.TotalCoeff
 			} else {
+				currentQP = (currentQP + int(mbInter.QPDelta)%52 + 52) % 52
 				d.reconstructMBInter(f, mbInter, mbX, mbY, currentQP)
 				nzCtx[mbIdx] = mbInter.TotalCoeff
 			}
@@ -202,7 +210,9 @@ func (d *Decoder) applyDeblocking(f *frame.Frame, sps *nal.SPS, qp int) {
 					q1 := int(f.PixelY(x+1, mbY*16+y))
 					// Boundary strength 4 (intra edge) filter
 					alpha := 7 + qp // simplified threshold
-					if alpha > 255 { alpha = 255 }
+					if alpha > 255 {
+						alpha = 255
+					}
 					if abs264(p0-q0) < alpha && abs264(p1-p0) < alpha/2 && abs264(q1-q0) < alpha/2 {
 						delta := clip264(-alpha/4, alpha/4, ((q0-p0)*4+(p1-q1)+4)>>3)
 						f.SetPixelY(x-1, mbY*16+y, clip1_264(p0+delta))
@@ -219,7 +229,9 @@ func (d *Decoder) applyDeblocking(f *frame.Frame, sps *nal.SPS, qp int) {
 					q0 := int(f.PixelY(mbX*16+x, y))
 					q1 := int(f.PixelY(mbX*16+x, y+1))
 					alpha := 7 + qp
-					if alpha > 255 { alpha = 255 }
+					if alpha > 255 {
+						alpha = 255
+					}
 					if abs264(p0-q0) < alpha && abs264(p1-p0) < alpha/2 && abs264(q1-q0) < alpha/2 {
 						delta := clip264(-alpha/4, alpha/4, ((q0-p0)*4+(p1-q1)+4)>>3)
 						f.SetPixelY(mbX*16+x, y-1, clip1_264(p0+delta))
@@ -231,9 +243,30 @@ func (d *Decoder) applyDeblocking(f *frame.Frame, sps *nal.SPS, qp int) {
 	}
 }
 
-func abs264(x int) int { if x < 0 { return -x }; return x }
-func clip264(lo, hi, v int) int { if v < lo { return lo }; if v > hi { return hi }; return v }
-func clip1_264(v int) uint8 { if v < 0 { return 0 }; if v > 255 { return 255 }; return uint8(v) }
+func abs264(x int) int {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
+func clip264(lo, hi, v int) int {
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
+}
+func clip1_264(v int) uint8 {
+	if v < 0 {
+		return 0
+	}
+	if v > 255 {
+		return 255
+	}
+	return uint8(v)
+}
 
 func (d *Decoder) reconstructMB(f *frame.Frame, mb *slice.MBIntra, mbX, mbY int, qp int, sps *nal.SPS) {
 	if mb.MBType >= 1 && mb.MBType <= 24 {
@@ -252,16 +285,26 @@ func (d *Decoder) reconstruct16x16(f *frame.Frame, mb *slice.MBIntra, mbX, mbY, 
 	left := make([]uint8, 16)
 	topLeft := uint8(128)
 	if mbY > 0 {
-		for x := 0; x < 16; x++ { top[x] = f.PixelY(mbX*16+x, mbY*16-1) }
+		for x := 0; x < 16; x++ {
+			top[x] = f.PixelY(mbX*16+x, mbY*16-1)
+		}
 	} else {
-		for i := range top { top[i] = 128 }
+		for i := range top {
+			top[i] = 128
+		}
 	}
 	if mbX > 0 {
-		for y := 0; y < 16; y++ { left[y] = f.PixelY(mbX*16-1, mbY*16+y) }
+		for y := 0; y < 16; y++ {
+			left[y] = f.PixelY(mbX*16-1, mbY*16+y)
+		}
 	} else {
-		for i := range left { left[i] = 128 }
+		for i := range left {
+			left[i] = 128
+		}
 	}
-	if mbX > 0 && mbY > 0 { topLeft = f.PixelY(mbX*16-1, mbY*16-1) }
+	if mbX > 0 && mbY > 0 {
+		topLeft = f.PixelY(mbX*16-1, mbY*16-1)
+	}
 
 	predicted := make([]uint8, 256)
 	if mode == pred.Intra16x16DC {
@@ -271,27 +314,37 @@ func (d *Decoder) reconstruct16x16(f *frame.Frame, mb *slice.MBIntra, mbX, mbY, 
 		var dc uint8
 		if mbX > 0 && mbY > 0 {
 			sum := 0
-			for i := 0; i < 16; i++ { sum += int(top[i]) + int(left[i]) }
+			for i := 0; i < 16; i++ {
+				sum += int(top[i]) + int(left[i])
+			}
 			dc = uint8((sum + 16) >> 5)
 		} else if mbY > 0 {
 			sum := 0
-			for i := 0; i < 16; i++ { sum += int(top[i]) }
+			for i := 0; i < 16; i++ {
+				sum += int(top[i])
+			}
 			dc = uint8((sum + 8) >> 4)
 		} else if mbX > 0 {
 			sum := 0
-			for i := 0; i < 16; i++ { sum += int(left[i]) }
+			for i := 0; i < 16; i++ {
+				sum += int(left[i])
+			}
 			dc = uint8((sum + 8) >> 4)
 		} else {
 			dc = 128
 		}
-		for i := range predicted[:256] { predicted[i] = dc }
+		for i := range predicted[:256] {
+			predicted[i] = dc
+		}
 	} else {
 		pred.PredIntra16x16(predicted, mode, top, left, topLeft)
 	}
 
 	// Hadamard DC transform
 	var dcBlock [16]int16
-	for i := 0; i < 16; i++ { dcBlock[i] = mb.Coeffs[i][0] }
+	for i := 0; i < 16; i++ {
+		dcBlock[i] = mb.Coeffs[i][0]
+	}
 	transform.Hadamard4x4DC(dcBlock[:], qp)
 
 	cbpLuma := mb.CodedBlockPattern & 0xF
@@ -301,7 +354,9 @@ func (d *Decoder) reconstruct16x16(f *frame.Frame, mb *slice.MBIntra, mbX, mbY, 
 		var block [16]int16
 		block[0] = dcBlock[blkIdx]
 		if cbpLuma != 0 {
-			for j := 1; j < 16; j++ { block[j] = mb.Coeffs[blkIdx][j] }
+			for j := 1; j < 16; j++ {
+				block[j] = mb.Coeffs[blkIdx][j]
+			}
 			// Dequant AC only (DC already handled by Hadamard)
 			qpDiv6 := uint(qp / 6)
 			qpMod6 := qp % 6
@@ -316,8 +371,12 @@ func (d *Decoder) reconstruct16x16(f *frame.Frame, mb *slice.MBIntra, mbX, mbY, 
 		for py := 0; py < 4; py++ {
 			for px := 0; px < 4; px++ {
 				v := int(predicted[(by+py)*16+(bx+px)]) + int(block[py*4+px])
-				if v < 0 { v = 0 }
-				if v > 255 { v = 255 }
+				if v < 0 {
+					v = 0
+				}
+				if v > 255 {
+					v = 255
+				}
 				f.SetPixelY(mbX*16+bx+px, mbY*16+by+py, uint8(v))
 			}
 		}
@@ -374,8 +433,10 @@ func (d *Decoder) reconstruct4x4(f *frame.Frame, mb *slice.MBIntra, mbX, mbY, qp
 			modeB = d.intraModes[(blkY-1)*d.mbW*4+blkX]
 		}
 		predMode := modeA
-		if modeB < predMode { predMode = modeB }
-		
+		if modeB < predMode {
+			predMode = modeB
+		}
+
 		mode := int(predMode) // default: use predicted
 		rawMode := mb.IntraPredMode[blkIdx]
 		if rawMode == -1 {
@@ -387,7 +448,9 @@ func (d *Decoder) reconstruct4x4(f *frame.Frame, mb *slice.MBIntra, mbX, mbY, qp
 				mode = int(rawMode) + 1
 			}
 		}
-		if mode > 8 { mode = 2 }
+		if mode > 8 {
+			mode = 2
+		}
 		// Store the decoded mode
 		if blkY < d.mbH*4 && blkX < d.mbW*4 {
 			d.intraModes[blkY*d.mbW*4+blkX] = int8(mode)
@@ -401,20 +464,28 @@ func (d *Decoder) reconstruct4x4(f *frame.Frame, mb *slice.MBIntra, mbX, mbY, qp
 			var dc uint8
 			if topAvail && leftAvail {
 				sum := 0
-				for i := 0; i < 4; i++ { sum += int(top[i]) + int(left[i]) }
+				for i := 0; i < 4; i++ {
+					sum += int(top[i]) + int(left[i])
+				}
 				dc = uint8((sum + 4) >> 3)
 			} else if topAvail {
 				sum := 0
-				for i := 0; i < 4; i++ { sum += int(top[i]) }
+				for i := 0; i < 4; i++ {
+					sum += int(top[i])
+				}
 				dc = uint8((sum + 2) >> 2)
 			} else if leftAvail {
 				sum := 0
-				for i := 0; i < 4; i++ { sum += int(left[i]) }
+				for i := 0; i < 4; i++ {
+					sum += int(left[i])
+				}
 				dc = uint8((sum + 2) >> 2)
 			} else {
 				dc = 128
 			}
-			for i := range predicted[:16] { predicted[i] = dc }
+			for i := range predicted[:16] {
+				predicted[i] = dc
+			}
 		} else {
 			pred.PredIntra4x4(predicted, mode, top, topRight, left, topLeft)
 		}
@@ -430,8 +501,12 @@ func (d *Decoder) reconstruct4x4(f *frame.Frame, mb *slice.MBIntra, mbX, mbY, qp
 		for py := 0; py < 4; py++ {
 			for px := 0; px < 4; px++ {
 				v := int(predicted[py*4+px]) + int(block[py*4+px])
-				if v < 0 { v = 0 }
-				if v > 255 { v = 255 }
+				if v < 0 {
+					v = 0
+				}
+				if v > 255 {
+					v = 255
+				}
 				f.SetPixelY(x0+px, y0+py, uint8(v))
 			}
 		}
@@ -454,7 +529,6 @@ func (d *Decoder) reconstructMBInter(f *frame.Frame, mb *slice.MBInter, mbX, mbY
 		return
 	}
 
-
 	// Motion compensation based on partition type
 	switch mb.MBType {
 	case slice.PMBTypeP16x16:
@@ -463,28 +537,54 @@ func (d *Decoder) reconstructMBInter(f *frame.Frame, mb *slice.MBInter, mbX, mbY
 		mv := mb.MV[0]
 		predicted := make([]uint8, 256)
 		pred.InterPred16x16At(predicted, ref.Y, ref.StrideY, mbX*16, mbY*16, pred.MotionVector{X: mv.X, Y: mv.Y})
-		// Dequant + IDCT residual blocks, then add to prediction
-		cbpLuma := mb.CBP & 0xF
-		for blkIdx := 0; blkIdx < 16; blkIdx++ {
-			group := blkIdx / 4
-			if cbpLuma&(1<<uint(group)) != 0 {
-				block := mb.Coeffs[blkIdx]
-				transform.Dequant4x4(block[:], qp)
-				transform.IDCT4x4(block[:])
-			}
+		d.writeInterResidual(f, mb, predicted, mbX, mbY, qp)
+
+	case slice.PMBTypeP16x8:
+		predicted := make([]uint8, 256)
+		tmp := make([]uint8, 256)
+		mv0 := mb.MV[0]
+		pred.InterPred16x16At(tmp, ref.Y, ref.StrideY, mbX*16, mbY*16, pred.MotionVector{X: mv0.X, Y: mv0.Y})
+		for y := 0; y < 8; y++ {
+			copy(predicted[y*16:y*16+16], tmp[y*16:y*16+16])
 		}
+		mv1 := mb.MV[1]
+		pred.InterPred16x16At(tmp, ref.Y, ref.StrideY, mbX*16, mbY*16+8, pred.MotionVector{X: mv1.X, Y: mv1.Y})
+		for y := 0; y < 8; y++ {
+			copy(predicted[(y+8)*16:(y+8)*16+16], tmp[y*16:y*16+16])
+		}
+		d.writeInterResidual(f, mb, predicted, mbX, mbY, qp)
+
+	case slice.PMBTypeP8x16:
+		predicted := make([]uint8, 256)
+		tmp := make([]uint8, 256)
+		mv0 := mb.MV[0]
+		pred.InterPred16x16At(tmp, ref.Y, ref.StrideY, mbX*16, mbY*16, pred.MotionVector{X: mv0.X, Y: mv0.Y})
 		for y := 0; y < 16; y++ {
-			for x := 0; x < 16; x++ {
-				_ = blk4x4X
-				// Simplified: use raster order for residual
-				bi := (y/4)*4 + (x/4)
-				py, px := y%4, x%4
-				v := int(predicted[y*16+x]) + int(mb.Coeffs[bi][py*4+px])
-				if v < 0 { v = 0 }
-				if v > 255 { v = 255 }
-				f.SetPixelY(mbX*16+x, mbY*16+y, uint8(v))
+			copy(predicted[y*16:y*16+8], tmp[y*16:y*16+8])
+		}
+		mv1 := mb.MV[1]
+		pred.InterPred16x16At(tmp, ref.Y, ref.StrideY, mbX*16+8, mbY*16, pred.MotionVector{X: mv1.X, Y: mv1.Y})
+		for y := 0; y < 16; y++ {
+			copy(predicted[y*16+8:y*16+16], tmp[y*16:y*16+8])
+		}
+		d.writeInterResidual(f, mb, predicted, mbX, mbY, qp)
+
+	case slice.PMBTypeP8x8, slice.PMBTypeP8x8ref0:
+		// Conservative 8x8 MC: use the first MV of each 8x8 sub-MB and copy the
+		// top-left 8x8 of the generated 16x16 prediction. Sub-8x8 partitioning is
+		// parsed but not split yet.
+		predicted := make([]uint8, 256)
+		tmp := make([]uint8, 256)
+		for part := 0; part < 4; part++ {
+			px := (part & 1) * 8
+			py := (part >> 1) * 8
+			mv := mb.SubMV[part*4]
+			pred.InterPred16x16At(tmp, ref.Y, ref.StrideY, mbX*16+px, mbY*16+py, pred.MotionVector{X: mv.X, Y: mv.Y})
+			for y := 0; y < 8; y++ {
+				copy(predicted[(py+y)*16+px:(py+y)*16+px+8], tmp[y*16:y*16+8])
 			}
 		}
+		d.writeInterResidual(f, mb, predicted, mbX, mbY, qp)
 
 	default:
 		// For other partition types, copy from reference with zero MV as fallback
@@ -495,6 +595,38 @@ func (d *Decoder) reconstructMBInter(f *frame.Frame, mb *slice.MBInter, mbX, mbY
 				if srcX < ref.Width && srcY < ref.Height {
 					f.SetPixelY(srcX, srcY, ref.PixelY(srcX, srcY))
 				}
+			}
+		}
+	}
+}
+
+func (d *Decoder) writeInterResidual(f *frame.Frame, mb *slice.MBInter, predicted []uint8, mbX, mbY, qp int) {
+	// Dequant + IDCT residual blocks, then add to prediction. Keep a
+	// transformed residual copy; mb.Coeffs remains quantized bitstream data.
+	cbpLuma := mb.CBP & 0xF
+	var residual [16][16]int16
+	for blkIdx := 0; blkIdx < 16; blkIdx++ {
+		group := blkIdx / 4
+		if cbpLuma&(1<<uint(group)) != 0 {
+			residual[blkIdx] = mb.Coeffs[blkIdx]
+			transform.Dequant4x4(residual[blkIdx][:], qp)
+			transform.IDCT4x4(residual[blkIdx][:])
+		}
+	}
+	for blkIdx := 0; blkIdx < 16; blkIdx++ {
+		bx := blk4x4X[blkIdx]
+		by := blk4x4Y[blkIdx]
+		for py := 0; py < 4; py++ {
+			for px := 0; px < 4; px++ {
+				pidx := (by+py)*16 + (bx + px)
+				v := int(predicted[pidx]) + int(residual[blkIdx][py*4+px])
+				if v < 0 {
+					v = 0
+				}
+				if v > 255 {
+					v = 255
+				}
+				f.SetPixelY(mbX*16+bx+px, mbY*16+by+py, uint8(v))
 			}
 		}
 	}
@@ -561,7 +693,11 @@ func (d *Decoder) reconstructMBBidi(f *frame.Frame, mb *slice.MBBidi, mbX, mbY, 
 type DecodedFrame = frame.Frame
 
 func clampInt(v, lo, hi int) int {
-	if v < lo { return lo }
-	if v > hi { return hi }
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
 	return v
 }

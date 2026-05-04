@@ -25,14 +25,14 @@ type MotionVector struct {
 
 // MBInter describes a decoded inter macroblock.
 type MBInter struct {
-	MBType    uint32
-	RefIdx    [4]int8      // reference frame indices per partition
-	MV        [4]MotionVector // motion vectors per partition
-	SubMBType [4]uint32    // sub-macroblock types for P8x8
-	SubMV     [16]MotionVector // sub-partition MVs for P8x8
-	CBP       uint32
-	QPDelta   int32
-	Coeffs    [16][16]int16
+	MBType     uint32
+	RefIdx     [4]int8          // reference frame indices per partition
+	MV         [4]MotionVector  // motion vectors per partition
+	SubMBType  [4]uint32        // sub-macroblock types for P8x8
+	SubMV      [16]MotionVector // sub-partition MVs for P8x8
+	CBP        uint32
+	QPDelta    int32
+	Coeffs     [16][16]int16
 	TotalCoeff [16]int
 }
 
@@ -47,9 +47,11 @@ func DecodeMBInterCtx(r *nal.Reader, sliceQP int32, numRefFrames uint32, leftNZ,
 	mb := &MBInter{}
 	mb.MBType = r.ReadUE()
 
-	// Check if this is actually an intra MB in a P-slice
+	// Check if this is actually an intra MB in a P-slice. The caller is
+	// responsible for decoding the remaining intra payload with
+	// DecodeMBIntraCtxWithType(mb_type-5); returning here would otherwise leave
+	// the bitstream positioned at mb_pred().
 	if mb.MBType >= 5 {
-		// Intra macroblock — delegate to intra decoder
 		return mb
 	}
 
@@ -140,10 +142,14 @@ func decodeMVD(r *nal.Reader) MotionVector {
 // subMBPartCount returns the number of sub-partitions for a sub-MB type.
 func subMBPartCount(subType uint32) int {
 	switch subType {
-	case 0: return 1 // 8x8
-	case 1: return 2 // 8x4
-	case 2: return 2 // 4x8
-	case 3: return 4 // 4x4
+	case 0:
+		return 1 // 8x8
+	case 1:
+		return 2 // 8x4
+	case 2:
+		return 2 // 4x8
+	case 3:
+		return 4 // 4x4
 	}
 	return 1
 }

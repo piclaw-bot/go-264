@@ -15,14 +15,14 @@ const (
 
 // MBIntra describes a decoded intra macroblock.
 type MBIntra struct {
-	MBType        uint32
-	IntraPredMode [16]int8 // 4x4 prediction modes (if MBTypeINxN)
+	MBType             uint32
+	IntraPredMode      [16]int8 // 4x4 prediction modes (if MBTypeINxN)
 	Intra16x16PredMode int8
 	CodedBlockPattern  uint32 // CBP
 	QPDelta            int32
-	Coeffs             [16][16]int16 // 4x4 luma blocks in raster scan
+	Coeffs             [16][16]int16   // 4x4 luma blocks in raster scan
 	CoeffsChroma       [2][4][16]int16 // chroma blocks [U/V][4 blocks][16 coeffs]
-	TotalCoeff         [16]int // CAVLC totalCoeff per luma 4x4 block (for nC context)
+	TotalCoeff         [16]int         // CAVLC totalCoeff per luma 4x4 block (for nC context)
 }
 
 // DecodeMBIntra decodes one intra macroblock from the bitstream.
@@ -35,9 +35,15 @@ func DecodeMBIntra(r *nal.Reader, sliceQP int32, ppsEntropy uint32, transform8x8
 // context from neighbouring macroblocks. leftNZ/topNZ are indexed by the H.264
 // 4x4 block index within the neighbouring macroblock.
 func DecodeMBIntraCtx(r *nal.Reader, sliceQP int32, ppsEntropy uint32, transform8x8 bool, leftNZ, topNZ *[16]int) *MBIntra {
-	mb := &MBIntra{}
+	mbType := r.ReadUE()
+	return DecodeMBIntraCtxWithType(r, mbType, sliceQP, ppsEntropy, transform8x8, leftNZ, topNZ)
+}
 
-	mb.MBType = r.ReadUE()
+// DecodeMBIntraCtxWithType decodes the intra macroblock payload after the
+// caller has already consumed an enclosing slice-specific mb_type. P/B slices
+// encode intra macroblock types as offsets from the inter type range.
+func DecodeMBIntraCtxWithType(r *nal.Reader, mbType uint32, sliceQP int32, ppsEntropy uint32, transform8x8 bool, leftNZ, topNZ *[16]int) *MBIntra {
+	mb := &MBIntra{MBType: mbType}
 
 	if mb.MBType == 0 {
 		// I_NxN: always 16 prediction modes (4x4 block-level modes)
@@ -71,10 +77,9 @@ func DecodeMBIntraCtx(r *nal.Reader, sliceQP int32, ppsEntropy uint32, transform
 	}
 
 	use8x8 := false
-	if transform8x8 && mb.MBType == 0 && (mb.CodedBlockPattern & 0xF) != 0 {
+	if transform8x8 && mb.MBType == 0 && (mb.CodedBlockPattern&0xF) != 0 {
 		use8x8 = r.ReadBool()
 	}
-	
 
 	// QP delta
 	if mb.CodedBlockPattern > 0 || (mb.MBType >= 1 && mb.MBType <= 24) {
@@ -111,7 +116,7 @@ func DecodeMBIntraCtx(r *nal.Reader, sliceQP int32, ppsEntropy uint32, transform
 						// 4 sub-blocks per 8x8 block
 						for sub := 0; sub < 4; sub++ {
 							blk4 := blk8*4 + sub
-										nC := computeNC4x4Ctx(blk4, nzCoeffs[:], leftNZ, topNZ)
+							nC := computeNC4x4Ctx(blk4, nzCoeffs[:], leftNZ, topNZ)
 							block, tc := entropy.DecodeCAVLCBlock(r, nC)
 							mb.Coeffs[blk4] = [16]int16(block)
 							nzCoeffs[blk4] = tc
@@ -158,7 +163,7 @@ func DecodeMBIntraCtx(r *nal.Reader, sliceQP int32, ppsEntropy uint32, transform
 			}
 		}
 	}
-	
+
 	return mb
 }
 
@@ -178,13 +183,14 @@ func decodeCBPIntra(r *nal.Reader) uint32 {
 	return 0
 }
 
-
 // computeNC4x4 computes the nC context for a 4x4 block within a macroblock.
 // Uses the totalCoeff of the left and top neighboring 4x4 blocks.
 // Block layout within MB (H.264 raster scan §6.4.3):
-//  0  1  4  5
-//  2  3  6  7
-//  8  9 12 13
+//
+//	0  1  4  5
+//	2  3  6  7
+//	8  9 12 13
+//
 // 10 11 14 15
 var blk4x4ToX = [16]int{0, 1, 0, 1, 2, 3, 2, 3, 0, 1, 0, 1, 2, 3, 2, 3}
 var blk4x4ToY = [16]int{0, 0, 1, 1, 0, 0, 1, 1, 2, 2, 3, 3, 2, 2, 3, 3}
@@ -206,10 +212,20 @@ func computeNC4x4Ctx(blkIdx int, nz []int, leftNZ, topNZ *[16]int) int {
 	x := blkIdx % 4
 	y := blkIdx / 4
 	nA, nB := -1, -1
-	if x > 0 { nA = nz[blkIdx-1] }
-	if y > 0 { nB = nz[blkIdx-4] }
-	if nA >= 0 && nB >= 0 { return (nA+nB+1)>>1 }
-	if nA >= 0 { return nA }
-	if nB >= 0 { return nB }
+	if x > 0 {
+		nA = nz[blkIdx-1]
+	}
+	if y > 0 {
+		nB = nz[blkIdx-4]
+	}
+	if nA >= 0 && nB >= 0 {
+		return (nA + nB + 1) >> 1
+	}
+	if nA >= 0 {
+		return nA
+	}
+	if nB >= 0 {
+		return nB
+	}
 	return 0
 }
