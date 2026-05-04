@@ -127,11 +127,13 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 		maxMBs = 10000
 	} // safety limit
 	currentQP := int(qp)
-	nzCtx := make([][16]int, maxMBs) // CAVLC totalCoeff context per decoded MB
-	skipRun := 0                     // CAVLC P/B-slice mb_skip_run state
+	nzCtx := make([][16]int, maxMBs)            // CAVLC totalCoeff context per decoded MB
+	mvCtx := make([]slice.MotionVector, maxMBs) // representative L0 MV context per MB
+	skipRun := 0                                // CAVLC P/B-slice mb_skip_run state
 	for mbIdx := int(hdr.FirstMbInSlice); mbIdx < maxMBs; mbIdx++ {
 		mbX := mbIdx % mbWidth
 		mbY := mbIdx / mbWidth
+		predMV := predictMBMV(mvCtx, mbIdx, mbX, mbY, mbWidth)
 
 		var leftNZ, topNZ *[16]int
 		if mbX > 0 {
@@ -155,9 +157,12 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					skipRun = int(r.ReadUE())
 				}
 				if skipRun > 0 {
-					// P_Skip: no residual, no mvd/ref_idx. Use zero-MV P16x16 copy as
-					// the conservative fallback until neighbour MV prediction is wired.
-					d.reconstructMBInter(f, &slice.MBInter{MBType: slice.PMBTypeP16x16}, mbX, mbY, currentQP)
+					// P_Skip: no residual, no mvd/ref_idx. Motion vector is the normal
+					// median predictor from neighbouring L0 vectors.
+					mbSkip := &slice.MBInter{MBType: slice.PMBTypeP16x16}
+					mbSkip.MV[0] = predMV
+					d.reconstructMBInter(f, mbSkip, mbX, mbY, currentQP)
+					mvCtx[mbIdx] = predMV
 					skipRun--
 					continue
 				}
@@ -172,9 +177,11 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 				d.reconstructMB(f, mb, mbX, mbY, currentQP, sps)
 				nzCtx[mbIdx] = mb.TotalCoeff
 			} else {
+				applyMVPredictors(mbInter, predMV)
 				currentQP = (currentQP + int(mbInter.QPDelta)%52 + 52) % 52
 				d.reconstructMBInter(f, mbInter, mbX, mbY, currentQP)
 				nzCtx[mbIdx] = mbInter.TotalCoeff
+				mvCtx[mbIdx] = mbInter.MV[0]
 			}
 		} else {
 			// B-slice
@@ -700,4 +707,44 @@ func clampInt(v, lo, hi int) int {
 		return hi
 	}
 	return v
+}
+
+func predictMBMV(ctx []slice.MotionVector, mbIdx, mbX, mbY, mbWidth int) slice.MotionVector {
+	var a, b, c slice.MotionVector
+	availA := mbX > 0
+	availB := mbY > 0
+	availC := mbY > 0 && mbX+1 < mbWidth
+	if availA {
+		a = ctx[mbIdx-1]
+	}
+	if availB {
+		b = ctx[mbIdx-mbWidth]
+	}
+	if availC {
+		c = ctx[mbIdx-mbWidth+1]
+	} else if mbY > 0 && mbX > 0 {
+		// Spec fallback for unavailable top-right C: use top-left.
+		c = ctx[mbIdx-mbWidth-1]
+		availC = true
+	}
+	return slice.PredictMV(a, b, c, availA, availB, availC)
+}
+
+func applyMVPredictors(mb *slice.MBInter, pred slice.MotionVector) {
+	add := func(mv *slice.MotionVector) {
+		mv.X += pred.X
+		mv.Y += pred.Y
+	}
+	switch mb.MBType {
+	case slice.PMBTypeP16x16:
+		add(&mb.MV[0])
+	case slice.PMBTypeP16x8, slice.PMBTypeP8x16:
+		add(&mb.MV[0])
+		add(&mb.MV[1])
+	case slice.PMBTypeP8x8, slice.PMBTypeP8x8ref0:
+		for i := 0; i < 16; i++ {
+			add(&mb.SubMV[i])
+		}
+		mb.MV[0] = mb.SubMV[0]
+	}
 }
