@@ -1,6 +1,7 @@
 package decode
 
 import (
+	"image/color"
 	"image/png"
 	"math"
 	"os"
@@ -168,8 +169,7 @@ func readGrayPNG(path string) (*grayFixture, error) {
 	pix := make([]uint8, w*h)
 	for y := 0; y < h; y++ {
 		for x := 0; x < w; x++ {
-			r, g, b, _ := img.At(b.Min.X+x, b.Min.Y+y).RGBA()
-			pix[y*w+x] = uint8(((r + g + b) / 3) >> 8)
+			pix[y*w+x] = color.GrayModel.Convert(img.At(b.Min.X+x, b.Min.Y+y)).(color.Gray).Y
 		}
 	}
 	return &grayFixture{Pix: pix, W: w, H: h, Stride: w}, nil
