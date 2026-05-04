@@ -65,24 +65,24 @@ func DecodeCAVLCBlock(r *nal.Reader, nC int) (Block4x4, int) {
 	if totalCoeff < 16 {
 		totalZeros = DecodeTotalZeros(r, totalCoeff)
 	}
+	// Decode run_before values in reverse coefficient order, then place levels
+	// in increasing scan positions as specified in §9.2.1. Positions are in
+	// zig-zag scan order and converted to raster-order block indices.
 	zerosLeft := totalZeros
-	coeffIdx := totalCoeff - 1
-	scanPos := totalCoeff + totalZeros - 1
-	for coeffIdx >= 0 {
-		if zerosLeft > 0 && coeffIdx > 0 {
-			run := DecodeRunBefore(r, zerosLeft)
-			if scanPos >= 0 && scanPos < 16 {
-				block[zigZag4x4[scanPos]] = levels[coeffIdx]
-			}
-			scanPos -= run + 1
-			zerosLeft -= run
-		} else {
-			if scanPos >= 0 && scanPos < 16 {
-				block[zigZag4x4[scanPos]] = levels[coeffIdx]
-			}
-			scanPos--
+	runBefore := make([]int, totalCoeff)
+	for i := totalCoeff - 1; i > 0; i-- {
+		if zerosLeft > 0 {
+			runBefore[i] = DecodeRunBefore(r, zerosLeft)
+			zerosLeft -= runBefore[i]
 		}
-		coeffIdx--
+	}
+	runBefore[0] = zerosLeft
+	coeffNum := -1
+	for i := totalCoeff - 1; i >= 0; i-- {
+		coeffNum += runBefore[i] + 1
+		if coeffNum >= 0 && coeffNum < 16 {
+			block[zigZag4x4[coeffNum]] = levels[i]
+		}
 	}
 	return block, totalCoeff
 }
@@ -184,23 +184,20 @@ func DecodeCAVLCChromaDC(r *nal.Reader) [4]int16 {
 	}
 
 	zerosLeft := totalZeros
-	coeffIdx := totalCoeff - 1
-	scanPos := totalCoeff + totalZeros - 1
-	for coeffIdx >= 0 {
-		if zerosLeft > 0 && coeffIdx > 0 {
-			run := DecodeRunBefore(r, zerosLeft)
-			if scanPos >= 0 && scanPos < 4 {
-				block[scanPos] = levels[coeffIdx]
-			}
-			scanPos -= run + 1
-			zerosLeft -= run
-		} else {
-			if scanPos >= 0 && scanPos < 4 {
-				block[scanPos] = levels[coeffIdx]
-			}
-			scanPos--
+	runBefore := make([]int, totalCoeff)
+	for i := totalCoeff - 1; i > 0; i-- {
+		if zerosLeft > 0 {
+			runBefore[i] = DecodeRunBefore(r, zerosLeft)
+			zerosLeft -= runBefore[i]
 		}
-		coeffIdx--
+	}
+	runBefore[0] = zerosLeft
+	coeffNum := -1
+	for i := totalCoeff - 1; i >= 0; i-- {
+		coeffNum += runBefore[i] + 1
+		if coeffNum >= 0 && coeffNum < 4 {
+			block[coeffNum] = levels[i]
+		}
 	}
 	return block
 }
