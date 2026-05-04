@@ -195,9 +195,10 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 		}
 	}
 
-	// Apply deblocking filter
-	d.applyDeblocking(f, sps, int(qp))
-
+	// Do not run the old simplified deblocking pass here. It is not spec-complete
+	// and measurably reduces reference PSNR. The proper in-loop deblocker should
+	// be wired from the filter package once boundary strengths and per-edge QP
+	// are tracked accurately.
 	return f, nil
 }
 
