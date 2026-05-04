@@ -25,7 +25,7 @@ func NewFrame(width, height int) *Frame {
 	strideC := strideY / 2
 	h := (height + 15) &^ 15
 
-	return &Frame{
+	f := &Frame{
 		Width:   width,
 		Height:  height,
 		Y:       make([]uint8, strideY*h),
@@ -34,6 +34,16 @@ func NewFrame(width, height int) *Frame {
 		StrideY: strideY,
 		StrideC: strideC,
 	}
+	// Neutral chroma for partially implemented chroma reconstruction and skipped
+	// chroma blocks. H.264 4:2:0 YUV defaults should be grey (U=V=128), not
+	// green/purple from zero-filled chroma planes.
+	for i := range f.U {
+		f.U[i] = 128
+	}
+	for i := range f.V {
+		f.V[i] = 128
+	}
+	return f
 }
 
 // PixelY returns luma pixel at (x, y).
@@ -73,8 +83,8 @@ func (f *Frame) WriteBlock4x4Y(mbX, mbY, blkIdx int, block []uint8) {
 
 // DPB (Decoded Picture Buffer) manages reference frames.
 type DPB struct {
-	Frames   []*Frame
-	MaxSize  int
+	Frames  []*Frame
+	MaxSize int
 }
 
 // NewDPB creates a decoded picture buffer.
