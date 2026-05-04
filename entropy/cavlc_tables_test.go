@@ -125,3 +125,20 @@ func TestRunBeforeTablesRoundtrip(t *testing.T) {
 		}
 	}
 }
+
+func TestVLCTableAdvanceSkipsEmulationPrevention(t *testing.T) {
+	// Start three bits before an emulation-prevention byte. The RBSP bits seen by
+	// DecodeRunBefore are 0001 (zerosLeft=7, run_before=7): three zero bits at
+	// the end of byte 1, then byte 2 (0x03) must be skipped and the one bit is
+	// read from byte 3. Table decoders must advance by reading bits, not by raw
+	// Seek(pos+n), otherwise they can land inside the 0x03 EBSP byte.
+	r := nal.NewReader([]byte{0x00, 0x00, 0x03, 0x80})
+	r.Seek(13)
+	got := DecodeRunBefore(r, 7)
+	if got != 7 {
+		t.Fatalf("DecodeRunBefore across emulation-prevention byte = %d, want 7", got)
+	}
+	if pos := r.Position(); pos != 25 {
+		t.Fatalf("reader position after VLC across emulation-prevention byte = %d, want 25", pos)
+	}
+}

@@ -72,7 +72,6 @@ func DecodeTotalZeros(r *nal.Reader, totalCoeff int) int {
 	tableIdx := totalCoeff - 1
 	maxVal := totalZerosMaxVal[tableIdx]
 
-	pos := r.Position()
 	avail := r.BitsLeft()
 	peekLen := 9 // max code length in total_zeros table
 	if avail < peekLen {
@@ -91,11 +90,14 @@ func DecodeTotalZeros(r *nal.Reader, totalCoeff int) int {
 		}
 		shift := uint(peekLen - cLen)
 		if (bits >> shift) == cBits {
-			r.Seek(pos + cLen)
+			// Advance through the reader instead of Seek(pos+cLen): Seek uses
+			// raw EBSP bit offsets and can land inside/after an emulation-prevention
+			// byte, while ReadBits preserves RBSP skip semantics.
+			r.ReadBits(cLen)
 			return val
 		}
 	}
-	r.Seek(pos + 1) // fallback
+	r.ReadBit() // fallback; preserve emulation-prevention handling
 	return 0
 }
 
@@ -114,7 +116,6 @@ func DecodeRunBefore(r *nal.Reader, zerosLeft int) int {
 		maxRun = 15
 	}
 
-	pos := r.Position()
 	avail := r.BitsLeft()
 	peekLen := 11 // max code length in run_before table
 	if avail < peekLen {
@@ -133,11 +134,11 @@ func DecodeRunBefore(r *nal.Reader, zerosLeft int) int {
 		}
 		shift := uint(peekLen - cLen)
 		if (bits >> shift) == cBits {
-			r.Seek(pos + cLen)
+			r.ReadBits(cLen)
 			return run
 		}
 	}
-	r.Seek(pos + 1)
+	r.ReadBit()
 	return 0
 }
 
@@ -190,7 +191,6 @@ func decodeCoeffTokenFromTable(r *nal.Reader, nC int) (int, int) {
 		ctBits = &ctBits3
 	}
 
-	pos := r.Position()
 	avail := r.BitsLeft()
 	peekLen := 16
 	if avail < peekLen {
@@ -227,10 +227,10 @@ func decodeCoeffTokenFromTable(r *nal.Reader, nC int) (int, int) {
 	}
 
 	if bestLen > 0 {
-		r.Seek(pos + bestLen)
+		r.ReadBits(bestLen)
 		return bestTC, bestTO
 	}
-	r.Seek(pos + 1)
+	r.ReadBit()
 	return 0, 0
 }
 
@@ -250,7 +250,6 @@ var chromaDCTotalZerosBits = [3][4]uint8{
 }
 
 func decodeCoeffTokenChromaDCTable(r *nal.Reader) (int, int) {
-	pos := r.Position()
 	avail := r.BitsLeft()
 	peekLen := 8
 	if avail < peekLen {
@@ -280,10 +279,10 @@ func decodeCoeffTokenChromaDCTable(r *nal.Reader) (int, int) {
 		}
 	}
 	if bestLen > 0 {
-		r.Seek(pos + bestLen)
+		r.ReadBits(bestLen)
 		return bestTC, bestTO
 	}
-	r.Seek(pos + 1)
+	r.ReadBit()
 	return 0, 0
 }
 
@@ -292,7 +291,6 @@ func decodeChromaDCTotalZerosTable(r *nal.Reader, totalCoeff int) int {
 		return 0
 	}
 	idx := totalCoeff - 1
-	pos := r.Position()
 	avail := r.BitsLeft()
 	peekLen := 3
 	if avail < peekLen {
@@ -308,10 +306,10 @@ func decodeChromaDCTotalZerosTable(r *nal.Reader, totalCoeff int) int {
 			continue
 		}
 		if bits>>uint(peekLen-l) == uint32(chromaDCTotalZerosBits[idx][val]) {
-			r.Seek(pos + l)
+			r.ReadBits(l)
 			return val
 		}
 	}
-	r.Seek(pos + 1)
+	r.ReadBit()
 	return 0
 }
