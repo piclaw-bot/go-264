@@ -32,10 +32,8 @@ func DecodeMBIntra(r *nal.Reader, sliceQP int32, ppsEntropy uint32, transform8x8
 	mb.MBType = r.ReadUE()
 
 	if mb.MBType == 0 {
-		// I_NxN: decode prediction modes
-		// transform_8x8_mode_flag=1 → I_8x8 (4 modes), else I_4x4 (16 modes)
+		// I_NxN: always 16 prediction modes (4x4 block-level modes)
 		numModes := 16
-		if transform8x8 { numModes = 4 }
 		for i := 0; i < numModes; i++ {
 			if r.ReadBool() { // prev_intra_pred_mode_flag
 				mb.IntraPredMode[i] = -1 // use predicted mode
@@ -64,6 +62,11 @@ func DecodeMBIntra(r *nal.Reader, sliceQP int32, ppsEntropy uint32, transform8x8
 		mb.CodedBlockPattern = decodeCBPIntra(r)
 	}
 
+	// transform_size_8x8_flag: present for I_NxN when transform_8x8_mode_flag=1 and CBP_luma!=0
+	if transform8x8 && mb.MBType == 0 && (mb.CodedBlockPattern & 0xF) != 0 {
+		_ = r.ReadBool() // transform_size_8x8_flag (determines 4x4 vs 8x8 transform)
+	}
+	
 	// QP delta
 	if mb.CodedBlockPattern > 0 || (mb.MBType >= 1 && mb.MBType <= 24) {
 		mb.QPDelta = r.ReadSE()

@@ -287,7 +287,7 @@ func decodeCoeffTokenChromaDC(r *nal.Reader) (int, int) {
 	return 0, 0 // fallback
 }
 
-// DecodeCAVLCChromaDC decodes a chroma DC 2×2 block (max 4 coefficients).
+// DecodeCAVLCChromaDC decodes a chroma DC 2×2 block (4:2:0, max 4 coefficients).
 func DecodeCAVLCChromaDC(r *nal.Reader) [4]int16 {
 	var block [4]int16
 	totalCoeff, trailingOnes := decodeCoeffTokenChromaDC(r)
@@ -314,14 +314,10 @@ func DecodeCAVLCChromaDC(r *nal.Reader) [4]int16 {
 		idx--
 	}
 
-	// total_zeros for chroma DC (max 3 zeros)
+	// Chroma DC total_zeros (from FFmpeg chroma_dc_total_zeros tables)
 	totalZeros := 0
 	if totalCoeff < 4 {
-		// Simplified: unary for chroma DC total_zeros
-		for totalZeros < 4-totalCoeff {
-			if r.ReadBit() == 1 { break }
-			totalZeros++
-		}
+		totalZeros = decodeChromaDCTotalZeros(r, totalCoeff)
 	}
 
 	zerosLeft := totalZeros
@@ -329,9 +325,8 @@ func DecodeCAVLCChromaDC(r *nal.Reader) [4]int16 {
 	scanPos := totalCoeff + totalZeros - 1
 	for coeffIdx >= 0 {
 		if zerosLeft > 0 && coeffIdx > 0 {
-			run := 0
-			for run < zerosLeft { if r.ReadBit() == 1 { break }; run++ }
-			if scanPos < 4 { block[scanPos] = levels[coeffIdx] }
+			run := DecodeRunBefore(r, zerosLeft)
+			if scanPos >= 0 && scanPos < 4 { block[scanPos] = levels[coeffIdx] }
 			scanPos -= run + 1; zerosLeft -= run
 		} else {
 			if scanPos >= 0 && scanPos < 4 { block[scanPos] = levels[coeffIdx] }
@@ -340,4 +335,23 @@ func DecodeCAVLCChromaDC(r *nal.Reader) [4]int16 {
 		coeffIdx--
 	}
 	return block
+}
+
+// decodeChromaDCTotalZeros: from FFmpeg chroma_dc_total_zeros tables
+func decodeChromaDCTotalZeros(r *nal.Reader, totalCoeff int) int {
+	switch totalCoeff {
+	case 1: // lens: 1,2,3,3  bits: 1,1,1,0
+		if r.ReadBit() == 1 { return 0 }
+		if r.ReadBit() == 1 { return 1 }
+		if r.ReadBit() == 1 { return 2 }
+		return 3
+	case 2: // lens: 1,2,2  bits: 1,1,0
+		if r.ReadBit() == 1 { return 0 }
+		if r.ReadBit() == 1 { return 1 }
+		return 2
+	case 3: // lens: 1,1  bits: 1,0
+		if r.ReadBit() == 1 { return 0 }
+		return 1
+	}
+	return 0
 }
