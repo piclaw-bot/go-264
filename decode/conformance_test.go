@@ -1,9 +1,10 @@
 package decode
 
 import (
+	"image/png"
+	"math"
 	"os"
 	"testing"
-	"math"
 )
 
 func psnr(a, b []uint8, w, h, strideA, strideB int) float64 {
@@ -15,17 +16,25 @@ func psnr(a, b []uint8, w, h, strideA, strideB int) float64 {
 		}
 	}
 	mse /= float64(w * h)
-	if mse < 1e-10 { return 99.0 }
+	if mse < 1e-10 {
+		return 99.0
+	}
 	return 10 * math.Log10(255*255/mse)
 }
 
 func TestConformanceGray16(t *testing.T) {
 	data, err := os.ReadFile("/workspace/tmp/gray16.h264")
-	if err != nil { t.Skip("no test file") }
+	if err != nil {
+		t.Skip("no test file")
+	}
 	dec := NewDecoder()
 	frames, err := dec.Decode(data)
-	if err != nil { t.Fatal(err) }
-	if len(frames) == 0 { t.Fatal("no frames") }
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(frames) == 0 {
+		t.Fatal("no frames")
+	}
 	f := frames[0]
 	// All pixels should be ~128 (gray)
 	for y := 0; y < f.Height; y++ {
@@ -41,10 +50,14 @@ func TestConformanceGray16(t *testing.T) {
 
 func TestConformanceBBB(t *testing.T) {
 	data, err := os.ReadFile("/workspace/tmp/bbb_annexb.h264")
-	if err != nil { t.Skip("no test file") }
+	if err != nil {
+		t.Skip("no test file")
+	}
 	dec := NewDecoder()
 	frames, err := dec.Decode(data)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(frames) < 10 {
 		t.Fatalf("decoded %d frames, want >=10", len(frames))
 	}
@@ -64,12 +77,100 @@ func TestConformanceBBB(t *testing.T) {
 
 func TestConformanceBaseline(t *testing.T) {
 	data, err := os.ReadFile("/workspace/tmp/testsrc_bl.h264")
-	if err != nil { t.Skip("no test file") }
+	if err != nil {
+		t.Skip("no test file")
+	}
 	dec := NewDecoder()
 	frames, err := dec.Decode(data)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(frames) < 5 {
 		t.Fatalf("decoded %d frames, want >=5", len(frames))
 	}
 	t.Logf("Baseline: %d frames, %dx%d", len(frames), frames[0].Width, frames[0].Height)
+}
+
+func TestConformancePSNRRegression(t *testing.T) {
+	cases := []struct {
+		name   string
+		stream string
+		refs   []string
+		minAvg float64
+	}{
+		{"dark64", "/workspace/tmp/dark64.h264", []string{"/workspace/tmp/dark_ref.png"}, 25.0},
+		{"baseline", "/workspace/tmp/testsrc_bl.h264", []string{
+			"/workspace/tmp/bl_allref_0001.png", "/workspace/tmp/bl_allref_0002.png",
+			"/workspace/tmp/bl_allref_0003.png", "/workspace/tmp/bl_allref_0004.png",
+			"/workspace/tmp/bl_allref_0005.png", "/workspace/tmp/bl_allref_0006.png",
+			"/workspace/tmp/bl_allref_0007.png", "/workspace/tmp/bl_allref_0008.png",
+			"/workspace/tmp/bl_allref_0009.png", "/workspace/tmp/bl_allref_0010.png",
+		}, 7.0},
+		{"bbb-frame0", "/workspace/tmp/bbb_annexb.h264", []string{"/workspace/tmp/bbb_ref_0001.png"}, 8.0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			data, err := os.ReadFile(tc.stream)
+			if err != nil {
+				t.Skipf("stream fixture missing: %v", err)
+			}
+			for _, rp := range tc.refs {
+				if _, err := os.Stat(rp); err != nil {
+					t.Skipf("reference fixture missing: %s", rp)
+				}
+			}
+			frames, err := NewDecoder().Decode(data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(frames) < len(tc.refs) {
+				t.Fatalf("decoded %d frames want >=%d", len(frames), len(tc.refs))
+			}
+			var sum float64
+			for i, rp := range tc.refs {
+				ref, err := readGrayPNG(rp)
+				if err != nil {
+					t.Fatal(err)
+				}
+				f := frames[i]
+				if f.Width != ref.W || f.Height != ref.H {
+					t.Fatalf("frame %d size=%dx%d ref=%dx%d", i, f.Width, f.Height, ref.W, ref.H)
+				}
+				sum += psnr(f.Y, ref.Pix, f.Width, f.Height, f.StrideY, ref.Stride)
+			}
+			avg := sum / float64(len(tc.refs))
+			t.Logf("%s avg PSNR %.2f dB", tc.name, avg)
+			if avg < tc.minAvg {
+				t.Fatalf("avg PSNR %.2f < %.2f", avg, tc.minAvg)
+			}
+		})
+	}
+}
+
+type grayFixture struct {
+	Pix    []uint8
+	W, H   int
+	Stride int
+}
+
+func readGrayPNG(path string) (*grayFixture, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	img, err := png.Decode(f)
+	if err != nil {
+		return nil, err
+	}
+	b := img.Bounds()
+	w, h := b.Dx(), b.Dy()
+	pix := make([]uint8, w*h)
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			r, g, b, _ := img.At(b.Min.X+x, b.Min.Y+y).RGBA()
+			pix[y*w+x] = uint8(((r + g + b) / 3) >> 8)
+		}
+	}
+	return &grayFixture{Pix: pix, W: w, H: h, Stride: w}, nil
 }
