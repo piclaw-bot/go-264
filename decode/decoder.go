@@ -119,13 +119,15 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 
 	maxMBs := mbWidth * mbHeight
 	if maxMBs > 10000 { maxMBs = 10000 } // safety limit
+	currentQP := int(qp)
 	for mbIdx := int(hdr.FirstMbInSlice); mbIdx < maxMBs; mbIdx++ {
 		mbX := mbIdx % mbWidth
 		mbY := mbIdx / mbWidth
 
 		if isIntra {
-			mb := slice.DecodeMBIntra(r, qp, pps.EntropyCodingMode, pps.Transform8x8Mode)
-			d.reconstructMB(f, mb, mbX, mbY, int(qp), sps)
+			mb := slice.DecodeMBIntra(r, int32(currentQP), pps.EntropyCodingMode, pps.Transform8x8Mode && sps.ProfileIDC >= 100)
+			mbQPDelta := int(mb.QPDelta); currentQP = (currentQP + mbQPDelta%52 + 52) % 52
+			d.reconstructMB(f, mb, mbX, mbY, currentQP, sps)
 		} else if hdr.SliceType == slice.SliceTypeP {
 			mbInter := slice.DecodeMBInter(r, qp, hdr.NumRefIdxL0Active)
 			if mbInter.MBType >= 5 {

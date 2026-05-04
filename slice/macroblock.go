@@ -62,11 +62,6 @@ func DecodeMBIntra(r *nal.Reader, sliceQP int32, ppsEntropy uint32, transform8x8
 		mb.CodedBlockPattern = decodeCBPIntra(r)
 	}
 
-	// transform_size_8x8_flag: present for I_NxN when transform_8x8_mode_flag=1 and CBP_luma!=0
-	if transform8x8 && mb.MBType == 0 && (mb.CodedBlockPattern & 0xF) != 0 {
-		_ = r.ReadBool() // transform_size_8x8_flag (determines 4x4 vs 8x8 transform)
-	}
-	
 	// QP delta
 	if mb.CodedBlockPattern > 0 || (mb.MBType >= 1 && mb.MBType <= 24) {
 		mb.QPDelta = r.ReadSE()
