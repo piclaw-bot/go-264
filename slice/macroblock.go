@@ -100,11 +100,12 @@ func DecodeMBIntraCtxWithType(r *nal.Reader, mbType uint32, sliceQP int32, ppsEn
 			cbpLuma := mb.CodedBlockPattern & 0xF
 			if cbpLuma != 0 {
 				for blk := 0; blk < 16; blk++ {
-					acBlock, _ := entropy.DecodeCAVLCBlock(r, 0)
-					// AC coefficients go into positions 1..15
+					acBlock, tc := entropy.DecodeCAVLCBlockAC(r, 0)
+					// AC coefficients are already positioned at raster slots 1..15.
 					for j := 1; j < 16; j++ {
-						mb.Coeffs[blk][j] = acBlock[j-1]
+						mb.Coeffs[blk][j] = acBlock[j]
 					}
+					mb.TotalCoeff[blk] = tc
 				}
 			}
 		} else if mb.MBType == 0 && mb.CodedBlockPattern > 0 {
@@ -156,9 +157,9 @@ func DecodeMBIntraCtxWithType(r *nal.Reader, mbType uint32, sliceQP int32, ppsEn
 		if cbpChroma == 2 {
 			for comp := 0; comp < 2; comp++ {
 				for blk := 0; blk < 4; blk++ {
-					acBlock, _ := entropy.DecodeCAVLCBlock(r, 0)
+					acBlock, _ := entropy.DecodeCAVLCBlockAC(r, 0)
 					for j := 1; j < 16; j++ {
-						mb.CoeffsChroma[comp][blk][j] = acBlock[j-1]
+						mb.CoeffsChroma[comp][blk][j] = acBlock[j]
 					}
 				}
 			}

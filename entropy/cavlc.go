@@ -91,6 +91,88 @@ func DecodeCAVLCBlock(r *nal.Reader, nC int) (Block4x4, int) {
 	return block, totalCoeff
 }
 
+// DecodeCAVLCBlockAC decodes a 15-coefficient AC residual block whose scan
+// starts after the DC coefficient. Returned coefficients are placed in
+// raster-order positions 1..15; position 0 is left zero for caller-supplied DC.
+func DecodeCAVLCBlockAC(r *nal.Reader, nC int) (Block4x4, int) {
+	return decodeCAVLCBlockWithScan(r, nC, 15, zigZag4x4[1:])
+}
+
+func decodeCAVLCBlockWithScan(r *nal.Reader, nC int, maxCoeff int, scan []int) (Block4x4, int) {
+	var block Block4x4
+	totalCoeff, trailingOnes := DecodeCoeffToken(r, nC)
+	if totalCoeff == 0 {
+		return block, 0
+	}
+	if totalCoeff > maxCoeff {
+		totalCoeff = maxCoeff
+	}
+	signs := make([]int16, trailingOnes)
+	for i := trailingOnes - 1; i >= 0; i-- {
+		if r.ReadBit() == 1 {
+			signs[i] = -1
+		} else {
+			signs[i] = 1
+		}
+	}
+	levels := make([]int16, totalCoeff)
+	idx := totalCoeff - 1
+	for i := trailingOnes - 1; i >= 0 && idx >= 0; i-- {
+		levels[idx] = signs[i]
+		idx--
+	}
+	suffixLength := 0
+	if totalCoeff > 10 && trailingOnes < 3 {
+		suffixLength = 1
+	}
+	for i := trailingOnes; i < totalCoeff; i++ {
+		levelCode := decodeLevelPrefix(r, suffixLength)
+		if i == trailingOnes && trailingOnes < 3 {
+			levelCode += 2
+		}
+		if levelCode%2 == 0 {
+			levels[idx] = int16((levelCode + 2) >> 1)
+		} else {
+			levels[idx] = int16(-((levelCode + 1) >> 1))
+		}
+		absLevel := levels[idx]
+		if absLevel < 0 {
+			absLevel = -absLevel
+		}
+		if suffixLength == 0 {
+			suffixLength = 1
+		}
+		if int(absLevel) > (3<<uint(suffixLength-1)) && suffixLength < 6 {
+			suffixLength++
+		}
+		idx--
+	}
+	totalZeros := 0
+	if totalCoeff < maxCoeff {
+		totalZeros = DecodeTotalZeros(r, totalCoeff)
+	}
+	zerosLeft := totalZeros
+	coeffIdx := totalCoeff - 1
+	scanPos := totalCoeff + totalZeros - 1
+	for coeffIdx >= 0 {
+		if zerosLeft > 0 && coeffIdx > 0 {
+			run := DecodeRunBefore(r, zerosLeft)
+			if scanPos >= 0 && scanPos < len(scan) {
+				block[scan[scanPos]] = levels[coeffIdx]
+			}
+			scanPos -= run + 1
+			zerosLeft -= run
+		} else {
+			if scanPos >= 0 && scanPos < len(scan) {
+				block[scan[scanPos]] = levels[coeffIdx]
+			}
+			scanPos--
+		}
+		coeffIdx--
+	}
+	return block, totalCoeff
+}
+
 func DecodeCoeffToken(r *nal.Reader, nC int) (int, int) {
 	return decodeCoeffTokenFromTable(r, nC)
 }
