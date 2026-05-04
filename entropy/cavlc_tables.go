@@ -31,13 +31,13 @@ var totalZerosBits = [15][16]uint8{
 	{5, 4, 3, 7, 6, 5, 4, 3, 2, 1, 1, 0, 0, 0, 0, 0},
 	{1, 1, 7, 6, 5, 4, 3, 2, 1, 1, 0, 0, 0, 0, 0, 0},
 	{1, 1, 5, 4, 3, 3, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0},
-	{1, 1, 1, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0},
-	{1, 0, 1, 3, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-	{1, 0, 1, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-	{0, 1, 1, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	{1, 1, 1, 3, 3, 2, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0},
+	{1, 0, 1, 3, 2, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0},
+	{1, 0, 1, 3, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	{0, 1, 1, 2, 1, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	{0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 	{0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 	{0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-	{0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 	{0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 }
 
@@ -71,18 +71,24 @@ func DecodeTotalZeros(r *nal.Reader, totalCoeff int) int {
 	}
 	tableIdx := totalCoeff - 1
 	maxVal := totalZerosMaxVal[tableIdx]
-	
+
 	pos := r.Position()
 	avail := r.BitsLeft()
 	peekLen := 9 // max code length in total_zeros table
-	if avail < peekLen { peekLen = avail }
-	if peekLen <= 0 { return 0 }
+	if avail < peekLen {
+		peekLen = avail
+	}
+	if peekLen <= 0 {
+		return 0
+	}
 	bits := r.PeekBits(peekLen)
-	
+
 	for val := 0; val <= maxVal; val++ {
 		cLen := int(totalZerosLen[tableIdx][val])
 		cBits := uint32(totalZerosBits[tableIdx][val])
-		if cLen == 0 || cLen > peekLen { continue }
+		if cLen == 0 || cLen > peekLen {
+			continue
+		}
 		shift := uint(peekLen - cLen)
 		if (bits >> shift) == cBits {
 			r.Seek(pos + cLen)
@@ -95,24 +101,36 @@ func DecodeTotalZeros(r *nal.Reader, totalCoeff int) int {
 
 // DecodeRunBefore decodes run_before (Table 9-10).
 func DecodeRunBefore(r *nal.Reader, zerosLeft int) int {
-	if zerosLeft <= 0 { return 0 }
-	
+	if zerosLeft <= 0 {
+		return 0
+	}
+
 	tableIdx := zerosLeft - 1
-	if tableIdx > 6 { tableIdx = 6 }
+	if tableIdx > 6 {
+		tableIdx = 6
+	}
 	maxRun := zerosLeft
-	if maxRun > 15 { maxRun = 15 }
-	
+	if maxRun > 15 {
+		maxRun = 15
+	}
+
 	pos := r.Position()
 	avail := r.BitsLeft()
 	peekLen := 11 // max code length in run_before table
-	if avail < peekLen { peekLen = avail }
-	if peekLen <= 0 { return 0 }
+	if avail < peekLen {
+		peekLen = avail
+	}
+	if peekLen <= 0 {
+		return 0
+	}
 	bits := r.PeekBits(peekLen)
-	
+
 	for run := 0; run <= maxRun; run++ {
 		cLen := int(runBeforeLen[tableIdx][run])
 		cBits := uint32(runBeforeBits[tableIdx][run])
-		if cLen == 0 || cLen > peekLen { continue }
+		if cLen == 0 || cLen > peekLen {
+			continue
+		}
 		shift := uint(peekLen - cLen)
 		if (bits >> shift) == cBits {
 			r.Seek(pos + cLen)
@@ -169,7 +187,9 @@ func decodeCoeffTokenFromTable(r *nal.Reader, nC int) (int, int) {
 		}
 		to := int(code % 4)
 		tc := int(code / 4)
-		if to > tc { to = tc }
+		if to > tc {
+			to = tc
+		}
 		return tc, to
 	}
 
@@ -189,20 +209,28 @@ func decodeCoeffTokenFromTable(r *nal.Reader, nC int) (int, int) {
 	pos := r.Position()
 	avail := r.BitsLeft()
 	peekLen := 16
-	if avail < peekLen { peekLen = avail }
-	if peekLen <= 0 { return 0, 0 }
+	if avail < peekLen {
+		peekLen = avail
+	}
+	if peekLen <= 0 {
+		return 0, 0
+	}
 	bits := r.PeekBits(peekLen)
 
 	bestLen := 0
 	bestTC, bestTO := 0, 0
 	for tc := 0; tc <= 16; tc++ {
 		maxTO := 3
-		if tc < maxTO { maxTO = tc }
+		if tc < maxTO {
+			maxTO = tc
+		}
 		for to := 0; to <= maxTO; to++ {
 			idx := tc*4 + to
 			cLen := int(ctLen[idx])
 			cBits := uint32(ctBits[idx])
-			if cLen == 0 || cLen > peekLen { continue }
+			if cLen == 0 || cLen > peekLen {
+				continue
+			}
 			shift := uint(peekLen - cLen)
 			if (bits >> shift) == cBits {
 				if bestLen == 0 || cLen < bestLen {
