@@ -533,8 +533,9 @@ func (d *Decoder) reconstructChromaIntra(f *frame.Frame, mb *slice.MBIntra, mbX,
 		for blk := 0; blk < 4; blk++ {
 			residual[blk] = mb.CoeffsChroma[comp][blk]
 			residual[blk][0] = dc[blk]
-			// AC coefficients share the 4x4 dequant path closely enough for 8-bit 4:2:0.
-			transform.Dequant4x4(residual[blk][:], qp)
+			// Chroma DC has already been Hadamard-transformed/dequantized.
+			// Dequantize AC only before the inverse 4x4 transform.
+			transform.Dequant4x4AC(residual[blk][:], qp)
 			transform.IDCT4x4(residual[blk][:])
 		}
 		for blk := 0; blk < 4; blk++ {
@@ -779,7 +780,7 @@ func (d *Decoder) writeChromaInterResidual(f *frame.Frame, mb *slice.MBInter, pr
 	for blk := 0; blk < 4; blk++ {
 		residual[blk] = mb.CoeffsChroma[comp][blk]
 		residual[blk][0] = dc[blk]
-		transform.Dequant4x4(residual[blk][:], qp)
+		transform.Dequant4x4AC(residual[blk][:], qp)
 		transform.IDCT4x4(residual[blk][:])
 	}
 	for blk := 0; blk < 4; blk++ {

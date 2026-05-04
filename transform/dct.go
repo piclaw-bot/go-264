@@ -76,9 +76,20 @@ var posToV = [16]int{
 // Dequant4x4 dequantizes a 4×4 block of transform coefficients.
 // QP range: 0-51.
 func Dequant4x4(block []int16, qp int) {
+	dequant4x4Range(block, qp, 0)
+}
+
+// Dequant4x4AC dequantizes only AC coefficients (positions 1..15), preserving
+// an already-transformed/dequantized DC coefficient. Used by Intra16x16 and
+// chroma DC paths where DC has a separate Hadamard/dequant step.
+func Dequant4x4AC(block []int16, qp int) {
+	dequant4x4Range(block, qp, 1)
+}
+
+func dequant4x4Range(block []int16, qp int, start int) {
 	qpDiv6 := uint(qp / 6)
 	qpMod6 := qp % 6
-	for i := 0; i < 16; i++ {
+	for i := start; i < 16; i++ {
 		if block[i] != 0 {
 			v := int32(dequantV[qpMod6][posToV[i]])
 			block[i] = int16(int32(block[i]) * v << qpDiv6)
