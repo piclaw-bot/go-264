@@ -577,18 +577,26 @@ func (d *Decoder) reconstructMBInter(f *frame.Frame, mb *slice.MBInter, mbX, mbY
 		d.writeInterResidual(f, mb, predicted, mbX, mbY, qp)
 
 	case slice.PMBTypeP8x8, slice.PMBTypeP8x8ref0:
-		// Conservative 8x8 MC: use the first MV of each 8x8 sub-MB and copy the
-		// top-left 8x8 of the generated 16x16 prediction. Sub-8x8 partitioning is
-		// parsed but not split yet.
 		predicted := make([]uint8, 256)
-		tmp := make([]uint8, 256)
 		for part := 0; part < 4; part++ {
-			px := (part & 1) * 8
-			py := (part >> 1) * 8
-			mv := mb.SubMV[part*4]
-			pred.InterPred16x16At(tmp, ref.Y, ref.StrideY, mbX*16+px, mbY*16+py, pred.MotionVector{X: mv.X, Y: mv.Y})
-			for y := 0; y < 8; y++ {
-				copy(predicted[(py+y)*16+px:(py+y)*16+px+8], tmp[y*16:y*16+8])
+			baseX := (part & 1) * 8
+			baseY := (part >> 1) * 8
+			switch mb.SubMBType[part] {
+			case 0: // P_L0_8x8
+				d.copyInterSubRect(predicted, ref, mbX*16+baseX, mbY*16+baseY, baseX, baseY, 8, 8, mb.SubMV[part*4])
+			case 1: // P_L0_8x4
+				d.copyInterSubRect(predicted, ref, mbX*16+baseX, mbY*16+baseY, baseX, baseY, 8, 4, mb.SubMV[part*4])
+				d.copyInterSubRect(predicted, ref, mbX*16+baseX, mbY*16+baseY+4, baseX, baseY+4, 8, 4, mb.SubMV[part*4+1])
+			case 2: // P_L0_4x8
+				d.copyInterSubRect(predicted, ref, mbX*16+baseX, mbY*16+baseY, baseX, baseY, 4, 8, mb.SubMV[part*4])
+				d.copyInterSubRect(predicted, ref, mbX*16+baseX+4, mbY*16+baseY, baseX+4, baseY, 4, 8, mb.SubMV[part*4+1])
+			case 3: // P_L0_4x4
+				d.copyInterSubRect(predicted, ref, mbX*16+baseX, mbY*16+baseY, baseX, baseY, 4, 4, mb.SubMV[part*4])
+				d.copyInterSubRect(predicted, ref, mbX*16+baseX+4, mbY*16+baseY, baseX+4, baseY, 4, 4, mb.SubMV[part*4+1])
+				d.copyInterSubRect(predicted, ref, mbX*16+baseX, mbY*16+baseY+4, baseX, baseY+4, 4, 4, mb.SubMV[part*4+2])
+				d.copyInterSubRect(predicted, ref, mbX*16+baseX+4, mbY*16+baseY+4, baseX+4, baseY+4, 4, 4, mb.SubMV[part*4+3])
+			default:
+				d.copyInterSubRect(predicted, ref, mbX*16+baseX, mbY*16+baseY, baseX, baseY, 8, 8, mb.SubMV[part*4])
 			}
 		}
 		d.writeInterResidual(f, mb, predicted, mbX, mbY, qp)
@@ -604,6 +612,16 @@ func (d *Decoder) reconstructMBInter(f *frame.Frame, mb *slice.MBInter, mbX, mbY
 				}
 			}
 		}
+	}
+}
+
+func (d *Decoder) copyInterSubRect(dst []uint8, ref *frame.Frame, srcBaseX, srcBaseY, dstX, dstY, w, h int, mv slice.MotionVector) {
+	// Reuse the 16x16 MC primitive (and its SIMD fast path when in-bounds), then
+	// copy the requested sub-rectangle into the macroblock prediction buffer.
+	var tmp [256]uint8
+	pred.InterPred16x16At(tmp[:], ref.Y, ref.StrideY, srcBaseX, srcBaseY, pred.MotionVector{X: mv.X, Y: mv.Y})
+	for y := 0; y < h; y++ {
+		copy(dst[(dstY+y)*16+dstX:(dstY+y)*16+dstX+w], tmp[y*16:y*16+w])
 	}
 }
 
