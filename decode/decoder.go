@@ -387,27 +387,11 @@ func (d *Decoder) reconstructMBInter(f *frame.Frame, mb *slice.MBInter, mbX, mbY
 	// Motion compensation based on partition type
 	switch mb.MBType {
 	case slice.PMBTypeP16x16:
-		// Single 16x16 partition
+		// Single 16x16 partition. InterPred16x16At dispatches to SIMD row-copy
+		// on amd64/arm64 when the source rectangle is fully in-bounds.
 		mv := mb.MV[0]
-		pred.InterPred16x16(
-			make([]uint8, 256),
-			ref.Y,
-			ref.StrideY,
-			pred.MotionVector{X: mv.X, Y: mv.Y},
-		)
-		// Write predicted + residual to output
 		predicted := make([]uint8, 256)
-		for y := 0; y < 16; y++ {
-			for x := 0; x < 16; x++ {
-				srcX := int(mv.X>>2) + mbX*16 + x
-				srcY := int(mv.Y>>2) + mbY*16 + y
-				if srcX < 0 { srcX = 0 }
-				if srcY < 0 { srcY = 0 }
-				if srcX >= ref.Width { srcX = ref.Width - 1 }
-				if srcY >= ref.Height { srcY = ref.Height - 1 }
-				predicted[y*16+x] = ref.PixelY(srcX, srcY)
-			}
-		}
+		pred.InterPred16x16At(predicted, ref.Y, ref.StrideY, mbX*16, mbY*16, pred.MotionVector{X: mv.X, Y: mv.Y})
 		// Dequant + IDCT residual blocks, then add to prediction
 		cbpLuma := mb.CBP & 0xF
 		for blkIdx := 0; blkIdx < 16; blkIdx++ {

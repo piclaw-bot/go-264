@@ -31,6 +31,46 @@ func TestInterPred16x16(t *testing.T) {
 	}
 }
 
+func TestInterPred16x16At(t *testing.T) {
+	stride := 48
+	ref := make([]uint8, stride*48)
+	for y := 0; y < 48; y++ {
+		for x := 0; x < 48; x++ {
+			ref[y*stride+x] = uint8((x*3 + y*5) & 0xff)
+		}
+	}
+
+	out := make([]uint8, 256)
+	InterPred16x16At(out, ref, stride, 16, 12, MotionVector{4, 8}) // +1,+2 px
+	for y := 0; y < 16; y++ {
+		for x := 0; x < 16; x++ {
+			want := ref[(12+2+y)*stride+(16+1+x)]
+			if out[y*16+x] != want {
+				t.Fatalf("out[%d,%d]=%d want %d", y, x, out[y*16+x], want)
+			}
+		}
+	}
+
+	// Clipped edge path must remain scalar-correct.
+	InterPred16x16At(out, ref, stride, -4, -3, MotionVector{0, 0})
+	if out[0] != ref[0] {
+		t.Fatalf("clipped top-left: got %d want %d", out[0], ref[0])
+	}
+}
+
+func BenchmarkInterPred16x16At(b *testing.B) {
+	stride := 1920
+	ref := make([]uint8, stride*1080)
+	out := make([]uint8, 256)
+	for i := range ref { ref[i] = uint8(i) }
+	mv := MotionVector{4, 4}
+	b.ReportAllocs()
+	b.SetBytes(256)
+	for i := 0; i < b.N; i++ {
+		InterPred16x16At(out, ref, stride, 256, 256, mv)
+	}
+}
+
 func TestSubpelFilter(t *testing.T) {
 	// Test with constant input: should return same value
 	samples := [6]uint8{100, 100, 100, 100, 100, 100}

@@ -5,6 +5,8 @@ package transform
 
 // DCT8x8 performs the forward 8×8 integer transform (in-place).
 func DCT8x8(block []int16) {
+	// Keep encoder-side DCT8x8 on scalar for now: the available assembly is
+	// decoder-oriented/test coverage only. IDCT8x8 below is SIMD-dispatched.
 	// Horizontal pass
 	for i := 0; i < 8; i++ {
 		r := block[i*8 : i*8+8]
@@ -72,7 +74,7 @@ func DCT8x8(block []int16) {
 
 // IDCT8x8 performs the inverse 8×8 integer transform (in-place).
 func IDCT8x8(block []int16) {
-	if HasAVX2 && len(block) >= 64 {
+	if (HasAVX2 || HasNEON) && len(block) >= 64 {
 		IDCT8x8_ASM(&block[0])
 		return
 	}
