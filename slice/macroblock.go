@@ -103,8 +103,9 @@ func DecodeMBIntraCtxWithTypeFull(r *nal.Reader, mbType uint32, sliceQP int32, p
 			// the corresponding luma block context rather than a hard-coded nC=0.
 			dcNC := computeNCLumaDC(leftNZ, topNZ)
 			dcBlock, _ := entropy.DecodeCAVLCBlock(r, dcNC)
-			for i := 0; i < 16; i++ {
-				mb.Coeffs[i][0] = dcBlock[i]
+			for pos := 0; pos < 16; pos++ {
+				blk := xyToBlk4x4[pos/4][pos%4]
+				mb.Coeffs[blk][0] = dcBlock[pos]
 			}
 			// Decode AC coefficients for each 4x4 block if CBP indicates. These
 			// residual blocks also use neighbouring nC prediction; only coefficient

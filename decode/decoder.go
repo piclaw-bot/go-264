@@ -282,10 +282,12 @@ func (d *Decoder) reconstruct16x16(f *frame.Frame, mb *slice.MBIntra, mbX, mbY, 
 		pred.PredIntra16x16(predicted, mode, top, left, topLeft)
 	}
 
-	// Hadamard DC transform
+	// Hadamard DC transform. Intra16x16 DC is a 4x4 matrix in raster
+	// position order, while mb.Coeffs is indexed by H.264 luma4x4BlkIdx.
 	var dcBlock [16]int16
-	for i := 0; i < 16; i++ {
-		dcBlock[i] = mb.Coeffs[i][0]
+	for blkIdx := 0; blkIdx < 16; blkIdx++ {
+		pos := (blk4x4Y[blkIdx]/4)*4 + (blk4x4X[blkIdx] / 4)
+		dcBlock[pos] = mb.Coeffs[blkIdx][0]
 	}
 	transform.Hadamard4x4DC(dcBlock[:], qp)
 
@@ -293,8 +295,9 @@ func (d *Decoder) reconstruct16x16(f *frame.Frame, mb *slice.MBIntra, mbX, mbY, 
 	for blkIdx := 0; blkIdx < 16; blkIdx++ {
 		bx := blk4x4X[blkIdx]
 		by := blk4x4Y[blkIdx]
+		pos := (by/4)*4 + (bx / 4)
 		var block [16]int16
-		block[0] = dcBlock[blkIdx]
+		block[0] = dcBlock[pos]
 		if cbpLuma != 0 {
 			for j := 1; j < 16; j++ {
 				block[j] = mb.Coeffs[blkIdx][j]
@@ -368,15 +371,20 @@ func (d *Decoder) reconstruct4x4(f *frame.Frame, mb *slice.MBIntra, mbX, mbY, qp
 		blkY := mbY*4 + by/4
 		modeA := int8(2) // left neighbor default
 		modeB := int8(2) // top neighbor default
-		if blkX > 0 {
+		hasA := blkX > 0
+		hasB := blkY > 0
+		if hasA {
 			modeA = d.intraModes[blkY*d.mbW*4+(blkX-1)]
 		}
-		if blkY > 0 {
+		if hasB {
 			modeB = d.intraModes[(blkY-1)*d.mbW*4+blkX]
 		}
-		predMode := modeA
-		if modeB < predMode {
-			predMode = modeB
+		predMode := int8(2)
+		if hasA && hasB {
+			predMode = modeA
+			if modeB < predMode {
+				predMode = modeB
+			}
 		}
 
 		mode := int(predMode) // default: use predicted
