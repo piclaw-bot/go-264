@@ -119,10 +119,22 @@ func traceSlice(nalIdx int, unit nal.Unit, spsMap map[uint32]*nal.SPS, ppsMap ma
 			}
 		}
 		mb := slice.DecodeMBInterCtxFull(r, int32(currentQP), hdr.NumRefIdxL0Active, leftNZ, topNZ, leftChromaNZ, topChromaNZ)
+		if mb.MBType >= slice.PMBTypeIntra {
+			intra := slice.DecodeMBIntraCtxWithTypeFull(r, mb.MBType-slice.PMBTypeIntra, int32(currentQP), pps.EntropyCodingMode, pps.Transform8x8Mode, leftNZ, topNZ, leftChromaNZ, topChromaNZ)
+			currentQP = (currentQP + int(intra.QPDelta)%52 + 52) % 52
+			nzCtx[mbIdx] = intra.TotalCoeff
+			chromaNZCtx[mbIdx] = intra.ChromaTotalCoeff
+			fmt.Printf("  mb=%04d x=%02d y=%02d bits=%d..%d type=P:I:%d cbp=%02x chromaMode=%d qpd=%d qp=%d tc=%v\n", mbIdx, mbX, mbY, start, r.Position(), intra.MBType, intra.CodedBlockPattern, intra.ChromaPredMode, intra.QPDelta, currentQP, intra.TotalCoeff)
+			if intra.MBType > slice.MBTypeIPCM || intra.ChromaPredMode > 3 {
+				fmt.Printf("  !! invalid P-intra syntax at mb=%d: mb_type=%d chroma_mode=%d nextBit=%d\n", mbIdx, intra.MBType, intra.ChromaPredMode, r.Position())
+				return nil
+			}
+			continue
+		}
 		currentQP = (currentQP + int(mb.QPDelta)%52 + 52) % 52
 		nzCtx[mbIdx] = mb.TotalCoeff
 		chromaNZCtx[mbIdx] = mb.ChromaTotalCoeff
-		fmt.Printf("  mb=%04d x=%02d y=%02d bits=%d..%d type=P:%d cbp=%02x qpd=%d qp=%d mv0=(%d,%d) tc=%v\n", mbIdx, mbX, mbY, start, r.Position(), mb.MBType, mb.CBP, mb.QPDelta, currentQP, mb.MV[0].X, mb.MV[0].Y, mb.TotalCoeff)
+		fmt.Printf("  mb=%04d x=%02d y=%02d bits=%d..%d type=P:%d cbp=%02x qpd=%d qp=%d mv0=(%d,%d) ref0=%d tc=%v\n", mbIdx, mbX, mbY, start, r.Position(), mb.MBType, mb.CBP, mb.QPDelta, currentQP, mb.MV[0].X, mb.MV[0].Y, mb.RefIdx[0], mb.TotalCoeff)
 	}
 	return nil
 }
