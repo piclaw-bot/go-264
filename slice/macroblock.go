@@ -106,15 +106,20 @@ func DecodeMBIntraCtxWithTypeFull(r *nal.Reader, mbType uint32, sliceQP int32, p
 			for i := 0; i < 16; i++ {
 				mb.Coeffs[i][0] = dcBlock[i]
 			}
-			// Decode AC coefficients for each 4x4 block if CBP indicates
+			// Decode AC coefficients for each 4x4 block if CBP indicates. These
+			// residual blocks also use neighbouring nC prediction; only coefficient
+			// position 0 is skipped because the luma DC block was decoded above.
 			cbpLuma := mb.CodedBlockPattern & 0xF
 			if cbpLuma != 0 {
+				var nzCoeffs [16]int
 				for blk := 0; blk < 16; blk++ {
-					acBlock, tc := entropy.DecodeCAVLCBlockAC(r, 0)
+					nC := computeNC4x4Ctx(blk, nzCoeffs[:], leftNZ, topNZ)
+					acBlock, tc := entropy.DecodeCAVLCBlockAC(r, nC)
 					// AC coefficients are already positioned at raster slots 1..15.
 					for j := 1; j < 16; j++ {
 						mb.Coeffs[blk][j] = acBlock[j]
 					}
+					nzCoeffs[blk] = tc
 					mb.TotalCoeff[blk] = tc
 				}
 			}
