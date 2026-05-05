@@ -98,10 +98,11 @@ func DecodeMBIntraCtxWithTypeFull(r *nal.Reader, mbType uint32, sliceQP int32, p
 
 	if ppsEntropy == 0 {
 		if mb.MBType >= 1 && mb.MBType <= 24 {
-			// I_16x16: decode DC block (16 DC coefficients) via CAVLC
-			// nC = -1 signals DC block (uses special ChromaDC-like table)
-			// For simplicity, use nC=0
-			dcBlock, _ := entropy.DecodeCAVLCBlock(r, 0)
+			// I_16x16: decode the 16 luma DC coefficients as a separate CAVLC
+			// block. Its coeff_token still uses neighbouring nC prediction from
+			// the corresponding luma block context rather than a hard-coded nC=0.
+			dcNC := computeNCLumaDC(leftNZ, topNZ)
+			dcBlock, _ := entropy.DecodeCAVLCBlock(r, dcNC)
 			for i := 0; i < 16; i++ {
 				mb.Coeffs[i][0] = dcBlock[i]
 			}
@@ -221,6 +222,10 @@ func computeNC4x4(blkIdx int, nz []int) int {
 	return computeNC4x4Ctx(blkIdx, nz, nil, nil)
 }
 
+func computeNCLumaDC(leftNZ, topNZ *[16]int) int {
+	return combineNC(neighbourNC(leftNZ, xyToBlk4x4[0][3]), neighbourNC(topNZ, xyToBlk4x4[3][0]))
+}
+
 func computeNC4x4Ctx(blkIdx int, nz []int, leftNZ, topNZ *[16]int) int {
 	x := blk4x4ToX[blkIdx]
 	y := blk4x4ToY[blkIdx]
@@ -253,6 +258,13 @@ func computeNCChroma4x4Ctx(blkIdx int, nz []int, leftNZ, topNZ *[2][4]int, comp 
 		nB = topNZ[comp][2+x]
 	}
 	return combineNC(nA, nB)
+}
+
+func neighbourNC(nz *[16]int, idx int) int {
+	if nz == nil {
+		return -1
+	}
+	return nz[idx]
 }
 
 func combineNC(nA, nB int) int {
