@@ -199,6 +199,48 @@ func readGrayPNG(path string) (*grayFixture, error) {
 	return &grayFixture{Pix: pix, W: w, H: h, Stride: w}, nil
 }
 
+func TestConformanceYUVReferencePlanes(t *testing.T) {
+	data, err := os.ReadFile("/workspace/tmp/testsrc_bl.h264")
+	if err != nil {
+		t.Skip("no baseline fixture")
+	}
+	ref, err := os.ReadFile("/workspace/tmp/bl_ref_yuv/ref.yuv")
+	if err != nil {
+		t.Skipf("no YUV reference fixture: %v", err)
+	}
+	frames, err := NewDecoder().Decode(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(frames) < 10 {
+		t.Fatalf("decoded %d frames, want >=10", len(frames))
+	}
+	w, h := frames[0].Width, frames[0].Height
+	ySize := w * h
+	cW, cH := w/2, h/2
+	cSize := cW * cH
+	frameSize := ySize + 2*cSize
+	if len(ref) < frameSize*10 {
+		t.Fatalf("YUV reference too small: got %d want >=%d", len(ref), frameSize*10)
+	}
+	var sumY, sumU, sumV float64
+	for i := 0; i < 10; i++ {
+		f := frames[i]
+		off := i * frameSize
+		yRef := ref[off : off+ySize]
+		uRef := ref[off+ySize : off+ySize+cSize]
+		vRef := ref[off+ySize+cSize : off+frameSize]
+		sumY += psnr(f.Y, yRef, w, h, f.StrideY, w)
+		sumU += psnr(f.U, uRef, cW, cH, f.StrideC, cW)
+		sumV += psnr(f.V, vRef, cW, cH, f.StrideC, cW)
+	}
+	avgY, avgU, avgV := sumY/10, sumU/10, sumV/10
+	t.Logf("baseline YUV avg PSNR: Y=%.2f U=%.2f V=%.2f dB", avgY, avgU, avgV)
+	if avgY < 20.0 || avgU < 17.0 || avgV < 13.5 {
+		t.Fatalf("YUV PSNR too low: Y=%.2f U=%.2f V=%.2f", avgY, avgU, avgV)
+	}
+}
+
 func TestConformanceChromaPlanes(t *testing.T) {
 	data, err := os.ReadFile("/workspace/tmp/testsrc_bl.h264")
 	if err != nil {
