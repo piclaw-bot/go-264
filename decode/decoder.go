@@ -162,12 +162,13 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					skipRun = int(r.ReadUE())
 				}
 				if skipRun > 0 {
-					// P_Skip: no residual, no mvd/ref_idx. Motion vector is the normal
-					// median predictor from neighbouring L0 vectors.
+					// P_Skip: no residual, no mvd/ref_idx. Its MV is the normal L0
+					// predictor except for the spec's zero-neighbour special case.
+					skipMV := predictSkipMV(mvCtx, predMV, mbIdx, mbX, mbY, mbWidth)
 					mbSkip := &slice.MBInter{MBType: slice.PMBTypeP16x16}
-					mbSkip.MV[0] = predMV
+					mbSkip.MV[0] = skipMV
 					d.reconstructMBInter(f, mbSkip, mbX, mbY, currentQP)
-					mvCtx[mbIdx] = predMV
+					mvCtx[mbIdx] = skipMV
 					skipRun--
 					continue
 				}
@@ -888,6 +889,18 @@ func clampInt(v, lo, hi int) int {
 		return hi
 	}
 	return v
+}
+
+func predictSkipMV(ctx []slice.MotionVector, pred slice.MotionVector, mbIdx, mbX, mbY, mbWidth int) slice.MotionVector {
+	if mbX == 0 || mbY == 0 {
+		return slice.MotionVector{}
+	}
+	left := ctx[mbIdx-1]
+	top := ctx[mbIdx-mbWidth]
+	if (left.X == 0 && left.Y == 0) || (top.X == 0 && top.Y == 0) {
+		return slice.MotionVector{}
+	}
+	return pred
 }
 
 func predictMBMV(ctx []slice.MotionVector, mbIdx, mbX, mbY, mbWidth int) slice.MotionVector {
