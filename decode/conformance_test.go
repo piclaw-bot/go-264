@@ -92,6 +92,30 @@ func TestConformanceBaseline(t *testing.T) {
 	t.Logf("Baseline: %d frames, %dx%d", len(frames), frames[0].Width, frames[0].Height)
 }
 
+func TestConformanceBaselineFirstFrameLumaPSNR(t *testing.T) {
+	data, err := os.ReadFile("/workspace/tmp/testsrc_bl.h264")
+	if err != nil {
+		t.Skipf("stream fixture missing: %v", err)
+	}
+	ref, err := readGrayPNG("/workspace/tmp/bl_allref_0001.png")
+	if err != nil {
+		t.Skipf("reference fixture missing: %v", err)
+	}
+	frames, err := NewDecoder().Decode(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(frames) == 0 {
+		t.Fatal("decoded no frames")
+	}
+	f := frames[0]
+	got := psnr(f.Y, ref.Pix, f.Width, f.Height, f.StrideY, ref.Stride)
+	t.Logf("baseline first-frame luma PSNR %.2f dB", got)
+	if got < 28.0 {
+		t.Fatalf("baseline first-frame luma PSNR %.2f < 28.00", got)
+	}
+}
+
 func TestConformancePSNRRegression(t *testing.T) {
 	cases := []struct {
 		name   string
