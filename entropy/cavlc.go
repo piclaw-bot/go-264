@@ -193,7 +193,15 @@ func decodeLevelPrefix(r *nal.Reader, suffixLength int) int {
 	} else {
 		levelSuffixSize = suffixLength
 	}
-	levelCode := prefix << uint(suffixLength)
+	levelCodePrefix := prefix
+	if prefix >= 15 {
+		// For escape-coded levels the prefix contribution is saturated to 15
+		// before applying suffixLength (§9.2.2). Using prefix<<suffixLength here
+		// makes large levels too large and can perturb suffix-length adaptation for
+		// following coefficients.
+		levelCodePrefix = 15
+	}
+	levelCode := levelCodePrefix << uint(suffixLength)
 	if levelSuffixSize > 0 {
 		levelCode += int(r.ReadBits(levelSuffixSize))
 	}
