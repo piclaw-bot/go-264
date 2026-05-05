@@ -184,7 +184,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 				nzCtx[mbIdx] = mb.TotalCoeff
 				chromaNZCtx[mbIdx] = mb.ChromaTotalCoeff
 			} else {
-				applyMVPredictors(mbInter, predMV)
+				applyMVPredictors(mbInter, predMV, mvCtx, mbIdx, mbX, mbY, mbWidth)
 				currentQP = (currentQP + int(mbInter.QPDelta)%52 + 52) % 52
 				d.reconstructMBInter(f, mbInter, mbX, mbY, currentQP)
 				nzCtx[mbIdx] = mbInter.TotalCoeff
@@ -904,10 +904,14 @@ func predictSkipMV(ctx []slice.MotionVector, pred slice.MotionVector, mbIdx, mbX
 }
 
 func predictMBMV(ctx []slice.MotionVector, mbIdx, mbX, mbY, mbWidth int) slice.MotionVector {
-	var a, b, c slice.MotionVector
-	availA := mbX > 0
-	availB := mbY > 0
-	availC := mbY > 0 && mbX+1 < mbWidth
+	a, b, c, availA, availB, availC := neighbourMVs(ctx, mbIdx, mbX, mbY, mbWidth)
+	return slice.PredictMV(a, b, c, availA, availB, availC)
+}
+
+func neighbourMVs(ctx []slice.MotionVector, mbIdx, mbX, mbY, mbWidth int) (a, b, c slice.MotionVector, availA, availB, availC bool) {
+	availA = mbX > 0
+	availB = mbY > 0
+	availC = mbY > 0 && mbX+1 < mbWidth
 	if availA {
 		a = ctx[mbIdx-1]
 	}
@@ -921,23 +925,47 @@ func predictMBMV(ctx []slice.MotionVector, mbIdx, mbX, mbY, mbWidth int) slice.M
 		c = ctx[mbIdx-mbWidth-1]
 		availC = true
 	}
-	return slice.PredictMV(a, b, c, availA, availB, availC)
+	return
 }
 
-func applyMVPredictors(mb *slice.MBInter, pred slice.MotionVector) {
-	add := func(mv *slice.MotionVector) {
-		mv.X += pred.X
-		mv.Y += pred.Y
-	}
+func addMV(mv *slice.MotionVector, pred slice.MotionVector) {
+	mv.X += pred.X
+	mv.Y += pred.Y
+}
+
+func applyMVPredictors(mb *slice.MBInter, pred slice.MotionVector, ctx []slice.MotionVector, mbIdx, mbX, mbY, mbWidth int) {
+	a, b, c, availA, availB, availC := neighbourMVs(ctx, mbIdx, mbX, mbY, mbWidth)
 	switch mb.MBType {
 	case slice.PMBTypeP16x16:
-		add(&mb.MV[0])
-	case slice.PMBTypeP16x8, slice.PMBTypeP8x16:
-		add(&mb.MV[0])
-		add(&mb.MV[1])
+		addMV(&mb.MV[0], pred)
+	case slice.PMBTypeP16x8:
+		pred0 := pred
+		if availB {
+			pred0 = b
+		}
+		pred1 := pred
+		if availA {
+			pred1 = a
+		}
+		addMV(&mb.MV[0], pred0)
+		addMV(&mb.MV[1], pred1)
+	case slice.PMBTypeP8x16:
+		pred0 := pred
+		if availA {
+			pred0 = a
+		}
+		pred1 := pred
+		if availC {
+			pred1 = c
+		}
+		addMV(&mb.MV[0], pred0)
+		addMV(&mb.MV[1], pred1)
 	case slice.PMBTypeP8x8, slice.PMBTypeP8x8ref0:
+		// Sub-MB prediction should use sub-partition neighbours; until that full
+		// context is tracked, use the macroblock median predictor for all sub-MVs.
+		subPred := slice.PredictMV(a, b, c, availA, availB, availC)
 		for i := 0; i < 16; i++ {
-			add(&mb.SubMV[i])
+			addMV(&mb.SubMV[i], subPred)
 		}
 		mb.MV[0] = mb.SubMV[0]
 	}
