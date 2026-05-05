@@ -65,7 +65,7 @@ func DecodeMBInterCtxFull(r *nal.Reader, sliceQP int32, numRefFrames uint32, lef
 	case PMBTypeP16x16:
 		// One partition, one MV
 		if numRefFrames > 1 {
-			mb.RefIdx[0] = int8(r.ReadUE()) // ref_idx_l0
+			mb.RefIdx[0] = int8(readTE(r, int(numRefFrames-1))) // ref_idx_l0, te(v)
 		}
 		mb.MV[0] = decodeMVD(r) // mvd_l0
 
@@ -73,7 +73,7 @@ func DecodeMBInterCtxFull(r *nal.Reader, sliceQP int32, numRefFrames uint32, lef
 		// Two 16x8 partitions
 		for i := 0; i < 2; i++ {
 			if numRefFrames > 1 {
-				mb.RefIdx[i] = int8(r.ReadUE())
+				mb.RefIdx[i] = int8(readTE(r, int(numRefFrames-1)))
 			}
 		}
 		for i := 0; i < 2; i++ {
@@ -84,7 +84,7 @@ func DecodeMBInterCtxFull(r *nal.Reader, sliceQP int32, numRefFrames uint32, lef
 		// Two 8x16 partitions
 		for i := 0; i < 2; i++ {
 			if numRefFrames > 1 {
-				mb.RefIdx[i] = int8(r.ReadUE())
+				mb.RefIdx[i] = int8(readTE(r, int(numRefFrames-1)))
 			}
 		}
 		for i := 0; i < 2; i++ {
@@ -98,7 +98,7 @@ func DecodeMBInterCtxFull(r *nal.Reader, sliceQP int32, numRefFrames uint32, lef
 		}
 		for i := 0; i < 4; i++ {
 			if numRefFrames > 1 && mb.MBType != PMBTypeP8x8ref0 {
-				mb.RefIdx[i] = int8(r.ReadUE())
+				mb.RefIdx[i] = int8(readTE(r, int(numRefFrames-1)))
 			}
 		}
 		for i := 0; i < 4; i++ {
@@ -157,6 +157,17 @@ func DecodeMBInterCtxFull(r *nal.Reader, sliceQP int32, numRefFrames uint32, lef
 		}
 	}
 	return mb
+}
+
+func readTE(r *nal.Reader, maxVal int) uint32 {
+	if maxVal <= 0 {
+		return 0
+	}
+	if maxVal == 1 {
+		// te(v) with range 1 is coded as a single inverted bit: 1 -> 0, 0 -> 1.
+		return 1 - r.ReadBit()
+	}
+	return r.ReadUE()
 }
 
 // decodeMVD reads a motion vector difference (mvd_l0).
