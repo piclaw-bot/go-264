@@ -130,7 +130,7 @@ func TestConformancePSNRRegression(t *testing.T) {
 			"/workspace/tmp/bl_allref_0005.png", "/workspace/tmp/bl_allref_0006.png",
 			"/workspace/tmp/bl_allref_0007.png", "/workspace/tmp/bl_allref_0008.png",
 			"/workspace/tmp/bl_allref_0009.png", "/workspace/tmp/bl_allref_0010.png",
-		}, 20.5},
+		}, 22.5},
 		{"bbb-frame0", "/workspace/tmp/bbb_annexb.h264", []string{"/workspace/tmp/bbb_ref_0001.png"}, 8.0},
 	}
 	for _, tc := range cases {
@@ -236,7 +236,7 @@ func TestConformanceYUVReferencePlanes(t *testing.T) {
 	}
 	avgY, avgU, avgV := sumY/10, sumU/10, sumV/10
 	t.Logf("baseline YUV avg PSNR: Y=%.2f U=%.2f V=%.2f dB", avgY, avgU, avgV)
-	if avgY < 20.0 || avgU < 17.0 || avgV < 13.5 {
+	if avgY < 25.0 || avgU < 20.0 || avgV < 16.0 {
 		t.Fatalf("YUV PSNR too low: Y=%.2f U=%.2f V=%.2f", avgY, avgU, avgV)
 	}
 }

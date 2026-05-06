@@ -134,7 +134,8 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 	for i := range refCtx {
 		refCtx[i] = -1
 	}
-	skipRun := 0 // CAVLC P/B-slice mb_skip_run state
+	skipRun := 0
+	decodeAfterSkipRun := false
 	for mbIdx := int(hdr.FirstMbInSlice); mbIdx < maxMBs; mbIdx++ {
 		mbX := mbIdx % mbWidth
 		mbY := mbIdx / mbWidth
@@ -160,10 +161,11 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 			chromaNZCtx[mbIdx] = mb.ChromaTotalCoeff
 			refCtx[mbIdx] = -1
 		} else if hdr.SliceType == slice.SliceTypeP {
-			// CAVLC P-slices carry mb_skip_run before each non-skipped MB. Missing
-			// this field shifts every P macroblock by one Exp-Golomb code.
+			// CAVLC P-slices carry mb_skip_run before the next coded MB. A non-zero
+			// run skips that many macroblocks; the following MB is coded immediately
+			// without reading a fresh mb_skip_run.
 			if pps.EntropyCodingMode == 0 {
-				if skipRun == 0 {
+				if skipRun == 0 && !decodeAfterSkipRun {
 					skipRun = int(r.ReadUE())
 				}
 				if skipRun > 0 {
@@ -176,8 +178,10 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					mvCtx[mbIdx] = skipMV
 					refCtx[mbIdx] = 0
 					skipRun--
+					decodeAfterSkipRun = skipRun == 0
 					continue
 				}
+				decodeAfterSkipRun = false
 			}
 			mbInter := slice.DecodeMBInterCtxFull(r, int32(currentQP), hdr.NumRefIdxL0Active, leftNZ, topNZ, leftChromaNZ, topChromaNZ)
 			if mbInter.MBType >= 5 {

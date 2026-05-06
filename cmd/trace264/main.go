@@ -110,7 +110,7 @@ func traceSlice(nalIdx int, unit nal.Unit, spsMap map[uint32]*nal.SPS, ppsMap ma
 			continue
 		}
 		if hdr.SliceType == slice.SliceTypeP && pps.EntropyCodingMode == 0 {
-			if !decodeAfterSkipRun {
+			if skipRun == 0 && !decodeAfterSkipRun {
 				skipRun = int(r.ReadUE())
 			}
 			if skipRun > 0 {
