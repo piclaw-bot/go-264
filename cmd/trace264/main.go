@@ -82,6 +82,7 @@ func traceSlice(nalIdx int, unit nal.Unit, spsMap map[uint32]*nal.SPS, ppsMap ma
 	nzCtx := make([][16]int, mbWidth*mbHeight)
 	chromaNZCtx := make([][2][4]int, mbWidth*mbHeight)
 	skipRun := 0
+	decodeAfterSkipRun := false
 	for mbIdx := int(hdr.FirstMbInSlice); mbIdx < maxMBs; mbIdx++ {
 		mbX := mbIdx % mbWidth
 		mbY := mbIdx / mbWidth
@@ -109,14 +110,16 @@ func traceSlice(nalIdx int, unit nal.Unit, spsMap map[uint32]*nal.SPS, ppsMap ma
 			continue
 		}
 		if hdr.SliceType == slice.SliceTypeP && pps.EntropyCodingMode == 0 {
-			if skipRun == 0 {
+			if !decodeAfterSkipRun {
 				skipRun = int(r.ReadUE())
 			}
 			if skipRun > 0 {
 				fmt.Printf("  mb=%04d x=%02d y=%02d bits=%d..%d type=P_SKIP remainingSkip=%d qp=%d\n", mbIdx, mbX, mbY, start, r.Position(), skipRun-1, currentQP)
 				skipRun--
+				decodeAfterSkipRun = skipRun == 0
 				continue
 			}
+			decodeAfterSkipRun = false
 		}
 		mb := slice.DecodeMBInterCtxFull(r, int32(currentQP), hdr.NumRefIdxL0Active, leftNZ, topNZ, leftChromaNZ, topChromaNZ)
 		if mb.MBType >= slice.PMBTypeIntra {
