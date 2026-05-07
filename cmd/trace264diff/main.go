@@ -15,6 +15,13 @@ type goMB struct {
 	MVY  int
 }
 
+type ffMV struct {
+	MVX int
+	MVY int
+	W   int
+	H   int
+}
+
 type ffMB struct {
 	Area      int
 	MVX       int
@@ -22,6 +29,7 @@ type ffMB struct {
 	W         int
 	H         int
 	Ambiguous bool
+	All       []ffMV
 }
 
 var (
@@ -39,6 +47,7 @@ func main() {
 	maxMismatch := flag.Int("max-mismatch", -1, "fail with exit code 1 when mismatches exceed this threshold")
 	onlyUnambiguous := flag.Bool("only-unambiguous", true, "compare only MBs with unambiguous FF representative MV")
 	require16x16 := flag.Bool("require-16x16", false, "compare only MBs whose FF representative vector comes from a 16x16 block")
+	matchAny := flag.Bool("match-any", false, "treat an MB as matched if any FF MV entry in that MB matches go mv")
 	flag.Parse()
 
 	if *goTrace == "" || *ffTrace == "" {
@@ -91,9 +100,18 @@ func main() {
 			continue
 		}
 		compared++
-		if g.MVX != f.MVX || g.MVY != f.MVY {
+		matched := g.MVX == f.MVX && g.MVY == f.MVY
+		if *matchAny && !matched {
+			for _, cand := range f.All {
+				if g.MVX == cand.MVX && g.MVY == cand.MVY {
+					matched = true
+					break
+				}
+			}
+		}
+		if !matched {
 			if printed < *limit {
-				fmt.Printf("mb=(%d,%d) go type=%s mv=(%d,%d) ff mv=(%d,%d) ff_size=%dx%d ambiguous=%v\n", k[0], k[1], g.Type, g.MVX, g.MVY, f.MVX, f.MVY, f.W, f.H, f.Ambiguous)
+				fmt.Printf("mb=(%d,%d) go type=%s mv=(%d,%d) ff mv=(%d,%d) ff_size=%dx%d ambiguous=%v ff_candidates=%d\n", k[0], k[1], g.Type, g.MVX, g.MVY, f.MVX, f.MVY, f.W, f.H, f.Ambiguous, len(f.All))
 				printed++
 			}
 			mismatches++
@@ -186,18 +204,21 @@ func parseFF(path string, targetFrame int) (map[[2]int]ffMB, error) {
 		}
 		k := [2]int{mbX, mbY}
 		area := w * h
-		cand := ffMB{Area: area, MVX: mx, MVY: my, W: w, H: h}
+		cand := ffMB{Area: area, MVX: mx, MVY: my, W: w, H: h, All: []ffMV{{MVX: mx, MVY: my, W: w, H: h}}}
 		if prev, ok := out[k]; !ok {
 			out[k] = cand
 			continue
-		} else if cand.Area > prev.Area {
-			out[k] = cand
-			continue
-		} else if cand.Area == prev.Area {
-			if cand.MVX != prev.MVX || cand.MVY != prev.MVY || cand.W != prev.W || cand.H != prev.H {
-				prev.Ambiguous = true
-				out[k] = prev
+		} else {
+			prev.All = append(prev.All, ffMV{MVX: mx, MVY: my, W: w, H: h})
+			if cand.Area > prev.Area {
+				cand.All = prev.All
+				out[k] = cand
+				continue
 			}
+			if cand.Area == prev.Area && (cand.MVX != prev.MVX || cand.MVY != prev.MVY || cand.W != prev.W || cand.H != prev.H) {
+				prev.Ambiguous = true
+			}
+			out[k] = prev
 		}
 	}
 	return out, s.Err()
