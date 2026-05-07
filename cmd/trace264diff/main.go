@@ -16,9 +16,12 @@ type goMB struct {
 }
 
 type ffMB struct {
-	Area int
-	MVX  int
-	MVY  int
+	Area      int
+	MVX       int
+	MVY       int
+	W         int
+	H         int
+	Ambiguous bool
 }
 
 var (
@@ -34,6 +37,8 @@ func main() {
 	frame := flag.Int("frame", 1, "frame index to compare")
 	limit := flag.Int("limit", 20, "max mismatches to print")
 	maxMismatch := flag.Int("max-mismatch", -1, "fail with exit code 1 when mismatches exceed this threshold")
+	onlyUnambiguous := flag.Bool("only-unambiguous", true, "compare only MBs with unambiguous FF representative MV")
+	require16x16 := flag.Bool("require-16x16", false, "compare only MBs whose FF representative vector comes from a 16x16 block")
 	flag.Parse()
 
 	if *goTrace == "" || *ffTrace == "" {
@@ -66,6 +71,8 @@ func main() {
 	mismatches := 0
 	printed := 0
 	compared := 0
+	skippedAmbiguous := 0
+	skippedSize := 0
 	for _, k := range keys {
 		g := goMBs[k]
 		if g.Type == "P_SKIP" {
@@ -75,16 +82,24 @@ func main() {
 		if !ok {
 			continue
 		}
+		if *onlyUnambiguous && f.Ambiguous {
+			skippedAmbiguous++
+			continue
+		}
+		if *require16x16 && !(f.W == 16 && f.H == 16) {
+			skippedSize++
+			continue
+		}
 		compared++
 		if g.MVX != f.MVX || g.MVY != f.MVY {
 			if printed < *limit {
-				fmt.Printf("mb=(%d,%d) go type=%s mv=(%d,%d) ff mv=(%d,%d)\n", k[0], k[1], g.Type, g.MVX, g.MVY, f.MVX, f.MVY)
+				fmt.Printf("mb=(%d,%d) go type=%s mv=(%d,%d) ff mv=(%d,%d) ff_size=%dx%d ambiguous=%v\n", k[0], k[1], g.Type, g.MVX, g.MVY, f.MVX, f.MVY, f.W, f.H, f.Ambiguous)
 				printed++
 			}
 			mismatches++
 		}
 	}
-	fmt.Printf("total_mismatches=%d compared=%d\n", mismatches, compared)
+	fmt.Printf("total_mismatches=%d compared=%d skipped_ambiguous=%d skipped_size=%d\n", mismatches, compared, skippedAmbiguous, skippedSize)
 	if *maxMismatch >= 0 && mismatches > *maxMismatch {
 		os.Exit(1)
 	}
@@ -171,9 +186,18 @@ func parseFF(path string, targetFrame int) (map[[2]int]ffMB, error) {
 		}
 		k := [2]int{mbX, mbY}
 		area := w * h
-		cand := ffMB{Area: area, MVX: mx, MVY: my}
-		if prev, ok := out[k]; !ok || cand.Area > prev.Area {
+		cand := ffMB{Area: area, MVX: mx, MVY: my, W: w, H: h}
+		if prev, ok := out[k]; !ok {
 			out[k] = cand
+			continue
+		} else if cand.Area > prev.Area {
+			out[k] = cand
+			continue
+		} else if cand.Area == prev.Area {
+			if cand.MVX != prev.MVX || cand.MVY != prev.MVY || cand.W != prev.W || cand.H != prev.H {
+				prev.Ambiguous = true
+				out[k] = prev
+			}
 		}
 	}
 	return out, s.Err()

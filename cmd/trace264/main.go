@@ -81,6 +81,11 @@ func traceSlice(nalIdx int, unit nal.Unit, spsMap map[uint32]*nal.SPS, ppsMap ma
 	currentQP := int(hdr.QP(pps.PicInitQP))
 	nzCtx := make([][16]int, mbWidth*mbHeight)
 	chromaNZCtx := make([][2][4]int, mbWidth*mbHeight)
+	mvCtx := make([]slice.MotionVector, mbWidth*mbHeight)
+	refCtx := make([]int8, mbWidth*mbHeight)
+	for i := range refCtx {
+		refCtx[i] = -1
+	}
 	skipRun := 0
 	decodeAfterSkipRun := false
 	for mbIdx := int(hdr.FirstMbInSlice); mbIdx < maxMBs; mbIdx++ {
@@ -109,12 +114,16 @@ func traceSlice(nalIdx int, unit nal.Unit, spsMap map[uint32]*nal.SPS, ppsMap ma
 			}
 			continue
 		}
+		predMV := predictMBMV(mvCtx, refCtx, 0, mbIdx, mbX, mbY, mbWidth)
 		if hdr.SliceType == slice.SliceTypeP && pps.EntropyCodingMode == 0 {
 			if skipRun == 0 && !decodeAfterSkipRun {
 				skipRun = int(r.ReadUE())
 			}
 			if skipRun > 0 {
-				fmt.Printf("  mb=%04d x=%02d y=%02d bits=%d..%d type=P_SKIP remainingSkip=%d qp=%d\n", mbIdx, mbX, mbY, start, r.Position(), skipRun-1, currentQP)
+				skipMV := predictSkipMV(mvCtx, predMV, mbIdx, mbX, mbY, mbWidth)
+				fmt.Printf("  mb=%04d x=%02d y=%02d bits=%d..%d type=P_SKIP remainingSkip=%d qp=%d mv0=(%d,%d) ref0=0\n", mbIdx, mbX, mbY, start, r.Position(), skipRun-1, currentQP, skipMV.X, skipMV.Y)
+				mvCtx[mbIdx] = skipMV
+				refCtx[mbIdx] = 0
 				skipRun--
 				decodeAfterSkipRun = skipRun == 0
 				continue
@@ -127,6 +136,7 @@ func traceSlice(nalIdx int, unit nal.Unit, spsMap map[uint32]*nal.SPS, ppsMap ma
 			currentQP = (currentQP + int(intra.QPDelta)%52 + 52) % 52
 			nzCtx[mbIdx] = intra.TotalCoeff
 			chromaNZCtx[mbIdx] = intra.ChromaTotalCoeff
+			refCtx[mbIdx] = -1
 			fmt.Printf("  mb=%04d x=%02d y=%02d bits=%d..%d type=P:I:%d cbp=%02x chromaMode=%d qpd=%d qp=%d tc=%v\n", mbIdx, mbX, mbY, start, r.Position(), intra.MBType, intra.CodedBlockPattern, intra.ChromaPredMode, intra.QPDelta, currentQP, intra.TotalCoeff)
 			if intra.MBType > slice.MBTypeIPCM || intra.ChromaPredMode > 3 {
 				fmt.Printf("  !! invalid P-intra syntax at mb=%d: mb_type=%d chroma_mode=%d nextBit=%d\n", mbIdx, intra.MBType, intra.ChromaPredMode, r.Position())
@@ -134,10 +144,96 @@ func traceSlice(nalIdx int, unit nal.Unit, spsMap map[uint32]*nal.SPS, ppsMap ma
 			}
 			continue
 		}
+		applyMVPredictors(mb, mvCtx, refCtx, mbIdx, mbX, mbY, mbWidth)
 		currentQP = (currentQP + int(mb.QPDelta)%52 + 52) % 52
 		nzCtx[mbIdx] = mb.TotalCoeff
 		chromaNZCtx[mbIdx] = mb.ChromaTotalCoeff
+		mvCtx[mbIdx] = mb.MV[0]
+		refCtx[mbIdx] = mb.RefIdx[0]
 		fmt.Printf("  mb=%04d x=%02d y=%02d bits=%d..%d type=P:%d cbp=%02x qpd=%d qp=%d mv0=(%d,%d) ref0=%d tc=%v\n", mbIdx, mbX, mbY, start, r.Position(), mb.MBType, mb.CBP, mb.QPDelta, currentQP, mb.MV[0].X, mb.MV[0].Y, mb.RefIdx[0], mb.TotalCoeff)
 	}
 	return nil
+}
+
+func predictSkipMV(ctx []slice.MotionVector, pred slice.MotionVector, mbIdx, mbX, mbY, mbWidth int) slice.MotionVector {
+	if mbX == 0 || mbY == 0 {
+		return slice.MotionVector{}
+	}
+	left := ctx[mbIdx-1]
+	top := ctx[mbIdx-mbWidth]
+	if (left.X == 0 && left.Y == 0) || (top.X == 0 && top.Y == 0) {
+		return slice.MotionVector{}
+	}
+	return pred
+}
+
+func predictMBMV(ctx []slice.MotionVector, refCtx []int8, targetRef int8, mbIdx, mbX, mbY, mbWidth int) slice.MotionVector {
+	a, b, c, availA, availB, availC := neighbourMVs(ctx, refCtx, targetRef, mbIdx, mbX, mbY, mbWidth)
+	return slice.PredictMV(a, b, c, availA, availB, availC)
+}
+
+func neighbourMVs(ctx []slice.MotionVector, refCtx []int8, targetRef int8, mbIdx, mbX, mbY, mbWidth int) (a, b, c slice.MotionVector, availA, availB, availC bool) {
+	availA = mbX > 0 && refCtx[mbIdx-1] == targetRef
+	availB = mbY > 0 && refCtx[mbIdx-mbWidth] == targetRef
+	availC = mbY > 0 && mbX+1 < mbWidth && refCtx[mbIdx-mbWidth+1] == targetRef
+	if availA {
+		a = ctx[mbIdx-1]
+	}
+	if availB {
+		b = ctx[mbIdx-mbWidth]
+	}
+	if availC {
+		c = ctx[mbIdx-mbWidth+1]
+	} else if mbY > 0 && mbX > 0 && refCtx[mbIdx-mbWidth-1] == targetRef {
+		availC = true
+		c = ctx[mbIdx-mbWidth-1]
+	}
+	return
+}
+
+func addMV(mv *slice.MotionVector, pred slice.MotionVector) {
+	mv.X += pred.X
+	mv.Y += pred.Y
+}
+
+func applyMVPredictors(mb *slice.MBInter, ctx []slice.MotionVector, refCtx []int8, mbIdx, mbX, mbY, mbWidth int) {
+	switch mb.MBType {
+	case slice.PMBTypeP16x16:
+		addMV(&mb.MV[0], predictMBMV(ctx, refCtx, mb.RefIdx[0], mbIdx, mbX, mbY, mbWidth))
+	case slice.PMBTypeP16x8:
+		a0, b0, c0, availA0, availB0, availC0 := neighbourMVs(ctx, refCtx, mb.RefIdx[0], mbIdx, mbX, mbY, mbWidth)
+		pred0 := slice.PredictMV(a0, b0, c0, availA0, availB0, availC0)
+		if availB0 {
+			pred0 = b0
+		}
+		a1, b1, c1, availA1, availB1, availC1 := neighbourMVs(ctx, refCtx, mb.RefIdx[1], mbIdx, mbX, mbY, mbWidth)
+		pred1 := slice.PredictMV(a1, b1, c1, availA1, availB1, availC1)
+		if availA1 {
+			pred1 = a1
+		}
+		addMV(&mb.MV[0], pred0)
+		addMV(&mb.MV[1], pred1)
+	case slice.PMBTypeP8x16:
+		a0, b0, c0, availA0, availB0, availC0 := neighbourMVs(ctx, refCtx, mb.RefIdx[0], mbIdx, mbX, mbY, mbWidth)
+		pred0 := slice.PredictMV(a0, b0, c0, availA0, availB0, availC0)
+		if availA0 {
+			pred0 = a0
+		}
+		a1, b1, c1, availA1, availB1, availC1 := neighbourMVs(ctx, refCtx, mb.RefIdx[1], mbIdx, mbX, mbY, mbWidth)
+		pred1 := slice.PredictMV(a1, b1, c1, availA1, availB1, availC1)
+		if availC1 {
+			pred1 = c1
+		}
+		addMV(&mb.MV[0], pred0)
+		addMV(&mb.MV[1], pred1)
+	case slice.PMBTypeP8x8, slice.PMBTypeP8x8ref0:
+		for part := 0; part < 4; part++ {
+			a, b, c, availA, availB, availC := neighbourMVs(ctx, refCtx, mb.RefIdx[part], mbIdx, mbX, mbY, mbWidth)
+			subPred := slice.PredictMV(a, b, c, availA, availB, availC)
+			for i := 0; i < 4; i++ {
+				addMV(&mb.SubMV[part*4+i], subPred)
+			}
+		}
+		mb.MV[0] = mb.SubMV[0]
+	}
 }
