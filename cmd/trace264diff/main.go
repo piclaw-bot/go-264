@@ -24,6 +24,7 @@ type ffMV struct {
 
 type ffMB struct {
 	Area      int
+	AreaSum   int
 	MVX       int
 	MVY       int
 	W         int
@@ -50,6 +51,7 @@ func main() {
 	require16x16 := flag.Bool("require-16x16", false, "compare only MBs whose FF representative vector comes from a 16x16 block")
 	matchAny := flag.Bool("match-any", false, "treat an MB as matched if any FF MV entry in that MB matches go mv")
 	p16x16Only := flag.Bool("p16x16-only", false, "compare only go MBs with type P:0")
+	requireFullCover := flag.Bool("require-full-cover", false, "compare only FF MB groups whose MV block areas sum to exactly one 16x16 MB")
 	flag.Parse()
 
 	if *goTrace == "" || *ffTrace == "" {
@@ -84,6 +86,7 @@ func main() {
 	compared := 0
 	skippedAmbiguous := 0
 	skippedSize := 0
+	skippedCoverage := 0
 	for _, k := range keys {
 		g := goMBs[k]
 		if g.Type == "P_SKIP" {
@@ -104,6 +107,10 @@ func main() {
 			skippedSize++
 			continue
 		}
+		if *requireFullCover && f.AreaSum != 256 {
+			skippedCoverage++
+			continue
+		}
 		compared++
 		matched := g.MVX == f.MVX && g.MVY == f.MVY
 		if *matchAny && !matched {
@@ -122,7 +129,7 @@ func main() {
 			mismatches++
 		}
 	}
-	fmt.Printf("total_mismatches=%d compared=%d skipped_ambiguous=%d skipped_size=%d\n", mismatches, compared, skippedAmbiguous, skippedSize)
+	fmt.Printf("total_mismatches=%d compared=%d skipped_ambiguous=%d skipped_size=%d skipped_coverage=%d\n", mismatches, compared, skippedAmbiguous, skippedSize, skippedCoverage)
 	if *maxMismatch >= 0 && mismatches > *maxMismatch {
 		os.Exit(1)
 	}
@@ -215,14 +222,17 @@ func parseFF(path string, targetFrame int) (map[[2]int]ffMB, error) {
 		}
 		k := [2]int{mbX, mbY}
 		area := w * h
-		cand := ffMB{Area: area, MVX: mx, MVY: my, W: w, H: h, All: []ffMV{{MVX: mx, MVY: my, W: w, H: h}}}
+		cand := ffMB{Area: area, AreaSum: area, MVX: mx, MVY: my, W: w, H: h, All: []ffMV{{MVX: mx, MVY: my, W: w, H: h}}}
 		if prev, ok := out[k]; !ok {
 			out[k] = cand
 			continue
 		} else {
 			prev.All = append(prev.All, ffMV{MVX: mx, MVY: my, W: w, H: h})
+			prev.AreaSum += area
 			if cand.Area > prev.Area {
 				cand.All = prev.All
+				cand.AreaSum = prev.AreaSum
+				cand.Ambiguous = prev.Ambiguous
 				out[k] = cand
 				continue
 			}
