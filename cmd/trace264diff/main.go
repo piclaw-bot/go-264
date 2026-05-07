@@ -33,7 +33,7 @@ type ffMB struct {
 }
 
 var (
-	reNAL  = regexp.MustCompile(`frame=(\d+)`)
+	reNAL  = regexp.MustCompile(`nal=(\d+).*frame=(\d+)`)
 	reGOMB = regexp.MustCompile(`mb=\d+ x=(\d+) y=(\d+) .*type=([^ ]+)(.*)`)
 	reMV0  = regexp.MustCompile(`mv0=\((-?\d+),(-?\d+)\)`)
 	reFFMV = regexp.MustCompile(`mv dst=\((-?\d+),(-?\d+)\) size=(\d+)x(\d+) .*motion=\((-?\d+),(-?\d+)\)/(\d+)`)
@@ -43,6 +43,7 @@ func main() {
 	goTrace := flag.String("go-trace", "", "trace264 output file")
 	ffTrace := flag.String("ff-trace", "", "ffmvtrace output file")
 	frame := flag.Int("frame", 1, "frame index to compare")
+	nalIdx := flag.Int("nal", -1, "nal index in go trace to compare (overrides -frame for go trace)")
 	limit := flag.Int("limit", 20, "max mismatches to print")
 	maxMismatch := flag.Int("max-mismatch", -1, "fail with exit code 1 when mismatches exceed this threshold")
 	onlyUnambiguous := flag.Bool("only-unambiguous", true, "compare only MBs with unambiguous FF representative MV")
@@ -55,7 +56,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	goMBs, err := parseGo(*goTrace, *frame)
+	goMBs, err := parseGo(*goTrace, *frame, *nalIdx)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "parse go trace:", err)
 		os.Exit(1)
@@ -123,7 +124,7 @@ func main() {
 	}
 }
 
-func parseGo(path string, targetFrame int) (map[[2]int]goMB, error) {
+func parseGo(path string, targetFrame int, targetNAL int) (map[[2]int]goMB, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -132,16 +133,22 @@ func parseGo(path string, targetFrame int) (map[[2]int]goMB, error) {
 	out := map[[2]int]goMB{}
 	s := bufio.NewScanner(f)
 	frame := -1
+	nal := -1
 	for s.Scan() {
 		line := s.Text()
 		if len(line) > 4 && line[:4] == "nal=" {
 			m := reNAL.FindStringSubmatch(line)
-			if len(m) == 2 {
-				fmt.Sscanf(m[1], "%d", &frame)
+			if len(m) == 3 {
+				fmt.Sscanf(m[1], "%d", &nal)
+				fmt.Sscanf(m[2], "%d", &frame)
 			}
 			continue
 		}
-		if frame != targetFrame {
+		if targetNAL >= 0 {
+			if nal != targetNAL {
+				continue
+			}
+		} else if frame != targetFrame {
 			continue
 		}
 		m := reGOMB.FindStringSubmatch(line)

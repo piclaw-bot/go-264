@@ -231,9 +231,17 @@ func applyMVPredictors(mb *slice.MBInter, ctx []slice.MotionVector, refCtx []int
 	case slice.PMBTypeP8x8, slice.PMBTypeP8x8ref0:
 		for part := 0; part < 4; part++ {
 			a, b, c, availA, availB, availC := neighbourMVs(ctx, refCtx, mb.RefIdx[part], mbIdx, mbX, mbY, mbWidth)
-			subPred := slice.PredictMV(a, b, c, availA, availB, availC)
-			for i := 0; i < 4; i++ {
-				addMV(&mb.SubMV[part*4+i], subPred)
+			seed := slice.PredictMV(a, b, c, availA, availB, availC)
+			numSub := 1
+			switch mb.SubMBType[part] {
+			case 1, 2:
+				numSub = 2
+			case 3:
+				numSub = 4
+			}
+			addMV(&mb.SubMV[part*4], seed)
+			for i := 1; i < numSub; i++ {
+				addMV(&mb.SubMV[part*4+i], mb.SubMV[part*4+i-1])
 			}
 		}
 		mb.MV[0] = mb.SubMV[0]
