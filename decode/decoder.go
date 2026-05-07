@@ -5,6 +5,7 @@ package decode
 import (
 	"fmt"
 
+	"github.com/rcarmo/go-264/entropy"
 	"github.com/rcarmo/go-264/frame"
 	"github.com/rcarmo/go-264/nal"
 	"github.com/rcarmo/go-264/pred"
@@ -136,6 +137,12 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 	}
 	skipRun := 0
 	decodeAfterSkipRun := false
+	var cabacDec *entropy.CABACDecoder
+	var cabacModels []entropy.CABACCtx
+	if !isIntra && pps.EntropyCodingMode == 1 {
+		cabacDec = entropy.NewCABACDecoder(r)
+		cabacModels = entropy.InitContextModels(currentQP, int(hdr.CabacInitIDC), false)
+	}
 	for mbIdx := int(hdr.FirstMbInSlice); mbIdx < maxMBs; mbIdx++ {
 		mbX := mbIdx % mbWidth
 		mbY := mbIdx / mbWidth
@@ -161,6 +168,24 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 			chromaNZCtx[mbIdx] = mb.ChromaTotalCoeff
 			refCtx[mbIdx] = -1
 		} else if hdr.SliceType == slice.SliceTypeP {
+			if pps.EntropyCodingMode == 1 {
+				mbInter, skipped := decodeCABACPInterMB(cabacDec, cabacModels, hdr.NumRefIdxL0Active)
+				if skipped {
+					skipMV := predictSkipMV(mvCtx, predMV, mbIdx, mbX, mbY, mbWidth)
+					mbInter.MV[0] = skipMV
+					d.reconstructMBInter(f, mbInter, mbX, mbY, currentQP)
+					mvCtx[mbIdx] = skipMV
+					refCtx[mbIdx] = 0
+					continue
+				}
+				applyMVPredictors(mbInter, mvCtx, refCtx, mbIdx, mbX, mbY, mbWidth)
+				d.reconstructMBInter(f, mbInter, mbX, mbY, currentQP)
+				nzCtx[mbIdx] = mbInter.TotalCoeff
+				chromaNZCtx[mbIdx] = mbInter.ChromaTotalCoeff
+				mvCtx[mbIdx] = mbInter.MV[0]
+				refCtx[mbIdx] = mbInter.RefIdx[0]
+				continue
+			}
 			// CAVLC P-slices carry mb_skip_run before the next coded MB. A non-zero
 			// run skips that many macroblocks; the following MB is coded immediately
 			// without reading a fresh mb_skip_run.
@@ -903,6 +928,46 @@ func clampInt(v, lo, hi int) int {
 	return v
 }
 
+func decodeCABACPInterMB(dec *entropy.CABACDecoder, models []entropy.CABACCtx, numRefFrames uint32) (*slice.MBInter, bool) {
+	mb := &slice.MBInter{MBType: slice.PMBTypeP16x16}
+	if dec == nil || len(models) < 20 {
+		return mb, true
+	}
+	// CABAC mb_skip_flag (ctxIdxInc family around 11 for P-slices).
+	if dec.DecodeBin(&models[11]) == 1 {
+		return mb, true
+	}
+	// Simplified CABAC mb_type decoding (P_L0_16x16 / P_L0_16x8 / P_L0_8x16 / P_8x8).
+	if dec.DecodeBin(&models[14]) == 1 {
+		mb.MBType = 1
+		for mb.MBType < 4 && dec.DecodeBin(&models[15]) == 1 {
+			mb.MBType++
+		}
+	}
+	if numRefFrames > 1 {
+		if mb.MBType == slice.PMBTypeP16x16 {
+			mb.RefIdx[0] = int8(dec.DecodeUEG(0))
+		}
+	}
+	mb.MV[0] = slice.MotionVector{X: decodeCABACSigned(dec), Y: decodeCABACSigned(dec)}
+	return mb, false
+}
+
+func decodeCABACSigned(dec *entropy.CABACDecoder) int16 {
+	if dec == nil {
+		return 0
+	}
+	codeNum := dec.DecodeUEG(0)
+	if codeNum == 0 {
+		return 0
+	}
+	v := int16((codeNum + 1) >> 1)
+	if codeNum&1 == 0 {
+		return -v
+	}
+	return v
+}
+
 func predictSkipMV(ctx []slice.MotionVector, pred slice.MotionVector, mbIdx, mbX, mbY, mbWidth int) slice.MotionVector {
 	if mbX == 0 || mbY == 0 {
 		return slice.MotionVector{}
@@ -976,13 +1041,22 @@ func applyMVPredictors(mb *slice.MBInter, ctx []slice.MotionVector, refCtx []int
 		addMV(&mb.MV[0], pred0)
 		addMV(&mb.MV[1], pred1)
 	case slice.PMBTypeP8x8, slice.PMBTypeP8x8ref0:
-		// Sub-MB prediction should use sub-partition neighbours; until that full
-		// context is tracked, use the macroblock median predictor for all sub-MVs.
+		// Approximate sub-partition MVP: seed each 8x8 partition with macroblock
+		// median, then use the previous decoded sub-part vector for later subparts
+		// inside the same partition.
 		for part := 0; part < 4; part++ {
 			a, b, c, availA, availB, availC := neighbourMVs(ctx, refCtx, mb.RefIdx[part], mbIdx, mbX, mbY, mbWidth)
-			subPred := slice.PredictMV(a, b, c, availA, availB, availC)
-			for i := 0; i < 4; i++ {
-				addMV(&mb.SubMV[part*4+i], subPred)
+			seed := slice.PredictMV(a, b, c, availA, availB, availC)
+			numSub := 1
+			switch mb.SubMBType[part] {
+			case 1, 2:
+				numSub = 2
+			case 3:
+				numSub = 4
+			}
+			addMV(&mb.SubMV[part*4], seed)
+			for i := 1; i < numSub; i++ {
+				addMV(&mb.SubMV[part*4+i], mb.SubMV[part*4+i-1])
 			}
 		}
 		mb.MV[0] = mb.SubMV[0]
