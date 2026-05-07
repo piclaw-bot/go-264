@@ -49,6 +49,7 @@ func main() {
 	onlyUnambiguous := flag.Bool("only-unambiguous", true, "compare only MBs with unambiguous FF representative MV")
 	require16x16 := flag.Bool("require-16x16", false, "compare only MBs whose FF representative vector comes from a 16x16 block")
 	matchAny := flag.Bool("match-any", false, "treat an MB as matched if any FF MV entry in that MB matches go mv")
+	p16x16Only := flag.Bool("p16x16-only", false, "compare only go MBs with type P:0")
 	flag.Parse()
 
 	if *goTrace == "" || *ffTrace == "" {
@@ -86,6 +87,9 @@ func main() {
 	for _, k := range keys {
 		g := goMBs[k]
 		if g.Type == "P_SKIP" {
+			continue
+		}
+		if *p16x16Only && g.Type != "P:0" {
 			continue
 		}
 		f, ok := ffMBs[k]
