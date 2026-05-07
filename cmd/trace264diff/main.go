@@ -33,6 +33,7 @@ func main() {
 	ffTrace := flag.String("ff-trace", "", "ffmvtrace output file")
 	frame := flag.Int("frame", 1, "frame index to compare")
 	limit := flag.Int("limit", 20, "max mismatches to print")
+	maxMismatch := flag.Int("max-mismatch", -1, "fail with exit code 1 when mismatches exceed this threshold")
 	flag.Parse()
 
 	if *goTrace == "" || *ffTrace == "" {
@@ -63,6 +64,8 @@ func main() {
 	})
 
 	mismatches := 0
+	printed := 0
+	compared := 0
 	for _, k := range keys {
 		g := goMBs[k]
 		if g.Type == "P_SKIP" {
@@ -72,15 +75,19 @@ func main() {
 		if !ok {
 			continue
 		}
+		compared++
 		if g.MVX != f.MVX || g.MVY != f.MVY {
-			fmt.Printf("mb=(%d,%d) go type=%s mv=(%d,%d) ff mv=(%d,%d)\n", k[0], k[1], g.Type, g.MVX, g.MVY, f.MVX, f.MVY)
-			mismatches++
-			if mismatches >= *limit {
-				break
+			if printed < *limit {
+				fmt.Printf("mb=(%d,%d) go type=%s mv=(%d,%d) ff mv=(%d,%d)\n", k[0], k[1], g.Type, g.MVX, g.MVY, f.MVX, f.MVY)
+				printed++
 			}
+			mismatches++
 		}
 	}
-	fmt.Printf("total_mismatches=%d\n", mismatches)
+	fmt.Printf("total_mismatches=%d compared=%d\n", mismatches, compared)
+	if *maxMismatch >= 0 && mismatches > *maxMismatch {
+		os.Exit(1)
+	}
 }
 
 func parseGo(path string, targetFrame int) (map[[2]int]goMB, error) {
