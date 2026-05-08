@@ -10,9 +10,13 @@ import (
 )
 
 type goMB struct {
-	Type string
-	MVX  int
-	MVY  int
+	Type  string
+	MVX   int
+	MVY   int
+	MVDX  int
+	MVDY  int
+	PredX int
+	PredY int
 }
 
 type ffMV struct {
@@ -34,10 +38,12 @@ type ffMB struct {
 }
 
 var (
-	reNAL  = regexp.MustCompile(`nal=(\d+).*frame=(\d+)`)
-	reGOMB = regexp.MustCompile(`mb=\d+ x=(\d+) y=(\d+) .*type=([^ ]+)(.*)`)
-	reMV0  = regexp.MustCompile(`mv0=\((-?\d+),(-?\d+)\)`)
-	reFFMV = regexp.MustCompile(`mv dst=\((-?\d+),(-?\d+)\) size=(\d+)x(\d+) .*motion=\((-?\d+),(-?\d+)\)/(\d+)`)
+	reNAL   = regexp.MustCompile(`nal=(\d+).*frame=(\d+)`)
+	reGOMB  = regexp.MustCompile(`mb=\d+ x=(\d+) y=(\d+) .*type=([^ ]+)(.*)`)
+	reMV0   = regexp.MustCompile(`mv0=\((-?\d+),(-?\d+)\)`)
+	reMVD0  = regexp.MustCompile(`mvd0=\((-?\d+),(-?\d+)\)`)
+	rePred0 = regexp.MustCompile(`pred0=\((-?\d+),(-?\d+)\)`)
+	reFFMV  = regexp.MustCompile(`mv dst=\((-?\d+),(-?\d+)\) size=(\d+)x(\d+) .*motion=\((-?\d+),(-?\d+)\)/(\d+)`)
 )
 
 func main() {
@@ -123,7 +129,7 @@ func main() {
 		}
 		if !matched {
 			if printed < *limit {
-				fmt.Printf("mb=(%d,%d) go type=%s mv=(%d,%d) ff mv=(%d,%d) ff_size=%dx%d ambiguous=%v ff_candidates=%d\n", k[0], k[1], g.Type, g.MVX, g.MVY, f.MVX, f.MVY, f.W, f.H, f.Ambiguous, len(f.All))
+				fmt.Printf("mb=(%d,%d) go type=%s mvd=(%d,%d) pred=(%d,%d) mv=(%d,%d) ff mv=(%d,%d) ff_size=%dx%d ambiguous=%v ff_candidates=%d\n", k[0], k[1], g.Type, g.MVDX, g.MVDY, g.PredX, g.PredY, g.MVX, g.MVY, f.MVX, f.MVY, f.W, f.H, f.Ambiguous, len(f.All))
 				printed++
 			}
 			mismatches++
@@ -172,12 +178,22 @@ func parseGo(path string, targetFrame int, targetNAL int) (map[[2]int]goMB, erro
 		typ := m[3]
 		rest := m[4]
 		mvx, mvy := 0, 0
+		mvdx, mvdy := 0, 0
+		predx, predy := 0, 0
 		mm := reMV0.FindStringSubmatch(rest)
 		if len(mm) == 3 {
 			fmt.Sscanf(mm[1], "%d", &mvx)
 			fmt.Sscanf(mm[2], "%d", &mvy)
 		}
-		out[[2]int{x, y}] = goMB{Type: typ, MVX: mvx, MVY: mvy}
+		if dm := reMVD0.FindStringSubmatch(rest); len(dm) == 3 {
+			fmt.Sscanf(dm[1], "%d", &mvdx)
+			fmt.Sscanf(dm[2], "%d", &mvdy)
+		}
+		if pm := rePred0.FindStringSubmatch(rest); len(pm) == 3 {
+			fmt.Sscanf(pm[1], "%d", &predx)
+			fmt.Sscanf(pm[2], "%d", &predy)
+		}
+		out[[2]int{x, y}] = goMB{Type: typ, MVX: mvx, MVY: mvy, MVDX: mvdx, MVDY: mvdy, PredX: predx, PredY: predy}
 	}
 	return out, s.Err()
 }
