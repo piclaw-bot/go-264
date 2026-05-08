@@ -150,11 +150,21 @@ func traceSlice(nalIdx int, unit nal.Unit, spsMap map[uint32]*nal.SPS, ppsMap ma
 		currentQP = (currentQP + int(mb.QPDelta)%52 + 52) % 52
 		nzCtx[mbIdx] = mb.TotalCoeff
 		chromaNZCtx[mbIdx] = mb.ChromaTotalCoeff
-		mvCtx[mbIdx] = mb.MV[0]
-		refCtx[mbIdx] = mb.RefIdx[0]
+		mvCtx[mbIdx], refCtx[mbIdx] = representativeRightEdgeMV(mb)
 		fmt.Printf("  mb=%04d x=%02d y=%02d bits=%d..%d type=P:%d cbp=%02x qpd=%d qp=%d mvd0=(%d,%d) pred0=(%d,%d) mv0=(%d,%d) ref0=%d tc=%v\n", mbIdx, mbX, mbY, start, r.Position(), mb.MBType, mb.CBP, mb.QPDelta, currentQP, rawMV0.X, rawMV0.Y, pred0.X, pred0.Y, mb.MV[0].X, mb.MV[0].Y, mb.RefIdx[0], mb.TotalCoeff)
 	}
 	return nil
+}
+
+func representativeRightEdgeMV(mb *slice.MBInter) (slice.MotionVector, int8) {
+	switch mb.MBType {
+	case slice.PMBTypeP8x16:
+		return mb.MV[1], mb.RefIdx[1]
+	case slice.PMBTypeP8x8, slice.PMBTypeP8x8ref0:
+		return mb.SubMV[4], mb.RefIdx[1]
+	default:
+		return mb.MV[0], mb.RefIdx[0]
+	}
 }
 
 func predictSkipMV(ctx []slice.MotionVector, pred slice.MotionVector, mbIdx, mbX, mbY, mbWidth int) slice.MotionVector {

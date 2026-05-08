@@ -182,8 +182,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 				d.reconstructMBInter(f, mbInter, mbX, mbY, currentQP)
 				nzCtx[mbIdx] = mbInter.TotalCoeff
 				chromaNZCtx[mbIdx] = mbInter.ChromaTotalCoeff
-				mvCtx[mbIdx] = mbInter.MV[0]
-				refCtx[mbIdx] = mbInter.RefIdx[0]
+				mvCtx[mbIdx], refCtx[mbIdx] = representativeRightEdgeMV(mbInter)
 				continue
 			}
 			// CAVLC P-slices carry mb_skip_run before the next coded MB. A non-zero
@@ -225,8 +224,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 				d.reconstructMBInter(f, mbInter, mbX, mbY, currentQP)
 				nzCtx[mbIdx] = mbInter.TotalCoeff
 				chromaNZCtx[mbIdx] = mbInter.ChromaTotalCoeff
-				mvCtx[mbIdx] = mbInter.MV[0]
-				refCtx[mbIdx] = mbInter.RefIdx[0]
+				mvCtx[mbIdx], refCtx[mbIdx] = representativeRightEdgeMV(mbInter)
 			}
 		} else {
 			// B-slice
@@ -966,6 +964,17 @@ func decodeCABACSigned(dec *entropy.CABACDecoder) int16 {
 		return -v
 	}
 	return v
+}
+
+func representativeRightEdgeMV(mb *slice.MBInter) (slice.MotionVector, int8) {
+	switch mb.MBType {
+	case slice.PMBTypeP8x16:
+		return mb.MV[1], mb.RefIdx[1]
+	case slice.PMBTypeP8x8, slice.PMBTypeP8x8ref0:
+		return mb.SubMV[4], mb.RefIdx[1]
+	default:
+		return mb.MV[0], mb.RefIdx[0]
+	}
 }
 
 func predictSkipMV(ctx []slice.MotionVector, pred slice.MotionVector, mbIdx, mbX, mbY, mbWidth int) slice.MotionVector {
