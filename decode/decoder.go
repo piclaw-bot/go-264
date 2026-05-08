@@ -1120,6 +1120,36 @@ func predict16x8Motion4x4(mv4 []slice.MotionVector, ref4 []int8, stride4, x4, y4
 	return predictMotion4x4(mv4, ref4, stride4, x4, y4+2, 4, targetRef)
 }
 
+func predict8x16Motion4x4(mv4 []slice.MotionVector, ref4 []int8, stride4, x4, y4 int, part int, targetRef int8) slice.MotionVector {
+	if part == 0 {
+		a, refA := getMV4(mv4, ref4, stride4, x4-1, y4)
+		if refA == targetRef {
+			return a
+		}
+		return predictMotion4x4(mv4, ref4, stride4, x4, y4, 2, targetRef)
+	}
+	c, refC := getMV4(mv4, ref4, stride4, x4+4, y4-1)
+	if refC == -2 {
+		c, refC = getMV4(mv4, ref4, stride4, x4-1, y4-1)
+	}
+	if refC == targetRef {
+		return c
+	}
+	return predictMotion4x4(mv4, ref4, stride4, x4+2, y4, 2, targetRef)
+}
+
+func fillMV4(mv4 []slice.MotionVector, ref4 []int8, stride4, x4, y4, w4, h4 int, mv slice.MotionVector, ref int8) {
+	for y := 0; y < h4; y++ {
+		row := (y4+y)*stride4 + x4
+		for x := 0; x < w4; x++ {
+			if row+x >= 0 && row+x < len(ref4) {
+				mv4[row+x] = mv
+				ref4[row+x] = ref
+			}
+		}
+	}
+}
+
 func median3(a, b, c int16) int16 {
 	if a > b {
 		a, b = b, a
@@ -1168,17 +1198,15 @@ func applyMVPredictors(mb *slice.MBInter, ctx []slice.MotionVector, refCtx []int
 		addMV(&mb.MV[0], pred0)
 		addMV(&mb.MV[1], pred1)
 	case slice.PMBTypeP8x16:
-		a0, b0, c0, availA0, availB0, availC0 := neighbourMVs(ctx, refCtx, mb.RefIdx[0], mbIdx, mbX, mbY, mbWidth)
-		pred0 := slice.PredictMV(a0, b0, c0, availA0, availB0, availC0)
-		if availA0 {
-			pred0 = a0
-		}
-		a1, b1, c1, availA1, availB1, availC1 := neighbourMVs(ctx, refCtx, mb.RefIdx[1], mbIdx, mbX, mbY, mbWidth)
-		pred1 := slice.PredictMV(a1, b1, c1, availA1, availB1, availC1)
-		if availC1 {
-			pred1 = c1
-		}
+		// FFmpeg predicts/writes each 8x16 partition in sequence, so the right
+		// partition can see the left partition in the local mv_cache as A.
+		localMV4 := append([]slice.MotionVector(nil), mv4...)
+		localRef4 := append([]int8(nil), ref4...)
+		x4, y4 := mbX*4, mbY*4
+		pred0 := predict8x16Motion4x4(localMV4, localRef4, stride4, x4, y4, 0, mb.RefIdx[0])
 		addMV(&mb.MV[0], pred0)
+		fillMV4(localMV4, localRef4, stride4, x4, y4, 2, 4, mb.MV[0], mb.RefIdx[0])
+		pred1 := predict8x16Motion4x4(localMV4, localRef4, stride4, x4, y4, 1, mb.RefIdx[1])
 		addMV(&mb.MV[1], pred1)
 	case slice.PMBTypeP8x8, slice.PMBTypeP8x8ref0:
 		// Approximate sub-partition MVP: seed each 8x8 partition with macroblock
