@@ -1060,20 +1060,22 @@ func predictMBMV(ctx []slice.MotionVector, refCtx []int8, targetRef int8, mbIdx,
 	return slice.PredictMV(a, b, c, availA, availB, availC)
 }
 
+func getMV4(mv4 []slice.MotionVector, ref4 []int8, stride4, x4, y4 int) (slice.MotionVector, int8) {
+	const partNotAvailable int8 = -2
+	if x4 < 0 || y4 < 0 || x4 >= stride4 || y4*stride4+x4 >= len(ref4) {
+		return slice.MotionVector{}, partNotAvailable
+	}
+	idx := y4*stride4 + x4
+	return mv4[idx], ref4[idx]
+}
+
 func predictMotion4x4(mv4 []slice.MotionVector, ref4 []int8, stride4, x4, y4, partWidth4 int, targetRef int8) slice.MotionVector {
 	const partNotAvailable int8 = -2
-	get := func(x, y int) (slice.MotionVector, int8) {
-		if x < 0 || y < 0 || x >= stride4 || y*stride4+x >= len(ref4) {
-			return slice.MotionVector{}, partNotAvailable
-		}
-		idx := y*stride4 + x
-		return mv4[idx], ref4[idx]
-	}
-	a, refA := get(x4-1, y4)
-	b, refB := get(x4, y4-1)
-	c, refC := get(x4+partWidth4, y4-1)
+	a, refA := getMV4(mv4, ref4, stride4, x4-1, y4)
+	b, refB := getMV4(mv4, ref4, stride4, x4, y4-1)
+	c, refC := getMV4(mv4, ref4, stride4, x4+partWidth4, y4-1)
 	if refC == partNotAvailable {
-		c, refC = get(x4-1, y4-1)
+		c, refC = getMV4(mv4, ref4, stride4, x4-1, y4-1)
 	}
 	matchCount := 0
 	if refA == targetRef {
@@ -1101,6 +1103,21 @@ func predictMotion4x4(mv4 []slice.MotionVector, ref4 []int8, stride4, x4, y4, pa
 		return a
 	}
 	return slice.MotionVector{X: median3(a.X, b.X, c.X), Y: median3(a.Y, b.Y, c.Y)}
+}
+
+func predict16x8Motion4x4(mv4 []slice.MotionVector, ref4 []int8, stride4, x4, y4 int, part int, targetRef int8) slice.MotionVector {
+	if part == 0 {
+		b, refB := getMV4(mv4, ref4, stride4, x4, y4-1)
+		if refB == targetRef {
+			return b
+		}
+		return predictMotion4x4(mv4, ref4, stride4, x4, y4, 4, targetRef)
+	}
+	a, refA := getMV4(mv4, ref4, stride4, x4-1, y4+2)
+	if refA == targetRef {
+		return a
+	}
+	return predictMotion4x4(mv4, ref4, stride4, x4, y4+2, 4, targetRef)
 }
 
 func median3(a, b, c int16) int16 {
@@ -1146,16 +1163,8 @@ func applyMVPredictors(mb *slice.MBInter, ctx []slice.MotionVector, refCtx []int
 	case slice.PMBTypeP16x16:
 		addMV(&mb.MV[0], predictMotion4x4(mv4, ref4, stride4, mbX*4, mbY*4, 4, mb.RefIdx[0]))
 	case slice.PMBTypeP16x8:
-		a0, b0, c0, availA0, availB0, availC0 := neighbourMVs(ctx, refCtx, mb.RefIdx[0], mbIdx, mbX, mbY, mbWidth)
-		pred0 := slice.PredictMV(a0, b0, c0, availA0, availB0, availC0)
-		if availB0 {
-			pred0 = b0
-		}
-		a1, b1, c1, availA1, availB1, availC1 := neighbourMVs(ctx, refCtx, mb.RefIdx[1], mbIdx, mbX, mbY, mbWidth)
-		pred1 := slice.PredictMV(a1, b1, c1, availA1, availB1, availC1)
-		if availA1 {
-			pred1 = a1
-		}
+		pred0 := predict16x8Motion4x4(mv4, ref4, stride4, mbX*4, mbY*4, 0, mb.RefIdx[0])
+		pred1 := predict16x8Motion4x4(mv4, ref4, stride4, mbX*4, mbY*4, 1, mb.RefIdx[1])
 		addMV(&mb.MV[0], pred0)
 		addMV(&mb.MV[1], pred1)
 	case slice.PMBTypeP8x16:
