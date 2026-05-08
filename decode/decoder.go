@@ -135,6 +135,12 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 	for i := range refCtx {
 		refCtx[i] = -1
 	}
+	mv4Stride := mbWidth * 4
+	mv4Ctx := make([]slice.MotionVector, mv4Stride*mbHeight*4)
+	ref4Ctx := make([]int8, mv4Stride*mbHeight*4)
+	for i := range ref4Ctx {
+		ref4Ctx[i] = -2 // PART_NOT_AVAILABLE until written
+	}
 	skipRun := 0
 	decodeAfterSkipRun := false
 	var cabacDec *entropy.CABACDecoder
@@ -167,6 +173,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 			nzCtx[mbIdx] = mb.TotalCoeff
 			chromaNZCtx[mbIdx] = mb.ChromaTotalCoeff
 			refCtx[mbIdx] = -1
+			writeBackIntra4x4(ref4Ctx, mv4Stride, mbX, mbY)
 		} else if hdr.SliceType == slice.SliceTypeP {
 			if pps.EntropyCodingMode == 1 {
 				mbInter, skipped := decodeCABACPInterMB(cabacDec, cabacModels, hdr.NumRefIdxL0Active)
@@ -176,6 +183,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					d.reconstructMBInter(f, mbInter, mbX, mbY, currentQP)
 					mvCtx[mbIdx] = skipMV
 					refCtx[mbIdx] = 0
+					writeBackInter4x4(mv4Ctx, ref4Ctx, mv4Stride, mbX, mbY, mbInter)
 					continue
 				}
 				applyMVPredictors(mbInter, mvCtx, refCtx, mbIdx, mbX, mbY, mbWidth)
@@ -183,6 +191,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 				nzCtx[mbIdx] = mbInter.TotalCoeff
 				chromaNZCtx[mbIdx] = mbInter.ChromaTotalCoeff
 				mvCtx[mbIdx], refCtx[mbIdx] = representativeRightEdgeMV(mbInter)
+				writeBackInter4x4(mv4Ctx, ref4Ctx, mv4Stride, mbX, mbY, mbInter)
 				continue
 			}
 			// CAVLC P-slices carry mb_skip_run before the next coded MB. A non-zero
@@ -201,6 +210,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					d.reconstructMBInter(f, mbSkip, mbX, mbY, currentQP)
 					mvCtx[mbIdx] = skipMV
 					refCtx[mbIdx] = 0
+					writeBackInter4x4(mv4Ctx, ref4Ctx, mv4Stride, mbX, mbY, mbSkip)
 					skipRun--
 					decodeAfterSkipRun = skipRun == 0
 					continue
@@ -218,6 +228,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 				nzCtx[mbIdx] = mb.TotalCoeff
 				chromaNZCtx[mbIdx] = mb.ChromaTotalCoeff
 				refCtx[mbIdx] = -1
+				writeBackIntra4x4(ref4Ctx, mv4Stride, mbX, mbY)
 			} else {
 				applyMVPredictors(mbInter, mvCtx, refCtx, mbIdx, mbX, mbY, mbWidth)
 				currentQP = (currentQP + int(mbInter.QPDelta)%52 + 52) % 52
@@ -225,6 +236,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 				nzCtx[mbIdx] = mbInter.TotalCoeff
 				chromaNZCtx[mbIdx] = mbInter.ChromaTotalCoeff
 				mvCtx[mbIdx], refCtx[mbIdx] = representativeRightEdgeMV(mbInter)
+				writeBackInter4x4(mv4Ctx, ref4Ctx, mv4Stride, mbX, mbY, mbInter)
 			}
 		} else {
 			// B-slice
@@ -964,6 +976,60 @@ func decodeCABACSigned(dec *entropy.CABACDecoder) int16 {
 		return -v
 	}
 	return v
+}
+
+func writeBackInter4x4(mv4 []slice.MotionVector, ref4 []int8, stride4, mbX, mbY int, mb *slice.MBInter) {
+	fill := func(x4, y4, w4, h4 int, mv slice.MotionVector, ref int8) {
+		baseX, baseY := mbX*4+x4, mbY*4+y4
+		for y := 0; y < h4; y++ {
+			row := (baseY+y)*stride4 + baseX
+			for x := 0; x < w4; x++ {
+				mv4[row+x] = mv
+				ref4[row+x] = ref
+			}
+		}
+	}
+	switch mb.MBType {
+	case slice.PMBTypeP16x16:
+		fill(0, 0, 4, 4, mb.MV[0], mb.RefIdx[0])
+	case slice.PMBTypeP16x8:
+		fill(0, 0, 4, 2, mb.MV[0], mb.RefIdx[0])
+		fill(0, 2, 4, 2, mb.MV[1], mb.RefIdx[1])
+	case slice.PMBTypeP8x16:
+		fill(0, 0, 2, 4, mb.MV[0], mb.RefIdx[0])
+		fill(2, 0, 2, 4, mb.MV[1], mb.RefIdx[1])
+	case slice.PMBTypeP8x8, slice.PMBTypeP8x8ref0:
+		for part := 0; part < 4; part++ {
+			baseX := (part & 1) * 2
+			baseY := (part >> 1) * 2
+			ref := mb.RefIdx[part]
+			switch mb.SubMBType[part] {
+			case 0: // 8x8
+				fill(baseX, baseY, 2, 2, mb.SubMV[part*4], ref)
+			case 1: // 8x4
+				fill(baseX, baseY, 2, 1, mb.SubMV[part*4], ref)
+				fill(baseX, baseY+1, 2, 1, mb.SubMV[part*4+1], ref)
+			case 2: // 4x8
+				fill(baseX, baseY, 1, 2, mb.SubMV[part*4], ref)
+				fill(baseX+1, baseY, 1, 2, mb.SubMV[part*4+1], ref)
+			case 3: // 4x4
+				fill(baseX, baseY, 1, 1, mb.SubMV[part*4], ref)
+				fill(baseX+1, baseY, 1, 1, mb.SubMV[part*4+1], ref)
+				fill(baseX, baseY+1, 1, 1, mb.SubMV[part*4+2], ref)
+				fill(baseX+1, baseY+1, 1, 1, mb.SubMV[part*4+3], ref)
+			}
+		}
+	}
+}
+
+func writeBackIntra4x4(ref4 []int8, stride4, mbX, mbY int) {
+	baseX, baseY := mbX*4, mbY*4
+	for y := 0; y < 4; y++ {
+		row := (baseY+y)*stride4 + baseX
+		for x := 0; x < 4; x++ {
+			ref4[row+x] = -1
+		}
+	}
 }
 
 func representativeRightEdgeMV(mb *slice.MBInter) (slice.MotionVector, int8) {
