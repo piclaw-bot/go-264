@@ -1209,22 +1209,45 @@ func applyMVPredictors(mb *slice.MBInter, ctx []slice.MotionVector, refCtx []int
 		pred1 := predict8x16Motion4x4(localMV4, localRef4, stride4, x4, y4, 1, mb.RefIdx[1])
 		addMV(&mb.MV[1], pred1)
 	case slice.PMBTypeP8x8, slice.PMBTypeP8x8ref0:
-		// Approximate sub-partition MVP: seed each 8x8 partition with macroblock
-		// median, then use the previous decoded sub-part vector for later subparts
-		// inside the same partition.
+		// FFmpeg predicts each sub-partition against an in-MB mv_cache that is
+		// updated immediately after each decoded sub-partition.
+		localMV4 := append([]slice.MotionVector(nil), mv4...)
+		localRef4 := append([]int8(nil), ref4...)
+		mbBaseX, mbBaseY := mbX*4, mbY*4
 		for part := 0; part < 4; part++ {
-			a, b, c, availA, availB, availC := neighbourMVs(ctx, refCtx, mb.RefIdx[part], mbIdx, mbX, mbY, mbWidth)
-			seed := slice.PredictMV(a, b, c, availA, availB, availC)
-			numSub := 1
+			baseX := mbBaseX + (part&1)*2
+			baseY := mbBaseY + (part>>1)*2
+			ref := mb.RefIdx[part]
 			switch mb.SubMBType[part] {
-			case 1, 2:
-				numSub = 2
-			case 3:
-				numSub = 4
-			}
-			addMV(&mb.SubMV[part*4], seed)
-			for i := 1; i < numSub; i++ {
-				addMV(&mb.SubMV[part*4+i], mb.SubMV[part*4+i-1])
+			case 0: // P_L0_8x8
+				pred := predictMotion4x4(localMV4, localRef4, stride4, baseX, baseY, 2, ref)
+				addMV(&mb.SubMV[part*4], pred)
+				fillMV4(localMV4, localRef4, stride4, baseX, baseY, 2, 2, mb.SubMV[part*4], ref)
+			case 1: // P_L0_8x4
+				for j := 0; j < 2; j++ {
+					idx := part*4 + j
+					y := baseY + j
+					pred := predictMotion4x4(localMV4, localRef4, stride4, baseX, y, 2, ref)
+					addMV(&mb.SubMV[idx], pred)
+					fillMV4(localMV4, localRef4, stride4, baseX, y, 2, 1, mb.SubMV[idx], ref)
+				}
+			case 2: // P_L0_4x8
+				for j := 0; j < 2; j++ {
+					idx := part*4 + j
+					x := baseX + j
+					pred := predictMotion4x4(localMV4, localRef4, stride4, x, baseY, 1, ref)
+					addMV(&mb.SubMV[idx], pred)
+					fillMV4(localMV4, localRef4, stride4, x, baseY, 1, 2, mb.SubMV[idx], ref)
+				}
+			case 3: // P_L0_4x4
+				pos := [4][2]int{{0, 0}, {1, 0}, {0, 1}, {1, 1}}
+				for j := 0; j < 4; j++ {
+					idx := part*4 + j
+					x, y := baseX+pos[j][0], baseY+pos[j][1]
+					pred := predictMotion4x4(localMV4, localRef4, stride4, x, y, 1, ref)
+					addMV(&mb.SubMV[idx], pred)
+					fillMV4(localMV4, localRef4, stride4, x, y, 1, 1, mb.SubMV[idx], ref)
+				}
 			}
 		}
 		mb.MV[0] = mb.SubMV[0]
