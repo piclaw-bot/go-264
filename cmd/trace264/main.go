@@ -121,7 +121,7 @@ func traceSlice(nalIdx int, unit nal.Unit, spsMap map[uint32]*nal.SPS, ppsMap ma
 			}
 			continue
 		}
-		predMV := predictMBMV(mvCtx, refCtx, 0, mbIdx, mbX, mbY, mbWidth)
+		predMV := predictSkipMV4x4(mv4Ctx, ref4Ctx, mv4Stride, mbX*4, mbY*4)
 		if hdr.SliceType == slice.SliceTypeP && pps.EntropyCodingMode == 0 {
 			if skipRun == 0 && !decodeAfterSkipRun {
 				skipRun = int(r.ReadUE())
@@ -234,17 +234,46 @@ func representativeRightEdgeMV(mb *slice.MBInter) (slice.MotionVector, int8) {
 }
 
 func predictSkipMV(ctx []slice.MotionVector, refCtx []int8, pred slice.MotionVector, mbIdx, mbX, mbY, mbWidth int) slice.MotionVector {
-	if mbX == 0 || mbY == 0 {
+	return pred
+}
+
+func predictSkipMV4x4(mv4 []slice.MotionVector, ref4 []int8, stride4, x4, y4 int) slice.MotionVector {
+	const partNotAvailable int8 = -2
+	left, leftRef := getMV4(mv4, ref4, stride4, x4-1, y4)
+	top, topRef := getMV4(mv4, ref4, stride4, x4, y4-1)
+	if leftRef == partNotAvailable || topRef == partNotAvailable {
 		return slice.MotionVector{}
 	}
-	left := ctx[mbIdx-1]
-	top := ctx[mbIdx-mbWidth]
-	leftRef := refCtx[mbIdx-1]
-	topRef := refCtx[mbIdx-mbWidth]
 	if (leftRef == 0 && left.X == 0 && left.Y == 0) || (topRef == 0 && top.X == 0 && top.Y == 0) {
 		return slice.MotionVector{}
 	}
-	return pred
+	c, cRef := getMV4(mv4, ref4, stride4, x4+4, y4-1)
+	if cRef == partNotAvailable {
+		c, cRef = getMV4(mv4, ref4, stride4, x4-1, y4-1)
+	}
+	matchCount := 0
+	if leftRef == 0 {
+		matchCount++
+	}
+	if topRef == 0 {
+		matchCount++
+	}
+	if cRef == 0 {
+		matchCount++
+	}
+	if matchCount > 1 {
+		return slice.MotionVector{X: median3(left.X, top.X, c.X), Y: median3(left.Y, top.Y, c.Y)}
+	}
+	if matchCount == 1 {
+		if leftRef == 0 {
+			return left
+		}
+		if topRef == 0 {
+			return top
+		}
+		return c
+	}
+	return slice.MotionVector{X: median3(left.X, top.X, c.X), Y: median3(left.Y, top.Y, c.Y)}
 }
 
 func predictMBMV(ctx []slice.MotionVector, refCtx []int8, targetRef int8, mbIdx, mbX, mbY, mbWidth int) slice.MotionVector {
