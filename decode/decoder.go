@@ -947,12 +947,21 @@ func decodeCABACPInterMB(dec *entropy.CABACDecoder, models []entropy.CABACCtx, n
 	if dec.DecodeBin(&models[11]) == 1 {
 		return mb, true
 	}
-	// Simplified CABAC mb_type decoding (P_L0_16x16 / P_L0_16x8 / P_L0_8x16 / P_8x8).
-	if dec.DecodeBin(&models[14]) == 1 {
-		mb.MBType = 1
-		for mb.MBType < 4 && dec.DecodeBin(&models[15]) == 1 {
-			mb.MBType++
+	// CABAC P-slice mb_type binarization, matching FFmpeg h264_cabac.c:
+	// state[14] == 0 selects inter P types; state[15]/[16]/[17] distinguish
+	// P_L0_16x16, P_L0_16x8, P_L0_8x16, and P_8x8.
+	// Intra-CABAC mb_type decoding is still handled as a future full-CABAC pass.
+	if dec.DecodeBin(&models[14]) == 0 {
+		if dec.DecodeBin(&models[15]) == 0 {
+			mb.MBType = 3 * dec.DecodeBin(&models[16]) // P16x16 or P8x8
+		} else {
+			mb.MBType = 2 - dec.DecodeBin(&models[17]) // P8x16 or P16x8
 		}
+	} else {
+		// TODO: decode_cabac_intra_mb_type equivalent. Treat as P16x16 for now so
+		// high-profile smoke decoding remains bounded rather than desynchronising by
+		// attempting to parse CAVLC intra payload.
+		mb.MBType = slice.PMBTypeP16x16
 	}
 	if numRefFrames > 1 {
 		if mb.MBType == slice.PMBTypeP16x16 {
