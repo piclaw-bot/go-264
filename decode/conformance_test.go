@@ -23,6 +23,22 @@ func psnr(a, b []uint8, w, h, strideA, strideB int) float64 {
 	return 10 * math.Log10(255*255/mse)
 }
 
+func maxAbsDiff(a, b []uint8, w, h, strideA, strideB int) int {
+	maxDiff := 0
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			d := int(a[y*strideA+x]) - int(b[y*strideB+x])
+			if d < 0 {
+				d = -d
+			}
+			if d > maxDiff {
+				maxDiff = d
+			}
+		}
+	}
+	return maxDiff
+}
+
 func TestConformanceGray16(t *testing.T) {
 	data, err := os.ReadFile("/workspace/tmp/gray16.h264")
 	if err != nil {
@@ -130,7 +146,7 @@ func TestConformancePSNRRegression(t *testing.T) {
 			"/workspace/tmp/bl_allref_0005.png", "/workspace/tmp/bl_allref_0006.png",
 			"/workspace/tmp/bl_allref_0007.png", "/workspace/tmp/bl_allref_0008.png",
 			"/workspace/tmp/bl_allref_0009.png", "/workspace/tmp/bl_allref_0010.png",
-		}, 22.5},
+		}, 26.5},
 		{"bbb-frame0", "/workspace/tmp/bbb_annexb.h264", []string{"/workspace/tmp/bbb_ref_0001.png"}, 8.0},
 	}
 	for _, tc := range cases {
@@ -224,6 +240,7 @@ func TestConformanceYUVReferencePlanes(t *testing.T) {
 		t.Fatalf("YUV reference too small: got %d want >=%d", len(ref), frameSize*10)
 	}
 	var sumY, sumU, sumV float64
+	maxY, maxU, maxV := 0, 0, 0
 	for i := 0; i < 10; i++ {
 		f := frames[i]
 		off := i * frameSize
@@ -233,11 +250,17 @@ func TestConformanceYUVReferencePlanes(t *testing.T) {
 		sumY += psnr(f.Y, yRef, w, h, f.StrideY, w)
 		sumU += psnr(f.U, uRef, cW, cH, f.StrideC, cW)
 		sumV += psnr(f.V, vRef, cW, cH, f.StrideC, cW)
+		maxY = max(maxY, maxAbsDiff(f.Y, yRef, w, h, f.StrideY, w))
+		maxU = max(maxU, maxAbsDiff(f.U, uRef, cW, cH, f.StrideC, cW))
+		maxV = max(maxV, maxAbsDiff(f.V, vRef, cW, cH, f.StrideC, cW))
 	}
 	avgY, avgU, avgV := sumY/10, sumU/10, sumV/10
-	t.Logf("baseline YUV avg PSNR: Y=%.2f U=%.2f V=%.2f dB", avgY, avgU, avgV)
-	if avgY < 25.0 || avgU < 20.0 || avgV < 16.0 {
+	t.Logf("baseline YUV avg PSNR: Y=%.2f U=%.2f V=%.2f dB; max diff Y=%d U=%d V=%d", avgY, avgU, avgV, maxY, maxU, maxV)
+	if avgY < 32.0 || avgU < 21.0 || avgV < 18.0 {
 		t.Fatalf("YUV PSNR too low: Y=%.2f U=%.2f V=%.2f", avgY, avgU, avgV)
+	}
+	if maxY > 180 || maxU > 250 || maxV > 250 {
+		t.Fatalf("YUV max diff too high: Y=%d U=%d V=%d", maxY, maxU, maxV)
 	}
 }
 
