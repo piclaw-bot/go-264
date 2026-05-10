@@ -982,29 +982,57 @@ func decodeCABACPInterMB(dec *entropy.CABACDecoder, models []entropy.CABACCtx, n
 	}
 	if mb.MBType == slice.PMBTypeP8x8 || mb.MBType == slice.PMBTypeP8x8ref0 {
 		for i := 0; i < 4; i++ {
-			mb.SubMV[i*4] = slice.MotionVector{X: decodeCABACSigned(dec), Y: decodeCABACSigned(dec)}
+			mb.SubMV[i*4] = slice.MotionVector{X: decodeCABACMVD(dec, models, 40, 0), Y: decodeCABACMVD(dec, models, 47, 0)}
 		}
 	} else {
 		for i := 0; i < parts; i++ {
-			mb.MV[i] = slice.MotionVector{X: decodeCABACSigned(dec), Y: decodeCABACSigned(dec)}
+			mb.MV[i] = slice.MotionVector{X: decodeCABACMVD(dec, models, 40, 0), Y: decodeCABACMVD(dec, models, 47, 0)}
 		}
 	}
 	return mb, false
 }
 
-func decodeCABACSigned(dec *entropy.CABACDecoder) int16 {
-	if dec == nil {
+func decodeCABACMVD(dec *entropy.CABACDecoder, models []entropy.CABACCtx, ctxBase int, amvd int) int16 {
+	if dec == nil || len(models) <= ctxBase+6 {
 		return 0
 	}
-	codeNum := dec.DecodeUEG(0)
-	if codeNum == 0 {
+	ctx := 0
+	if amvd > 2 {
+		ctx++
+	}
+	if amvd > 32 {
+		ctx++
+	}
+	if dec.DecodeBin(&models[ctxBase+ctx]) == 0 {
 		return 0
 	}
-	v := int16((codeNum + 1) >> 1)
-	if codeNum&1 == 0 {
-		return -v
+	mvd := 1
+	ctxBase += 3
+	ctx = ctxBase
+	for mvd < 9 && dec.DecodeBin(&models[ctx]) == 1 {
+		if mvd < 4 {
+			ctx++
+		}
+		mvd++
 	}
-	return v
+	if mvd >= 9 {
+		k := 3
+		for dec.DecodeBypass() == 1 {
+			mvd += 1 << uint(k)
+			k++
+			if k > 24 {
+				return 0
+			}
+		}
+		for k >= 0 {
+			mvd += int(dec.DecodeBypass()) << uint(k)
+			k--
+		}
+	}
+	if dec.DecodeBypass() == 1 {
+		return int16(mvd)
+	}
+	return int16(-mvd)
 }
 
 func writeBackInter4x4(mv4 []slice.MotionVector, ref4 []int8, stride4, mbX, mbY int, mb *slice.MBInter) {
