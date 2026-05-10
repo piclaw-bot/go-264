@@ -142,15 +142,12 @@ func (d *CABACDecoder) DecodeCABACResidual(models []CABACCtx, cat, maxCoeff int,
 				}
 			}
 		}
-		// Check whether position maxCoeff-1 is also significant.
-		// Using sig_ctx check (not unconditional) to guard against context drift:
-		// a wrongly decoded CBF=1 would consume extra level bins unconditionally;
-		// the sig_ctx check lets a zero last position consume only one bin.
-		sigCtxIdx := sigBase + (maxCoeff - 1)
-		if d.DecodeBin(&models[sigCtxIdx]) == 1 {
-			index[coeffCount] = maxCoeff - 1
-			coeffCount++
-		}
+		// H.264 spec §9.3.3.1.3: position maxCoeff-1 is implicitly significant when
+		// the scan loop exhausts without an early last_significant_coeff_flag break.
+		// No sig_flag bin is emitted for this position; add it unconditionally.
+		// Safe because CBF=1 (decoded above) guarantees at least one nonzero coeff.
+		index[coeffCount] = maxCoeff - 1
+		coeffCount++
 	}
 
 decode_levels:
