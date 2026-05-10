@@ -5,6 +5,10 @@ import (
 	"image/png"
 	"math"
 	"os"
+	"os/exec"
+	"regexp"
+	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -288,4 +292,106 @@ func TestConformanceChromaPlanes(t *testing.T) {
 		t.Fatalf("chroma diversity too low: U=%d V=%d", len(uniqU), len(uniqV))
 	}
 	t.Logf("baseline chroma diversity: U=%d V=%d", len(uniqU), len(uniqV))
+}
+
+// TestSyntaxParityBaseline verifies syntax parity between our CAVLC decoder
+// and FFmpeg by comparing per-frame type sequence and pixel mean Y-values.
+// This forms part of the Syntax Parity hard gate.
+func TestSyntaxParityBaseline(t *testing.T) {
+	const input = "/workspace/tmp/testsrc_bl.h264"
+	if _, err := os.Stat(input); err != nil {
+		t.Skip("testsrc_bl.h264 not available")
+	}
+
+	// --- Run FFmpeg showinfo to get reference frame types and pixel means ---
+	cmd := exec.Command("ffmpeg", "-i", input, "-vf", "showinfo", "-f", "null", "-")
+	out, _ := cmd.CombinedOutput()
+	type frameRef struct {
+		isKey bool
+		pType string
+		meanY float64
+	}
+	re := regexp.MustCompile(`n:\s*(\d+).*iskey:(\d+)\s+type:([IP]).*mean:\[(\d+)`)
+	var refs []frameRef
+	for _, line := range strings.Split(string(out), "\n") {
+		m := re.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		isKey := m[2] == "1"
+		pType := m[3]
+		meanY, _ := strconv.ParseFloat(m[4], 64)
+		refs = append(refs, frameRef{isKey: isKey, pType: pType, meanY: meanY})
+	}
+	if len(refs) == 0 {
+		t.Skip("ffmpeg showinfo not available or produced no output")
+	}
+
+	// --- Decode with our decoder ---
+	data, err := os.ReadFile(input)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	dec := NewDecoder()
+	frames, err := dec.Decode(data)
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	// Frame count
+	if len(frames) != len(refs) {
+		t.Errorf("frame count mismatch: our=%d ffmpeg=%d", len(frames), len(refs))
+		if len(frames) < len(refs) {
+			refs = refs[:len(frames)]
+		} else {
+			frames = frames[:len(refs)]
+		}
+	}
+
+	// Frame type sequence
+	ourSeq, ffmpegSeq := "", ""
+	for _, f := range frames {
+		if f.IsIDR {
+			ourSeq += "I"
+		} else {
+			ourSeq += "P"
+		}
+	}
+	for _, r := range refs {
+		if r.isKey {
+			ffmpegSeq += "I"
+		} else {
+			ffmpegSeq += "P"
+		}
+	}
+	if ourSeq != ffmpegSeq {
+		t.Errorf("frame type sequence mismatch: our=%s ffmpeg=%s", ourSeq, ffmpegSeq)
+	} else {
+		t.Logf("frame type sequence: %s ✓", ourSeq)
+	}
+
+	// Per-frame pixel mean Y comparison (allow ±5 intensity units)
+	mismatches := 0
+	for i, ref := range refs {
+		if i >= len(frames) {
+			break
+		}
+		f := frames[i]
+		sum := 0.0
+		n := f.Width * f.Height
+		for y := 0; y < f.Height; y++ {
+			for x := 0; x < f.Width; x++ {
+				sum += float64(f.PixelY(x, y))
+			}
+		}
+		ourMean := sum / float64(n)
+		diff := math.Abs(ourMean - ref.meanY)
+		if diff > 5.0 {
+			t.Errorf("frame %d mean_Y mismatch: our=%.1f ffmpeg=%.1f diff=%.1f", i, ourMean, ref.meanY, diff)
+			mismatches++
+		}
+	}
+	if mismatches == 0 {
+		t.Logf("all %d frames: pixel means within ±5 of FFmpeg reference ✓", len(refs))
+	}
 }
