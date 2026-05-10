@@ -186,8 +186,13 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 		maxMBs = 10000
 	} // safety limit
 	currentQP := int(qp)
-	nzCtx := make([][16]int, maxMBs)            // CAVLC luma totalCoeff context per decoded MB
-	chromaNZCtx := make([][2][4]int, maxMBs)    // CAVLC chroma totalCoeff context per decoded MB/component
+	nzCtx := make([][16]int, maxMBs)         // CAVLC/CABAC luma totalCoeff context per decoded MB
+	chromaNZCtx := make([][2][4]int, maxMBs) // CAVLC/CABAC chroma totalCoeff context per decoded MB/component
+	cbpCtx := make([]uint32, maxMBs)         // CABAC CBP per decoded MB (for left/top CBP context)
+	mbTypeCtx := make([]uint32, maxMBs)      // CABAC MB type flags per decoded MB (for intra gate context)
+	for i := range mbTypeCtx {
+		mbTypeCtx[i] = 0 // 0 = inter/unknown; see isCABACIntra16orPCM()
+	}
 	mvCtx := make([]slice.MotionVector, maxMBs) // representative L0 MV context per MB
 	refCtx := make([]int8, maxMBs)              // representative L0 ref_idx context per MB
 	for i := range refCtx {
@@ -214,19 +219,25 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 
 		var leftNZ, topNZ *[16]int
 		var leftChromaNZ, topChromaNZ *[2][4]int
+		var leftCBP, topCBP uint32
+		var leftMBType, topMBType uint32
 		if mbX > 0 {
 			leftNZ = &nzCtx[mbIdx-1]
 			leftChromaNZ = &chromaNZCtx[mbIdx-1]
+			leftCBP = cbpCtx[mbIdx-1]
+			leftMBType = mbTypeCtx[mbIdx-1]
 		}
 		if mbY > 0 {
 			topNZ = &nzCtx[mbIdx-mbWidth]
 			topChromaNZ = &chromaNZCtx[mbIdx-mbWidth]
+			topCBP = cbpCtx[mbIdx-mbWidth]
+			topMBType = mbTypeCtx[mbIdx-mbWidth]
 		}
 
 		if isIntra {
 			var mb *slice.MBIntra
 			if pps.EntropyCodingMode == 1 {
-				mb = decodeCABACIntraMB(cabacDec, cabacModels, leftNZ, topNZ, leftChromaNZ, topChromaNZ)
+				mb = decodeCABACIntraMB(cabacDec, cabacModels, leftNZ, topNZ, leftChromaNZ, topChromaNZ, leftCBP, topCBP, leftMBType, topMBType)
 				mbQPDelta := int(mb.QPDelta)
 				currentQP = (currentQP + mbQPDelta%52 + 52) % 52
 			} else {
@@ -237,6 +248,8 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 			d.reconstructMB(f, mb, mbX, mbY, currentQP, sps)
 			nzCtx[mbIdx] = mb.TotalCoeff
 			chromaNZCtx[mbIdx] = mb.ChromaTotalCoeff
+			cbpCtx[mbIdx] = mb.CodedBlockPattern
+			mbTypeCtx[mbIdx] = cabacMBTypeFlag(mb.MBType)
 			refCtx[mbIdx] = -1
 			writeBackIntra4x4(ref4Ctx, mv4Stride, mbX, mbY)
 			if pps.EntropyCodingMode == 1 && cabacDec.DecodeTerminate() == 1 {
@@ -244,7 +257,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 			}
 		} else if hdr.SliceType == slice.SliceTypeP {
 			if pps.EntropyCodingMode == 1 {
-				mbInter, skipped := decodeCABACPInterMB(cabacDec, cabacModels, hdr.NumRefIdxL0Active, leftNZ, topNZ, leftChromaNZ, topChromaNZ)
+				mbInter, skipped := decodeCABACPInterMB(cabacDec, cabacModels, hdr.NumRefIdxL0Active, leftNZ, topNZ, leftChromaNZ, topChromaNZ, leftCBP, topCBP)
 				if skipped {
 					skipMV := predictSkipMV(mvCtx, refCtx, predMV, mbIdx, mbX, mbY, mbWidth)
 					mbInter.MV[0] = skipMV
@@ -258,6 +271,8 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 				d.reconstructMBInter(f, mbInter, mbX, mbY, currentQP)
 				nzCtx[mbIdx] = mbInter.TotalCoeff
 				chromaNZCtx[mbIdx] = mbInter.ChromaTotalCoeff
+				cbpCtx[mbIdx] = mbInter.CBP
+				mbTypeCtx[mbIdx] = 0 // inter MB
 				mvCtx[mbIdx], refCtx[mbIdx] = representativeRightEdgeMV(mbInter)
 				writeBackInter4x4(mv4Ctx, ref4Ctx, mv4Stride, mbX, mbY, mbInter)
 				// TODO: re-enable after remaining bootstrapped contexts are fixed.
@@ -1008,7 +1023,20 @@ func clampInt(v, lo, hi int) int {
 	return v
 }
 
-func decodeCABACPInterMB(dec *entropy.CABACDecoder, models []entropy.CABACCtx, numRefFrames uint32, leftNZ, topNZ *[16]int, leftChromaNZ, topChromaNZ *[2][4]int) (*slice.MBInter, bool) {
+// cabacMBTypeFlag returns the CABAC mb_type context flag for a decoded MB:
+// 1 if I_16x16 or I_PCM (used as left/top neighbour gate in decode_cabac_intra_mb_type),
+// 0 otherwise.
+func cabacMBTypeFlag(mbType uint32) uint32 {
+	if mbType >= 1 && mbType <= 25 {
+		return 1
+	}
+	return 0
+}
+
+// isCABACIntra16orPCM returns 1 if the stored mb_type flag indicates I_16x16 or I_PCM.
+func isCABACIntra16orPCM(f uint32) uint32 { return f }
+
+func decodeCABACPInterMB(dec *entropy.CABACDecoder, models []entropy.CABACCtx, numRefFrames uint32, leftNZ, topNZ *[16]int, leftChromaNZ, topChromaNZ *[2][4]int, leftCBP, topCBP uint32) (*slice.MBInter, bool) {
 	mb := &slice.MBInter{MBType: slice.PMBTypeP16x16}
 	if dec == nil || len(models) < 20 {
 		return mb, true
@@ -1059,7 +1087,7 @@ func decodeCABACPInterMB(dec *entropy.CABACDecoder, models []entropy.CABACCtx, n
 			mb.MV[i] = slice.MotionVector{X: decodeCABACMVD(dec, models, 40, 0), Y: decodeCABACMVD(dec, models, 47, 0)}
 		}
 	}
-	mb.CBP = decodeCABACCBP(dec, models, 0, 0)
+	mb.CBP = decodeCABACCBP(dec, models, leftCBP, topCBP)
 	if mb.CBP != 0 {
 		mb.QPDelta = int32(decodeCABACDQP(dec, models, 0))
 		// Decode luma 4x4 residuals for each coded 8x8 group with proper CBF context.
@@ -1105,17 +1133,18 @@ func decodeCABACPInterMB(dec *entropy.CABACDecoder, models []entropy.CABACCtx, n
 // decodeCABACIntraMB decodes one CABAC-coded intra macroblock (I-slice path).
 // Models the FFmpeg decode_cabac_intra_mb_type / decode_cabac_mb_intra4x4_pred_mode
 // / decode_cabac_mb_chroma_pre_mode flow from h264_cabac.c.
-func decodeCABACIntraMB(dec *entropy.CABACDecoder, models []entropy.CABACCtx, leftNZ, topNZ *[16]int, leftChromaNZ, topChromaNZ *[2][4]int) *slice.MBIntra {
+func decodeCABACIntraMB(dec *entropy.CABACDecoder, models []entropy.CABACCtx, leftNZ, topNZ *[16]int, leftChromaNZ, topChromaNZ *[2][4]int, leftCBP, topCBP uint32, leftMBType, topMBType uint32) *slice.MBIntra {
 	mb := &slice.MBIntra{}
 	if dec == nil || len(models) < 128 {
 		return mb
 	}
 
 	// ---- mb_type: decode_cabac_intra_mb_type(ctx_base=3, intra_slice=1) ----
-	// Bootstrap: no neighbour type tracking yet; use ctx=0.
-	// ctx 3+0..3+2: I_NxN gate (neighbour-dependent, bootstrapped to 0).
+	// ctx 3+0..3+2: I_NxN gate based on left/top neighbour being I_16x16 or I_PCM.
+	// Source: FFmpeg decode_cabac_intra_mb_type: ctx += left&(I16|PCM), ctx += 2*(top&(I16|PCM)).
 	const ctxBase = 3
-	if dec.DecodeBin(&models[ctxBase]) == 0 {
+	intraCtx := isCABACIntra16orPCM(leftMBType) + 2*isCABACIntra16orPCM(topMBType)
+	if dec.DecodeBin(&models[ctxBase+intraCtx]) == 0 {
 		// mb_type = 0: I_NxN (I_4x4 / I_8x8)
 		mb.MBType = 0
 	} else if dec.DecodeTerminate() == 1 {
@@ -1178,7 +1207,7 @@ func decodeCABACIntraMB(dec *entropy.CABACDecoder, models []entropy.CABACCtx, le
 
 	// ---- CBP for I_NxN (I_16x16 CBP is in mb_type already) ----
 	if mb.MBType == 0 {
-		mb.CodedBlockPattern = decodeCABACCBP(dec, models, 0, 0)
+		mb.CodedBlockPattern = decodeCABACCBP(dec, models, leftCBP, topCBP)
 	}
 
 	// ---- QP delta ----
