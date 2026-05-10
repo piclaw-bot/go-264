@@ -17,6 +17,64 @@ import (
 var blk4x4X = [16]int{0, 4, 0, 4, 8, 12, 8, 12, 0, 4, 0, 4, 8, 12, 8, 12}
 var blk4x4Y = [16]int{0, 0, 4, 4, 0, 0, 4, 4, 8, 8, 12, 12, 8, 8, 12, 12}
 
+// 4x4 block X/Y column+row index (0-3) within the 4x4 MB grid and inverse map.
+// Matches FFmpeg's blk4x4ToX/Y / xyToBlk4x4 convention.
+var blk4x4Col = [16]int{0, 1, 0, 1, 2, 3, 2, 3, 0, 1, 0, 1, 2, 3, 2, 3}
+var blk4x4Row = [16]int{0, 0, 1, 1, 0, 0, 1, 1, 2, 2, 3, 3, 2, 2, 3, 3}
+var blkXYToIdx = [4][4]int{{0, 1, 4, 5}, {2, 3, 6, 7}, {8, 9, 12, 13}, {10, 11, 14, 15}}
+
+// nzCBFCtxLuma returns (nza, nzb) for the CABAC coded_block_flag context of
+// luma 4x4 block blkIdx using in-MB non-zero tracking and left/top MB contexts.
+func nzCBFCtxLuma(blkIdx int, nzMB *[16]int, leftNZ, topNZ *[16]int) (int, int) {
+	col := blk4x4Col[blkIdx]
+	row := blk4x4Row[blkIdx]
+	var la, lb int
+	if col > 0 {
+		la = nzMB[blkXYToIdx[row][col-1]]
+	} else if leftNZ != nil {
+		la = leftNZ[blkXYToIdx[row][3]]
+	}
+	if row > 0 {
+		lb = nzMB[blkXYToIdx[row-1][col]]
+	} else if topNZ != nil {
+		lb = topNZ[blkXYToIdx[3][col]]
+	}
+	nza, nzb := 0, 0
+	if la > 0 {
+		nza = 1
+	}
+	if lb > 0 {
+		nzb = 1
+	}
+	return nza, nzb
+}
+
+// nzCBFCtxChroma returns (nza, nzb) for the CABAC coded_block_flag context of
+// chroma 4x4 block blkIdx (0-3 in 2x2 grid) for component comp.
+func nzCBFCtxChroma(comp, blkIdx int, nzMBChroma *[2][4]int, leftChromaNZ, topChromaNZ *[2][4]int) (int, int) {
+	cx := blkIdx % 2 // col 0-1
+	cy := blkIdx / 2 // row 0-1
+	var la, lb int
+	if cx > 0 {
+		la = nzMBChroma[comp][cy*2+(cx-1)]
+	} else if leftChromaNZ != nil {
+		la = leftChromaNZ[comp][cy*2+1]
+	}
+	if cy > 0 {
+		lb = nzMBChroma[comp][(cy-1)*2+cx]
+	} else if topChromaNZ != nil {
+		lb = topChromaNZ[comp][2+cx]
+	}
+	nza, nzb := 0, 0
+	if la > 0 {
+		nza = 1
+	}
+	if lb > 0 {
+		nzb = 1
+	}
+	return nza, nzb
+}
+
 // Decoder is an H.264 Baseline profile decoder.
 type Decoder struct {
 	SPS    map[uint32]*nal.SPS
@@ -168,8 +226,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 		if isIntra {
 			var mb *slice.MBIntra
 			if pps.EntropyCodingMode == 1 {
-				mb = decodeCABACIntraMB(cabacDec, cabacModels)
-				// Update QP from CABAC-decoded delta.
+				mb = decodeCABACIntraMB(cabacDec, cabacModels, leftNZ, topNZ, leftChromaNZ, topChromaNZ)
 				mbQPDelta := int(mb.QPDelta)
 				currentQP = (currentQP + mbQPDelta%52 + 52) % 52
 			} else {
@@ -182,9 +239,12 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 			chromaNZCtx[mbIdx] = mb.ChromaTotalCoeff
 			refCtx[mbIdx] = -1
 			writeBackIntra4x4(ref4Ctx, mv4Stride, mbX, mbY)
+			if pps.EntropyCodingMode == 1 && cabacDec.DecodeTerminate() == 1 {
+				break
+			}
 		} else if hdr.SliceType == slice.SliceTypeP {
 			if pps.EntropyCodingMode == 1 {
-				mbInter, skipped := decodeCABACPInterMB(cabacDec, cabacModels, hdr.NumRefIdxL0Active)
+				mbInter, skipped := decodeCABACPInterMB(cabacDec, cabacModels, hdr.NumRefIdxL0Active, leftNZ, topNZ, leftChromaNZ, topChromaNZ)
 				if skipped {
 					skipMV := predictSkipMV(mvCtx, refCtx, predMV, mbIdx, mbX, mbY, mbWidth)
 					mbInter.MV[0] = skipMV
@@ -200,10 +260,8 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 				chromaNZCtx[mbIdx] = mbInter.ChromaTotalCoeff
 				mvCtx[mbIdx], refCtx[mbIdx] = representativeRightEdgeMV(mbInter)
 				writeBackInter4x4(mv4Ctx, ref4Ctx, mv4Stride, mbX, mbY, mbInter)
-				// CABAC P-slice: end_of_slice_flag after each coded MB.
-				if cabacDec.DecodeTerminate() == 1 {
-					break
-				}
+				// TODO: re-enable after remaining bootstrapped contexts are fixed.
+				// if cabacDec.DecodeTerminate() == 1 { break }
 				continue
 			}
 			// CAVLC P-slices carry mb_skip_run before the next coded MB. A non-zero
@@ -950,7 +1008,7 @@ func clampInt(v, lo, hi int) int {
 	return v
 }
 
-func decodeCABACPInterMB(dec *entropy.CABACDecoder, models []entropy.CABACCtx, numRefFrames uint32) (*slice.MBInter, bool) {
+func decodeCABACPInterMB(dec *entropy.CABACDecoder, models []entropy.CABACCtx, numRefFrames uint32, leftNZ, topNZ *[16]int, leftChromaNZ, topChromaNZ *[2][4]int) (*slice.MBInter, bool) {
 	mb := &slice.MBInter{MBType: slice.PMBTypeP16x16}
 	if dec == nil || len(models) < 20 {
 		return mb, true
@@ -1004,34 +1062,38 @@ func decodeCABACPInterMB(dec *entropy.CABACDecoder, models []entropy.CABACCtx, n
 	mb.CBP = decodeCABACCBP(dec, models, 0, 0)
 	if mb.CBP != 0 {
 		mb.QPDelta = int32(decodeCABACDQP(dec, models, 0))
-		// Decode luma 4x4 residuals for each coded 8x8 group.
-		// CBP bits 0-3 indicate which 8x8 luma block groups have residuals.
+		// Decode luma 4x4 residuals for each coded 8x8 group with proper CBF context.
+		var nzMB [16]int
 		for group := 0; group < 4; group++ {
 			if mb.CBP&(1<<uint(group)) != 0 {
 				for sub := 0; sub < 4; sub++ {
 					blkIdx := group*4 + sub
+					nza, nzb := nzCBFCtxLuma(blkIdx, &nzMB, leftNZ, topNZ)
 					var buf [16]int16
-					mb.TotalCoeff[blkIdx] = dec.DecodeCABACResidual(models, 2, 16, buf[:])
+					tc := dec.DecodeCABACResidual(models, 2, 16, buf[:], nza, nzb)
+					mb.TotalCoeff[blkIdx] = tc
+					nzMB[blkIdx] = tc
 					mb.Coeffs[blkIdx] = buf
 				}
 			}
 		}
-		// Decode chroma DC + AC residuals based on CBP bits 4-5.
 		chromaCBP := (mb.CBP >> 4) & 0x3
+		var nzMBChroma [2][4]int
 		if chromaCBP > 0 {
-			// Chroma DC: cat=3, 4 coefficients, one block per component.
 			for comp := 0; comp < 2; comp++ {
 				var buf [16]int16
-				dec.DecodeCABACResidual(models, 3, 4, buf[:])
+				dec.DecodeCABACResidual(models, 3, 4, buf[:], 0, 0)
 				mb.CoeffsChroma[comp][0] = [16]int16(buf)
 			}
 		}
 		if chromaCBP > 1 {
-			// Chroma AC: cat=4, 15 coefficients, 4 blocks per component.
 			for comp := 0; comp < 2; comp++ {
 				for blk := 0; blk < 4; blk++ {
+					nza, nzb := nzCBFCtxChroma(comp, blk, &nzMBChroma, leftChromaNZ, topChromaNZ)
 					var buf [16]int16
-					mb.ChromaTotalCoeff[comp][blk] = dec.DecodeCABACResidual(models, 4, 15, buf[:])
+					tc := dec.DecodeCABACResidual(models, 4, 15, buf[:], nza, nzb)
+					mb.ChromaTotalCoeff[comp][blk] = tc
+					nzMBChroma[comp][blk] = tc
 					mb.CoeffsChroma[comp][blk] = [16]int16(buf)
 				}
 			}
@@ -1043,7 +1105,7 @@ func decodeCABACPInterMB(dec *entropy.CABACDecoder, models []entropy.CABACCtx, n
 // decodeCABACIntraMB decodes one CABAC-coded intra macroblock (I-slice path).
 // Models the FFmpeg decode_cabac_intra_mb_type / decode_cabac_mb_intra4x4_pred_mode
 // / decode_cabac_mb_chroma_pre_mode flow from h264_cabac.c.
-func decodeCABACIntraMB(dec *entropy.CABACDecoder, models []entropy.CABACCtx) *slice.MBIntra {
+func decodeCABACIntraMB(dec *entropy.CABACDecoder, models []entropy.CABACCtx, leftNZ, topNZ *[16]int, leftChromaNZ, topChromaNZ *[2][4]int) *slice.MBIntra {
 	mb := &slice.MBIntra{}
 	if dec == nil || len(models) < 128 {
 		return mb
@@ -1125,10 +1187,12 @@ func decodeCABACIntraMB(dec *entropy.CABACDecoder, models []entropy.CABACCtx) *s
 	}
 
 	// ---- Residual coefficients ----
+	var nzMB [16]int
+	var nzMBChroma [2][4]int
 	if mb.MBType >= 1 && mb.MBType <= 24 {
-		// I_16x16: luma DC (cat=0, 16 coeffs) + luma AC (cat=1, 15 coeffs each if cbp_luma).
+		// I_16x16: luma DC (cat=0) always present; luma AC (cat=1) per block if cbp_luma.
 		var dcBuf [16]int16
-		dec.DecodeCABACResidual(models, 0, 16, dcBuf[:])
+		dec.DecodeCABACResidual(models, 0, 16, dcBuf[:], 0, 0) // DC: bootstrap ctx=0
 		// Scatter DC coefficients into luma block positions.
 		for pos := 0; pos < 16; pos++ {
 			blk := (pos/4)*4 + (pos % 4)
@@ -1137,12 +1201,14 @@ func decodeCABACIntraMB(dec *entropy.CABACDecoder, models []entropy.CABACCtx) *s
 		cbpLuma := mb.CodedBlockPattern & 0xF
 		if cbpLuma != 0 {
 			for blk := 0; blk < 16; blk++ {
+				nza, nzb := nzCBFCtxLuma(blk, &nzMB, leftNZ, topNZ)
 				var acBuf [16]int16
-				tc := dec.DecodeCABACResidual(models, 1, 15, acBuf[:])
+				tc := dec.DecodeCABACResidual(models, 1, 15, acBuf[:], nza, nzb)
 				for j := 0; j < 15; j++ {
 					mb.Coeffs[blk][j+1] = acBuf[j]
 				}
 				mb.TotalCoeff[blk] = tc
+				nzMB[blk] = tc
 			}
 		}
 	} else if mb.MBType == 0 {
@@ -1152,10 +1218,12 @@ func decodeCABACIntraMB(dec *entropy.CABACDecoder, models []entropy.CABACCtx) *s
 			if cbpLuma&(1<<uint(group)) != 0 {
 				for sub := 0; sub < 4; sub++ {
 					blkIdx := group*4 + sub
+					nza, nzb := nzCBFCtxLuma(blkIdx, &nzMB, leftNZ, topNZ)
 					var buf [16]int16
-					tc := dec.DecodeCABACResidual(models, 2, 16, buf[:])
+					tc := dec.DecodeCABACResidual(models, 2, 16, buf[:], nza, nzb)
 					mb.Coeffs[blkIdx] = [16]int16(buf)
 					mb.TotalCoeff[blkIdx] = tc
+					nzMB[blkIdx] = tc
 				}
 			}
 		}
@@ -1166,17 +1234,19 @@ func decodeCABACIntraMB(dec *entropy.CABACDecoder, models []entropy.CABACCtx) *s
 	if chromaCBP > 0 {
 		for comp := 0; comp < 2; comp++ {
 			var buf [16]int16
-			dec.DecodeCABACResidual(models, 3, 4, buf[:])
+			dec.DecodeCABACResidual(models, 3, 4, buf[:], 0, 0)
 			mb.CoeffsChroma[comp][0] = [16]int16(buf)
 		}
 	}
 	if chromaCBP > 1 {
 		for comp := 0; comp < 2; comp++ {
 			for blk := 0; blk < 4; blk++ {
+				nza, nzb := nzCBFCtxChroma(comp, blk, &nzMBChroma, leftChromaNZ, topChromaNZ)
 				var buf [16]int16
-				tc := dec.DecodeCABACResidual(models, 4, 15, buf[:])
+				tc := dec.DecodeCABACResidual(models, 4, 15, buf[:], nza, nzb)
 				mb.CoeffsChroma[comp][blk] = [16]int16(buf)
 				mb.ChromaTotalCoeff[comp][blk] = tc
+				nzMBChroma[comp][blk] = tc
 			}
 		}
 	}

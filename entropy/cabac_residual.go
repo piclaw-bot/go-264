@@ -68,10 +68,11 @@ var cabacLastCoeff8x8 = [63]uint8{
 //   - cat: residual category (0=luma DC, 1=luma AC/I16, 2=luma 4x4, 3=chroma DC, 4=chroma AC, 5=luma 8x8)
 //   - maxCoeff: number of coefficients to decode (16 for 4x4, 4 for chroma DC, 15 for AC, 64 for 8x8)
 //   - out: slice of length >= maxCoeff; coefficients are written in scan-position order
+//   - nza, nzb: left/top neighbour nonzero flags for coded_block_flag context (0 or 1 each)
 //
 // Returns number of nonzero coefficients (totalCoeff).
-// TODO: add coded_block_flag decode when non_zero_count_cache neighbour tracking is in place.
-func (d *CABACDecoder) DecodeCABACResidual(models []CABACCtx, cat, maxCoeff int, out []int16) int {
+// Decodes coded_block_flag first; if 0, returns 0 without reading more bins.
+func (d *CABACDecoder) DecodeCABACResidual(models []CABACCtx, cat, maxCoeff int, out []int16, nza, nzb int) int {
 	if d == nil || len(models) < 1024 || len(out) < maxCoeff {
 		return 0
 	}
@@ -85,11 +86,31 @@ func (d *CABACDecoder) DecodeCABACResidual(models []CABACCtx, cat, maxCoeff int,
 
 	is8x8 := cat == 5
 
-	// ---- Step 1: significant coefficient flag map ----
-	// Follows FFmpeg DECODE_SIGNIFICANCE(max_coeff-1, last, last) for 4x4/DC,
-	// and DECODE_SIGNIFICANCE_8x8 for 8x8 blocks.
-	// Early return when coeff_count==0 after the loop acts as the CBF=0 guard
-	// until explicit coded_block_flag context tracking is implemented.
+	// ---- Step 0: coded_block_flag ----
+	// CBF context: ctx = (nza>0) + 2*(nzb>0), base from cabacCBFBase[cat].
+	// For cat 5 (8x8 DCT), CBF is not separately decoded per block.
+	// Source: FFmpeg decode_cabac_residual_dc/nondc → get_cabac_cbf_ctx.
+	if !is8x8 {
+		cbfBase := 0
+		switch cat {
+		case 0:
+			cbfBase = 85 // luma DC
+		case 1:
+			cbfBase = 89 // luma AC I16x16
+		case 2:
+			cbfBase = 93 // luma 4x4
+		case 3:
+			cbfBase = 97 // chroma DC
+		case 4:
+			cbfBase = 101 // chroma AC
+		default:
+			cbfBase = 93
+		}
+		cbfCtx := cbfBase + nza + 2*nzb
+		if d.DecodeBin(&models[cbfCtx]) == 0 {
+			return 0 // coded_block_flag = 0
+		}
+	}
 	var index [64]int
 	coeffCount := 0
 
@@ -121,12 +142,10 @@ func (d *CABACDecoder) DecodeCABACResidual(models []CABACCtx, cat, maxCoeff int,
 				}
 			}
 		}
-		// Guard: if no significant coeff found in positions 0..maxCoeff-2, the
-		// first sig-flag was the proxy CBF and it was 0 → return empty.
-		if coeffCount == 0 {
-			return 0
-		}
 		// Check whether position maxCoeff-1 is also significant.
+		// Using sig_ctx check (not unconditional) to guard against context drift:
+		// a wrongly decoded CBF=1 would consume extra level bins unconditionally;
+		// the sig_ctx check lets a zero last position consume only one bin.
 		sigCtxIdx := sigBase + (maxCoeff - 1)
 		if d.DecodeBin(&models[sigCtxIdx]) == 1 {
 			index[coeffCount] = maxCoeff - 1
