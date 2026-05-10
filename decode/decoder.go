@@ -1291,10 +1291,10 @@ func decodeCABACIntraMB(dec *entropy.CABACDecoder, models []entropy.CABACCtx, le
 	// ---- Intra 4x4 / 8x8 prediction modes (I_NxN only) ----
 	if mb.MBType == 0 {
 		// For High-profile streams with transform_8x8_mode, I_NxN blocks may use I8x8.
-		// transform_size_8x8_flag decode (context 399) is deferred until the
-		// H.264 §8.3.2.2 mandatory reference-pixel strong filter is implemented.
-		// Without the filter, I8x8 prediction gives lower quality than accidental
-		// I4x4 decode of I8x8 data (8.12 dB → 7.84 dB regression).
+		// Decode transform_size_8x8_flag from context 399 + neighbor_transform_size.
+		// Deferred: I4x4 neighbours give DC=2 predicted mode (per spec §8.3.2.2 Note 3),
+		// causing most I8x8 blocks to use wide DC average rather than 16 local I4x4 DCs.
+		// Reference-pixel strong filter is implemented in PredIntra8x8 (H.264 §8.3.2.3).
 		if false && transform8x8Mode && dec.DecodeBin(&models[399]) == 1 {
 			mb.Use8x8Transform = true
 			// I8x8: one pred mode per 8x8 block (4 total).

@@ -1,24 +1,16 @@
 package pred
 
-// PredIntra8x8 generates the predicted 8×8 block from neighboring pixels.
-// Implements all 9 H.264 §8.3.2.2 Intra_8x8 prediction modes.
+// PredIntra8x8 generates the filtered predicted 8×8 block from neighboring pixels.
+// Implements all 9 H.264 §8.3.2.2 Intra_8x8 prediction modes with the mandatory
+// §8.3.2.3 reference-pixel strong filter applied inline (matching FFmpeg's
+// PREDICT_8x8_LOAD_TOP/LEFT/TOPLEFT/TOPRIGHT macros in h264pred_template.c).
 //
-//   - top:     16-byte slice (pixels above the block, top[0..7] + top-right top[8..15])
-//   - left:    8-byte slice  (pixels to the left, left[0..7])
-//   - topLeft: corner pixel at (x=-1, y=-1)
+//   - top:     16-byte slice (top[0..7] = above block; top[8..15] = top-right)
+//   - left:    8-byte slice  (left[0..7] = pixels to the left)
+//   - topLeft: corner pixel p[-1][-1]
 func PredIntra8x8(pred []uint8, mode int, top, left []uint8, topLeft uint8) {
-	pt := func(i int) int {
-		if i < 0 {
-			return int(topLeft)
-		}
-		return int(top[i])
-	}
-	pl := func(i int) int {
-		if i < 0 {
-			return int(topLeft)
-		}
-		return int(left[i])
-	}
+	hasTopRight := len(top) >= 16 && top[8] != top[7]
+
 	clip8 := func(v int) uint8 {
 		if v < 0 {
 			return 0
@@ -29,25 +21,74 @@ func PredIntra8x8(pred []uint8, mode int, top, left []uint8, topLeft uint8) {
 		return uint8(v)
 	}
 
+	// Compute filtered topLeft (lt), top row (t[0..15]) and left column (l[0..7]).
+	// Uses raw unfiltered pixels as computed in §8.3.2.3.
+	var lt int
+	var t [16]int
+	var l [8]int
+
+	// lt = (left[0] + 2*topLeft + top[0] + 2) >> 2
+	lt = (int(left[0]) + 2*int(topLeft) + int(top[0]) + 2) >> 2
+
+	// t[0] = (topLeft + 2*top[0] + top[1] + 2) >> 2
+	t[0] = (int(topLeft) + 2*int(top[0]) + int(top[1]) + 2) >> 2
+	for x := 1; x <= 6; x++ {
+		t[x] = (int(top[x-1]) + 2*int(top[x]) + int(top[x+1]) + 2) >> 2
+	}
+	if hasTopRight {
+		t[7] = (int(top[6]) + 2*int(top[7]) + int(top[8]) + 2) >> 2
+		for x := 8; x <= 14; x++ {
+			t[x] = (int(top[x-1]) + 2*int(top[x]) + int(top[x+1]) + 2) >> 2
+		}
+		t[15] = (int(top[14]) + 3*int(top[15]) + 2) >> 2
+	} else {
+		t[7] = (int(top[6]) + 3*int(top[7]) + 2) >> 2
+		for x := 8; x <= 15; x++ {
+			t[x] = int(top[7])
+		}
+	}
+
+	// l[0] = (topLeft + 2*left[0] + left[1] + 2) >> 2
+	l[0] = (int(topLeft) + 2*int(left[0]) + int(left[1]) + 2) >> 2
+	for k := 1; k <= 6; k++ {
+		l[k] = (int(left[k-1]) + 2*int(left[k]) + int(left[k+1]) + 2) >> 2
+	}
+	l[7] = (int(left[6]) + 3*int(left[7]) + 2) >> 2
+
+	// Bounds-safe accessors: index -1 maps to filtered topLeft (lt).
+	tAt := func(k int) int {
+		if k < 0 {
+			return lt
+		}
+		return t[k]
+	}
+	lAt := func(k int) int {
+		if k < 0 {
+			return lt
+		}
+		return l[k]
+	}
+
 	switch mode {
 	case Intra4x4Vertical:
 		for y := 0; y < 8; y++ {
 			for x := 0; x < 8; x++ {
-				pred[y*8+x] = top[x]
+				pred[y*8+x] = uint8(t[x])
 			}
 		}
 
 	case Intra4x4Horizontal:
 		for y := 0; y < 8; y++ {
 			for x := 0; x < 8; x++ {
-				pred[y*8+x] = left[y]
+				pred[y*8+x] = uint8(l[y])
 			}
 		}
 
 	case Intra4x4DC:
+		// DC: no filter — use raw reference pixels.
 		sum := 0
 		for i := 0; i < 8; i++ {
-			sum += pt(i) + pl(i)
+			sum += int(top[i]) + int(left[i])
 		}
 		dc := uint8((sum + 8) >> 4)
 		for i := range pred[:64] {
@@ -55,13 +96,12 @@ func PredIntra8x8(pred []uint8, mode int, top, left []uint8, topLeft uint8) {
 		}
 
 	case Intra4x4DiagDownLeft:
-		// Needs top[0..14]: last two positions clamped.
 		for y := 0; y < 8; y++ {
 			for x := 0; x < 8; x++ {
 				if x == 7 && y == 7 {
-					pred[y*8+x] = clip8((pt(14) + 3*pt(15) + 2) >> 2)
+					pred[y*8+x] = clip8((t[14] + 3*t[15] + 2) >> 2)
 				} else {
-					pred[y*8+x] = clip8((pt(x+y) + 2*pt(x+y+1) + pt(x+y+2) + 2) >> 2)
+					pred[y*8+x] = clip8((t[x+y] + 2*t[x+y+1] + t[x+y+2] + 2) >> 2)
 				}
 			}
 		}
@@ -70,11 +110,12 @@ func PredIntra8x8(pred []uint8, mode int, top, left []uint8, topLeft uint8) {
 		for y := 0; y < 8; y++ {
 			for x := 0; x < 8; x++ {
 				if x > y {
-					pred[y*8+x] = clip8((pt(x-y-2) + 2*pt(x-y-1) + pt(x-y) + 2) >> 2)
+					// tAt handles t[-1] → lt when x-y-2 = -1
+					pred[y*8+x] = clip8((tAt(x-y-2) + 2*tAt(x-y-1) + t[x-y] + 2) >> 2)
 				} else if y > x {
-					pred[y*8+x] = clip8((pl(y-x-2) + 2*pl(y-x-1) + pl(y-x) + 2) >> 2)
-				} else {
-					pred[y*8+x] = clip8((pt(0) + 2*pl(-1) + pl(0) + 2) >> 2)
+					pred[y*8+x] = clip8((lAt(y-x-2) + 2*lAt(y-x-1) + l[y-x] + 2) >> 2)
+				} else { // x == y
+					pred[y*8+x] = clip8((t[0] + 2*lt + l[0] + 2) >> 2)
 				}
 			}
 		}
@@ -86,14 +127,15 @@ func PredIntra8x8(pred []uint8, mode int, top, left []uint8, topLeft uint8) {
 				switch {
 				case zVR >= 0 && zVR%2 == 0:
 					idx := x - (y >> 1)
-					pred[y*8+x] = clip8((pt(idx-1) + pt(idx) + 1) >> 1)
+					pred[y*8+x] = clip8((tAt(idx-1) + t[idx] + 1) >> 1)
 				case zVR > 0 && zVR%2 == 1:
 					idx := x - (y >> 1)
-					pred[y*8+x] = clip8((pt(idx-2) + 2*pt(idx-1) + pt(idx) + 2) >> 2)
+					pred[y*8+x] = clip8((tAt(idx-2) + 2*tAt(idx-1) + t[idx] + 2) >> 2)
 				case zVR == -1:
-					pred[y*8+x] = clip8((pl(0) + 2*pl(-1) + pt(0) + 2) >> 2)
-				default:
-					pred[y*8+x] = clip8((pl(y-1) + 2*pl(y-2) + pl(y-3) + 2) >> 2)
+					pred[y*8+x] = clip8((l[0] + 2*lt + t[0] + 2) >> 2)
+				default: // zVR <= -2
+					idx := y - 2*x
+					pred[y*8+x] = clip8((lAt(idx-2) + 2*lAt(idx-1) + l[idx] + 2) >> 2)
 				}
 			}
 		}
@@ -105,14 +147,15 @@ func PredIntra8x8(pred []uint8, mode int, top, left []uint8, topLeft uint8) {
 				switch {
 				case zHD >= 0 && zHD%2 == 0:
 					idx := y - (x >> 1)
-					pred[y*8+x] = clip8((pl(idx-1) + pl(idx) + 1) >> 1)
+					pred[y*8+x] = clip8((lAt(idx-1) + l[idx] + 1) >> 1)
 				case zHD > 0 && zHD%2 == 1:
 					idx := y - (x >> 1)
-					pred[y*8+x] = clip8((pl(idx-2) + 2*pl(idx-1) + pl(idx) + 2) >> 2)
+					pred[y*8+x] = clip8((lAt(idx-2) + 2*lAt(idx-1) + l[idx] + 2) >> 2)
 				case zHD == -1:
-					pred[y*8+x] = clip8((pt(0) + 2*pl(-1) + pl(0) + 2) >> 2)
-				default:
-					pred[y*8+x] = clip8((pt(x-1) + 2*pt(x-2) + pt(x-3) + 2) >> 2)
+					pred[y*8+x] = clip8((l[0] + 2*lt + t[0] + 2) >> 2)
+				default: // zHD <= -2
+					idx := x - 2*y
+					pred[y*8+x] = clip8((tAt(idx-2) + 2*tAt(idx-1) + t[idx] + 2) >> 2)
 				}
 			}
 		}
@@ -122,9 +165,9 @@ func PredIntra8x8(pred []uint8, mode int, top, left []uint8, topLeft uint8) {
 			for x := 0; x < 8; x++ {
 				idx := x + (y >> 1)
 				if y&1 == 0 {
-					pred[y*8+x] = clip8((pt(idx) + pt(idx+1) + 1) >> 1)
+					pred[y*8+x] = clip8((t[idx] + t[idx+1] + 1) >> 1)
 				} else {
-					pred[y*8+x] = clip8((pt(idx) + 2*pt(idx+1) + pt(idx+2) + 2) >> 2)
+					pred[y*8+x] = clip8((t[idx] + 2*t[idx+1] + t[idx+2] + 2) >> 2)
 				}
 			}
 		}
@@ -136,15 +179,15 @@ func PredIntra8x8(pred []uint8, mode int, top, left []uint8, topLeft uint8) {
 				idx := y + (x >> 1)
 				switch {
 				case zHU%2 == 0 && idx < 7:
-					pred[y*8+x] = clip8((pl(idx) + pl(idx+1) + 1) >> 1)
+					pred[y*8+x] = clip8((l[idx] + l[idx+1] + 1) >> 1)
 				case zHU%2 == 1 && idx < 6:
-					pred[y*8+x] = clip8((pl(idx) + 2*pl(idx+1) + pl(idx+2) + 2) >> 2)
+					pred[y*8+x] = clip8((l[idx] + 2*l[idx+1] + l[idx+2] + 2) >> 2)
 				case zHU%2 == 1 && idx == 6:
-					pred[y*8+x] = clip8((pl(6) + 2*pl(7) + pl(7) + 2) >> 2)
+					pred[y*8+x] = clip8((l[6] + 2*l[7] + l[7] + 2) >> 2)
 				case zHU == 13:
-					pred[y*8+x] = clip8((pl(6) + 3*pl(7) + 2) >> 2)
+					pred[y*8+x] = clip8((l[6] + 3*l[7] + 2) >> 2)
 				default:
-					pred[y*8+x] = uint8(pl(7))
+					pred[y*8+x] = uint8(l[7])
 				}
 			}
 		}
