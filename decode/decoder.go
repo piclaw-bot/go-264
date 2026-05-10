@@ -992,6 +992,38 @@ func decodeCABACPInterMB(dec *entropy.CABACDecoder, models []entropy.CABACCtx, n
 	mb.CBP = decodeCABACCBP(dec, models, 0, 0)
 	if mb.CBP != 0 {
 		mb.QPDelta = int32(decodeCABACDQP(dec, models, 0))
+		// Decode luma 4x4 residuals for each coded 8x8 group.
+		// CBP bits 0-3 indicate which 8x8 luma block groups have residuals.
+		for group := 0; group < 4; group++ {
+			if mb.CBP&(1<<uint(group)) != 0 {
+				for sub := 0; sub < 4; sub++ {
+					blkIdx := group*4 + sub
+					var buf [16]int16
+					mb.TotalCoeff[blkIdx] = dec.DecodeCABACResidual(models, 2, 16, buf[:])
+					mb.Coeffs[blkIdx] = buf
+				}
+			}
+		}
+		// Decode chroma DC + AC residuals based on CBP bits 4-5.
+		chromaCBP := (mb.CBP >> 4) & 0x3
+		if chromaCBP > 0 {
+			// Chroma DC: cat=3, 4 coefficients, one block per component.
+			for comp := 0; comp < 2; comp++ {
+				var buf [16]int16
+				dec.DecodeCABACResidual(models, 3, 4, buf[:])
+				mb.CoeffsChroma[comp][0] = [16]int16(buf)
+			}
+		}
+		if chromaCBP > 1 {
+			// Chroma AC: cat=4, 15 coefficients, 4 blocks per component.
+			for comp := 0; comp < 2; comp++ {
+				for blk := 0; blk < 4; blk++ {
+					var buf [16]int16
+					mb.ChromaTotalCoeff[comp][blk] = dec.DecodeCABACResidual(models, 4, 15, buf[:])
+					mb.CoeffsChroma[comp][blk] = [16]int16(buf)
+				}
+			}
+		}
 	}
 	return mb, false
 }
