@@ -989,7 +989,75 @@ func decodeCABACPInterMB(dec *entropy.CABACDecoder, models []entropy.CABACCtx, n
 			mb.MV[i] = slice.MotionVector{X: decodeCABACMVD(dec, models, 40, 0), Y: decodeCABACMVD(dec, models, 47, 0)}
 		}
 	}
+	mb.CBP = decodeCABACCBP(dec, models, 0, 0)
+	if mb.CBP != 0 {
+		mb.QPDelta = int32(decodeCABACDQP(dec, models, 0))
+	}
 	return mb, false
+}
+
+func decodeCABACCBP(dec *entropy.CABACDecoder, models []entropy.CABACCtx, leftCBP, topCBP uint32) uint32 {
+	if dec == nil || len(models) <= 83 {
+		return 0
+	}
+	cbpA, cbpB := int(leftCBP), int(topCBP)
+	cbp := uint32(0)
+	ctx := boolInt(cbpA&0x02 == 0) + 2*boolInt(cbpB&0x04 == 0)
+	cbp |= dec.DecodeBin(&models[73+ctx])
+	ctx = boolInt(cbp&0x01 == 0) + 2*boolInt(cbpB&0x08 == 0)
+	cbp |= dec.DecodeBin(&models[73+ctx]) << 1
+	ctx = boolInt(cbpA&0x08 == 0) + 2*boolInt(cbp&0x01 == 0)
+	cbp |= dec.DecodeBin(&models[73+ctx]) << 2
+	ctx = boolInt(cbp&0x04 == 0) + 2*boolInt(cbp&0x02 == 0)
+	cbp |= dec.DecodeBin(&models[73+ctx]) << 3
+
+	ctx = 0
+	if (leftCBP>>4)&0x03 > 0 {
+		ctx++
+	}
+	if (topCBP>>4)&0x03 > 0 {
+		ctx += 2
+	}
+	if dec.DecodeBin(&models[77+ctx]) != 0 {
+		ctx = 4
+		if (leftCBP>>4)&0x03 == 2 {
+			ctx++
+		}
+		if (topCBP>>4)&0x03 == 2 {
+			ctx += 2
+		}
+		cbp |= (1 + dec.DecodeBin(&models[77+ctx])) << 4
+	}
+	return cbp
+}
+
+func decodeCABACDQP(dec *entropy.CABACDecoder, models []entropy.CABACCtx, lastQScaleDiff int) int {
+	if dec == nil || len(models) <= 63 {
+		return 0
+	}
+	if dec.DecodeBin(&models[60+boolInt(lastQScaleDiff != 0)]) == 0 {
+		return 0
+	}
+	val := 1
+	ctx := 2
+	for dec.DecodeBin(&models[60+ctx]) == 1 {
+		ctx = 3
+		val++
+		if val > 102 {
+			return 0
+		}
+	}
+	if val&1 != 0 {
+		return (val + 1) >> 1
+	}
+	return -((val + 1) >> 1)
+}
+
+func boolInt(v bool) int {
+	if v {
+		return 1
+	}
+	return 0
 }
 
 func decodeCABACRef(dec *entropy.CABACDecoder, models []entropy.CABACCtx, ctx int) uint32 {
