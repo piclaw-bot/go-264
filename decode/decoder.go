@@ -963,12 +963,32 @@ func decodeCABACPInterMB(dec *entropy.CABACDecoder, models []entropy.CABACCtx, n
 		// attempting to parse CAVLC intra payload.
 		mb.MBType = slice.PMBTypeP16x16
 	}
-	if numRefFrames > 1 {
-		if mb.MBType == slice.PMBTypeP16x16 {
-			mb.RefIdx[0] = int8(dec.DecodeUEG(0))
+	parts := 1
+	switch mb.MBType {
+	case slice.PMBTypeP16x8, slice.PMBTypeP8x16:
+		parts = 2
+	case slice.PMBTypeP8x8, slice.PMBTypeP8x8ref0:
+		parts = 4
+		// Minimal P_8x8 bootstrap: assume P_L0_8x8 sub partitions until proper
+		// CABAC sub_mb_type contexts are implemented.
+		for i := 0; i < 4; i++ {
+			mb.SubMBType[i] = 0
 		}
 	}
-	mb.MV[0] = slice.MotionVector{X: decodeCABACSigned(dec), Y: decodeCABACSigned(dec)}
+	if numRefFrames > 1 && mb.MBType != slice.PMBTypeP8x8ref0 {
+		for i := 0; i < parts; i++ {
+			mb.RefIdx[i] = int8(dec.DecodeUEG(0))
+		}
+	}
+	if mb.MBType == slice.PMBTypeP8x8 || mb.MBType == slice.PMBTypeP8x8ref0 {
+		for i := 0; i < 4; i++ {
+			mb.SubMV[i*4] = slice.MotionVector{X: decodeCABACSigned(dec), Y: decodeCABACSigned(dec)}
+		}
+	} else {
+		for i := 0; i < parts; i++ {
+			mb.MV[i] = slice.MotionVector{X: decodeCABACSigned(dec), Y: decodeCABACSigned(dec)}
+		}
+	}
 	return mb, false
 }
 
