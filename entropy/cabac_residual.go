@@ -3,13 +3,27 @@ package entropy
 // CABAC residual coefficient decoding.
 // Implements decode_cabac_residual_internal from FFmpeg h264_cabac.c.
 // ITU-T H.264 §9.3.3.1 (significant-coeff-flag and coeff_abs_level binarization).
-//
-// NOTE: coded_block_flag (CBF) is intentionally NOT decoded here yet.
-// Full CBF decode requires non_zero_count_cache / left_cbp / top_cbp neighbour
-// tracking that is not yet implemented.  Until that tracking is in place the
-// function reads the sig-flag map directly, using the first sig-flag position as
-// a proxy for CBF.  The early-return guard (coeff_count==0 → return 0) provides
-// the bit-budget protection needed without the explicit CBF bin.
+
+// H.264 coefficient scan tables (scan position → matrix row-major index).
+// Coefficients are written at out[scan[pos]] so output is in the same
+// matrix-order format as the CAVLC decoder (ready for IDCT without reordering).
+var cabacScan4x4 = [16]int{
+	0, 1, 4, 8,
+	5, 2, 3, 6,
+	9, 12, 13, 10,
+	7, 11, 14, 15,
+}
+
+var cabacScan8x8 = [64]int{
+	0, 1, 8, 16, 9, 2, 3, 10,
+	17, 24, 32, 25, 18, 11, 4, 5,
+	12, 19, 26, 33, 40, 48, 41, 34,
+	27, 20, 13, 6, 7, 14, 21, 28,
+	35, 42, 49, 56, 57, 50, 43, 36,
+	29, 22, 15, 23, 30, 37, 44, 51,
+	58, 59, 52, 45, 38, 31, 39, 46,
+	53, 60, 61, 54, 47, 55, 62, 63,
+}
 
 // Context base offsets for significant coeff flags per category (non-field mode).
 // Source: FFmpeg libavcodec/h264_cabac.c significant_coeff_flag_offset[0][cat]
@@ -67,7 +81,7 @@ var cabacLastCoeff8x8 = [63]uint8{
 //
 //   - cat: residual category (0=luma DC, 1=luma AC/I16, 2=luma 4x4, 3=chroma DC, 4=chroma AC, 5=luma 8x8)
 //   - maxCoeff: number of coefficients to decode (16 for 4x4, 4 for chroma DC, 15 for AC, 64 for 8x8)
-//   - out: slice of length >= maxCoeff; coefficients are written in scan-position order
+//   - out: slice of length >= maxCoeff; coefficients are written in MATRIX (row-major) order matching CAVLC.
 //   - nza, nzb: left/top neighbour nonzero flags for coded_block_flag context (0 or 1 each)
 //
 // Returns number of nonzero coefficients (totalCoeff).
@@ -155,19 +169,39 @@ decode_levels:
 		return 0
 	}
 
+	// Choose the scan table to convert scan position → matrix row-major index.
+	// cat=0,2: 4x4 scan from position 0 (includes DC).
+	// cat=1,4: 4x4 scan from position 1 (AC-only, skips DC slot 0); matches FFmpeg `scan+1`.
+	// cat=3: chroma DC, identity (4 positions, raster).
+	// cat=5: 8x8 scan from position 0.
+	var scanTable []int
+	switch cat {
+	case 0, 2: // luma DC and luma 4x4: full 4x4 scan
+		scanTable = cabacScan4x4[:maxCoeff]
+	case 1, 4: // luma AC and chroma AC: skip DC slot, start from scan pos 1
+		scanTable = cabacScan4x4[1 : 1+maxCoeff]
+	case 3: // chroma DC: raster (identity)
+		scanTable = []int{0, 1, 2, 3}
+	case 5: // luma 8x8: full 8x8 scan
+		scanTable = cabacScan8x8[:]
+	default:
+		scanTable = cabacScan4x4[:maxCoeff]
+	}
+
 	// ---- Step 2: coefficient levels in reverse scan order ----
 	nodeCtx := 0
 	for i := coeffCount - 1; i >= 0; i-- {
-		pos := index[i]
+		scanPos := index[i]
+		matrixPos := scanTable[scanPos] // convert to matrix order
 
 		level1CtxIdx := levelBase + int(cabacLevel1Ctx[nodeCtx])
 		if d.DecodeBin(&models[level1CtxIdx]) == 0 {
 			// abs level == 1
 			nodeCtx = int(cabacLevelTransition[0][nodeCtx])
 			if d.DecodeBypass() == 1 {
-				out[pos] = -1
+				out[matrixPos] = -1
 			} else {
-				out[pos] = 1
+				out[matrixPos] = 1
 			}
 		} else {
 			// abs level >= 2
@@ -189,9 +223,9 @@ decode_levels:
 				coeffAbs += 14
 			}
 			if d.DecodeBypass() == 1 {
-				out[pos] = int16(-coeffAbs)
+				out[matrixPos] = int16(-coeffAbs)
 			} else {
-				out[pos] = int16(coeffAbs)
+				out[matrixPos] = int16(coeffAbs)
 			}
 		}
 	}

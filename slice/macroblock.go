@@ -16,7 +16,9 @@ const (
 // MBIntra describes a decoded intra macroblock.
 type MBIntra struct {
 	MBType             uint32
-	IntraPredMode      [16]int8 // 4x4 prediction modes (if MBTypeINxN)
+	IntraPredMode      [16]int8 // 4x4 prediction modes (if MBTypeINxN, I4x4)
+	I8x8PredMode       [4]int8  // 8x8 prediction modes (if MBTypeINxN + Use8x8Transform)
+	Use8x8Transform    bool     // true if I_NxN block uses 8x8 DCT (High profile)
 	Intra16x16PredMode int8
 	CodedBlockPattern  uint32 // CBP
 	ChromaPredMode     int8
