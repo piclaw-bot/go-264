@@ -31,6 +31,7 @@ type MBInter struct {
 	SubMBType        [4]uint32        // sub-macroblock types for P8x8
 	SubMV            [16]MotionVector // sub-partition MVs for P8x8
 	CBP              uint32
+	Use8x8Transform  bool // true if inter MB uses 8x8 DCT (High profile)
 	QPDelta          int32
 	Coeffs           [16][16]int16
 	CoeffsChroma     [2][4][16]int16

@@ -335,7 +335,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 			}
 		} else if hdr.SliceType == slice.SliceTypeP {
 			if pps.EntropyCodingMode == 1 {
-				mbInter, skipped := decodeCABACPInterMB(cabacDec, cabacModels, hdr.NumRefIdxL0Active, leftNZ, topNZ, leftChromaNZ, topChromaNZ, leftCBP, topCBP)
+				mbInter, skipped := decodeCABACPInterMB(cabacDec, cabacModels, hdr.NumRefIdxL0Active, leftNZ, topNZ, leftChromaNZ, topChromaNZ, leftCBP, topCBP, pps.Transform8x8Mode)
 				if skipped {
 					skipMV := predictSkipMV(mvCtx, refCtx, predMV, mbIdx, mbX, mbY, mbWidth)
 					mbInter.MV[0] = skipMV
@@ -1082,32 +1082,66 @@ func (d *Decoder) copyInterSubRect(dst []uint8, ref *frame.Frame, srcBaseX, srcB
 }
 
 func (d *Decoder) writeInterResidual(f *frame.Frame, mb *slice.MBInter, predicted []uint8, mbX, mbY, qp int) {
-	// Dequant + IDCT residual blocks, then add to prediction. Keep a
-	// transformed residual copy; mb.Coeffs remains quantized bitstream data.
+	// Dequant + IDCT residual blocks, then add to prediction.
 	cbpLuma := mb.CBP & 0xF
-	var residual [16][16]int16
-	for blkIdx := 0; blkIdx < 16; blkIdx++ {
-		group := blkIdx / 4
-		if cbpLuma&(1<<uint(group)) != 0 {
-			residual[blkIdx] = mb.Coeffs[blkIdx]
-			transform.Dequant4x4(residual[blkIdx][:], qp)
-			transform.IDCT4x4(residual[blkIdx][:])
+	if mb.Use8x8Transform {
+		// 8x8 DCT inter: 4 8x8 blocks per CBP group, each stored as 4x16 in Coeffs.
+		for group := 0; group < 4; group++ {
+			if cbpLuma&(1<<uint(group)) == 0 {
+				continue
+			}
+			// Reassemble the 64-coeff block from 4 consecutive Coeffs entries.
+			var block [64]int16
+			for sub := 0; sub < 4; sub++ {
+				for j := 0; j < 16; j++ {
+					block[sub*16+j] = mb.Coeffs[group*4+sub][j]
+				}
+			}
+			transform.Dequant8x8(block[:], qp)
+			transform.IDCT8x8(block[:])
+			// 8x8 block position within the predicted 16x16 buffer.
+			groupX := (group % 2) * 8
+			groupY := (group / 2) * 8
+			for py := 0; py < 8; py++ {
+				for px := 0; px < 8; px++ {
+					pidx := (groupY+py)*16 + (groupX + px)
+					v := int(predicted[pidx]) + int(block[py*8+px])
+					if v < 0 {
+						v = 0
+					}
+					if v > 255 {
+						v = 255
+					}
+					f.SetPixelY(mbX*16+groupX+px, mbY*16+groupY+py, uint8(v))
+				}
+			}
 		}
-	}
-	for blkIdx := 0; blkIdx < 16; blkIdx++ {
-		bx := blk4x4X[blkIdx]
-		by := blk4x4Y[blkIdx]
-		for py := 0; py < 4; py++ {
-			for px := 0; px < 4; px++ {
-				pidx := (by+py)*16 + (bx + px)
-				v := int(predicted[pidx]) + int(residual[blkIdx][py*4+px])
-				if v < 0 {
-					v = 0
+	} else {
+		// 4x4 DCT inter: 16 4x4 blocks.
+		var residual [16][16]int16
+		for blkIdx := 0; blkIdx < 16; blkIdx++ {
+			group := blkIdx / 4
+			if cbpLuma&(1<<uint(group)) != 0 {
+				residual[blkIdx] = mb.Coeffs[blkIdx]
+				transform.Dequant4x4(residual[blkIdx][:], qp)
+				transform.IDCT4x4(residual[blkIdx][:])
+			}
+		}
+		for blkIdx := 0; blkIdx < 16; blkIdx++ {
+			bx := blk4x4X[blkIdx]
+			by := blk4x4Y[blkIdx]
+			for py := 0; py < 4; py++ {
+				for px := 0; px < 4; px++ {
+					pidx := (by+py)*16 + (bx + px)
+					v := int(predicted[pidx]) + int(residual[blkIdx][py*4+px])
+					if v < 0 {
+						v = 0
+					}
+					if v > 255 {
+						v = 255
+					}
+					f.SetPixelY(mbX*16+bx+px, mbY*16+by+py, uint8(v))
 				}
-				if v > 255 {
-					v = 255
-				}
-				f.SetPixelY(mbX*16+bx+px, mbY*16+by+py, uint8(v))
 			}
 		}
 	}
@@ -1196,7 +1230,7 @@ func cabacMBTypeFlag(mbType uint32) uint32 {
 // isCABACIntra16orPCM returns 1 if the stored mb_type flag indicates I_16x16 or I_PCM.
 func isCABACIntra16orPCM(f uint32) uint32 { return f }
 
-func decodeCABACPInterMB(dec *entropy.CABACDecoder, models []entropy.CABACCtx, numRefFrames uint32, leftNZ, topNZ *[16]int, leftChromaNZ, topChromaNZ *[2][4]int, leftCBP, topCBP uint32) (*slice.MBInter, bool) {
+func decodeCABACPInterMB(dec *entropy.CABACDecoder, models []entropy.CABACCtx, numRefFrames uint32, leftNZ, topNZ *[16]int, leftChromaNZ, topChromaNZ *[2][4]int, leftCBP, topCBP uint32, transform8x8Mode bool) (*slice.MBInter, bool) {
 	mb := &slice.MBInter{MBType: slice.PMBTypeP16x16}
 	if dec == nil || len(models) < 20 {
 		return mb, true
@@ -1250,18 +1284,46 @@ func decodeCABACPInterMB(dec *entropy.CABACDecoder, models []entropy.CABACCtx, n
 	mb.CBP = decodeCABACCBP(dec, models, leftCBP, topCBP)
 	if mb.CBP != 0 {
 		mb.QPDelta = int32(decodeCABACDQP(dec, models, 0))
-		// Decode luma 4x4 residuals for each coded 8x8 group with proper CBF context.
+		// inter transform_size_8x8_flag: decoded after CBP for non-intra MBs when
+		// transform_8x8_mode_flag=1 and luma CBP != 0.
+		// Source: FFmpeg h264_cabac.c `if (dct8x8_allowed && (cbp&15) && !IS_INTRA)`.
+		use8x8Residual := false
+		if transform8x8Mode && mb.CBP&0xF != 0 {
+			if dec.DecodeBin(&models[399]) == 1 {
+				use8x8Residual = true
+				mb.Use8x8Transform = true
+			}
+		}
 		var nzMB [16]int
-		for group := 0; group < 4; group++ {
-			if mb.CBP&(1<<uint(group)) != 0 {
-				for sub := 0; sub < 4; sub++ {
-					blkIdx := group*4 + sub
-					nza, nzb := nzCBFCtxLuma(blkIdx, &nzMB, leftNZ, topNZ)
-					var buf [16]int16
-					tc := dec.DecodeCABACResidual(models, 2, 16, buf[:], nza, nzb)
-					mb.TotalCoeff[blkIdx] = tc
-					nzMB[blkIdx] = tc
-					mb.Coeffs[blkIdx] = buf
+		if use8x8Residual {
+			// I8x8 DCT inter: 4 8x8 blocks (cat=5, 64 coefficients, no CBF).
+			for group := 0; group < 4; group++ {
+				if mb.CBP&(1<<uint(group)) != 0 {
+					var buf [64]int16
+					dec.DecodeCABACResidual(models, 5, 64, buf[:], 0, 0)
+					for sub := 0; sub < 4; sub++ {
+						blkIdx := group*4 + sub
+						for j := 0; j < 16; j++ {
+							mb.Coeffs[blkIdx][j] = buf[sub*16+j]
+						}
+						nzMB[blkIdx] = 1 // mark non-zero group
+						mb.TotalCoeff[blkIdx] = 1
+					}
+				}
+			}
+		} else {
+			// 4x4 DCT inter: 16 4x4 blocks (cat=2).
+			for group := 0; group < 4; group++ {
+				if mb.CBP&(1<<uint(group)) != 0 {
+					for sub := 0; sub < 4; sub++ {
+						blkIdx := group*4 + sub
+						nza, nzb := nzCBFCtxLuma(blkIdx, &nzMB, leftNZ, topNZ)
+						var buf [16]int16
+						tc := dec.DecodeCABACResidual(models, 2, 16, buf[:], nza, nzb)
+						mb.TotalCoeff[blkIdx] = tc
+						nzMB[blkIdx] = tc
+						mb.Coeffs[blkIdx] = buf
+					}
 				}
 			}
 		}
