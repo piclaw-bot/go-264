@@ -977,7 +977,7 @@ func decodeCABACPInterMB(dec *entropy.CABACDecoder, models []entropy.CABACCtx, n
 	}
 	if numRefFrames > 1 && mb.MBType != slice.PMBTypeP8x8ref0 {
 		for i := 0; i < parts; i++ {
-			mb.RefIdx[i] = int8(dec.DecodeUEG(0))
+			mb.RefIdx[i] = int8(decodeCABACRef(dec, models, 0))
 		}
 	}
 	if mb.MBType == slice.PMBTypeP8x8 || mb.MBType == slice.PMBTypeP8x8ref0 {
@@ -990,6 +990,21 @@ func decodeCABACPInterMB(dec *entropy.CABACDecoder, models []entropy.CABACCtx, n
 		}
 	}
 	return mb, false
+}
+
+func decodeCABACRef(dec *entropy.CABACDecoder, models []entropy.CABACCtx, ctx int) uint32 {
+	if dec == nil || len(models) <= 58 {
+		return 0
+	}
+	ref := uint32(0)
+	for dec.DecodeBin(&models[54+ctx]) == 1 {
+		ref++
+		ctx = (ctx >> 2) + 4
+		if ref >= 32 {
+			return 0
+		}
+	}
+	return ref
 }
 
 func decodeCABACMVD(dec *entropy.CABACDecoder, models []entropy.CABACCtx, ctxBase int, amvd int) int16 {
