@@ -200,6 +200,10 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 				chromaNZCtx[mbIdx] = mbInter.ChromaTotalCoeff
 				mvCtx[mbIdx], refCtx[mbIdx] = representativeRightEdgeMV(mbInter)
 				writeBackInter4x4(mv4Ctx, ref4Ctx, mv4Stride, mbX, mbY, mbInter)
+				// CABAC P-slice: end_of_slice_flag after each coded MB.
+				if cabacDec.DecodeTerminate() == 1 {
+					break
+				}
 				continue
 			}
 			// CAVLC P-slices carry mb_skip_run before the next coded MB. A non-zero

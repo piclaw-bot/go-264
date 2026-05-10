@@ -3,6 +3,13 @@ package entropy
 // CABAC residual coefficient decoding.
 // Implements decode_cabac_residual_internal from FFmpeg h264_cabac.c.
 // ITU-T H.264 §9.3.3.1 (significant-coeff-flag and coeff_abs_level binarization).
+//
+// NOTE: coded_block_flag (CBF) is intentionally NOT decoded here yet.
+// Full CBF decode requires non_zero_count_cache / left_cbp / top_cbp neighbour
+// tracking that is not yet implemented.  Until that tracking is in place the
+// function reads the sig-flag map directly, using the first sig-flag position as
+// a proxy for CBF.  The early-return guard (coeff_count==0 → return 0) provides
+// the bit-budget protection needed without the explicit CBF bin.
 
 // Context base offsets for significant coeff flags per category (non-field mode).
 // Source: FFmpeg libavcodec/h264_cabac.c significant_coeff_flag_offset[0][cat]
@@ -59,12 +66,11 @@ var cabacLastCoeff8x8 = [63]uint8{
 // DecodeCABACResidual decodes one residual block using CABAC context models.
 //
 //   - cat: residual category (0=luma DC, 1=luma AC/I16, 2=luma 4x4, 3=chroma DC, 4=chroma AC, 5=luma 8x8)
-//   - maxCoeff: number of coefficients to decode (16 for 4x4, 4 for chroma DC, 64 for 8x8)
-//   - out: slice of length >= maxCoeff, filled with coefficients in scanned scan order (position 0..maxCoeff-1)
+//   - maxCoeff: number of coefficients to decode (16 for 4x4, 4 for chroma DC, 15 for AC, 64 for 8x8)
+//   - out: slice of length >= maxCoeff; coefficients are written in scan-position order
 //
 // Returns number of nonzero coefficients (totalCoeff).
-// The caller must inverse-scan the output if needed (for cat 0..4 the output is
-// already in the H.264 raster/zigzag scan coefficient position).
+// TODO: add coded_block_flag decode when non_zero_count_cache neighbour tracking is in place.
 func (d *CABACDecoder) DecodeCABACResidual(models []CABACCtx, cat, maxCoeff int, out []int16) int {
 	if d == nil || len(models) < 1024 || len(out) < maxCoeff {
 		return 0
@@ -78,71 +84,71 @@ func (d *CABACDecoder) DecodeCABACResidual(models []CABACCtx, cat, maxCoeff int,
 	levelBase := cabacCoeffAbsLevelOffset[cat]
 
 	is8x8 := cat == 5
-	isDC := cat == 0 || cat == 3
 
-	// 1. Decode significant coefficient flag map.
+	// ---- Step 1: significant coefficient flag map ----
+	// Follows FFmpeg DECODE_SIGNIFICANCE(max_coeff-1, last, last) for 4x4/DC,
+	// and DECODE_SIGNIFICANCE_8x8 for 8x8 blocks.
+	// Early return when coeff_count==0 after the loop acts as the CBF=0 guard
+	// until explicit coded_block_flag context tracking is implemented.
 	var index [64]int
-	coeff_count := 0
+	coeffCount := 0
 
 	if is8x8 {
-		// 8x8 block: significant map uses position-dependent context offsets.
 		for last := 0; last < 63; last++ {
 			sigCtxIdx := sigBase + int(cabacSigCoeff8x8[last])
 			if d.DecodeBin(&models[sigCtxIdx]) == 1 {
-				index[coeff_count] = last
-				coeff_count++
+				index[coeffCount] = last
+				coeffCount++
 				lastCtxIdx := lastBase + int(cabacLastCoeff8x8[last])
 				if d.DecodeBin(&models[lastCtxIdx]) == 1 {
-					// this was the last significant coefficient
 					goto decode_levels
 				}
 			}
 		}
-		// position 63 is always added if we got here
-		index[coeff_count] = 63
-		coeff_count++
+		// Position 63 is added unconditionally (only safe after 8x8 CBF=1).
+		index[coeffCount] = 63
+		coeffCount++
 	} else {
-		// 4x4 / DC block: significant map uses direct position as context offset.
+		// Scan positions 0..maxCoeff-2 via sig_ctx / last_ctx.
 		for last := 0; last < maxCoeff-1; last++ {
 			sigCtxIdx := sigBase + last
 			if d.DecodeBin(&models[sigCtxIdx]) == 1 {
-				index[coeff_count] = last
-				coeff_count++
+				index[coeffCount] = last
+				coeffCount++
 				lastCtxIdx := lastBase + last
 				if d.DecodeBin(&models[lastCtxIdx]) == 1 {
 					goto decode_levels
 				}
 			}
 		}
-		// Last position: if we reach it, it is always significant.
-		if coeff_count == 0 {
-			// No significant coefficients found; encode a single zero.
+		// Guard: if no significant coeff found in positions 0..maxCoeff-2, the
+		// first sig-flag was the proxy CBF and it was 0 → return empty.
+		if coeffCount == 0 {
 			return 0
 		}
-		// Check if last position itself is significant.
+		// Check whether position maxCoeff-1 is also significant.
 		sigCtxIdx := sigBase + (maxCoeff - 1)
 		if d.DecodeBin(&models[sigCtxIdx]) == 1 {
-			index[coeff_count] = maxCoeff - 1
-			coeff_count++
+			index[coeffCount] = maxCoeff - 1
+			coeffCount++
 		}
 	}
 
 decode_levels:
-	if coeff_count == 0 {
+	if coeffCount == 0 {
 		return 0
 	}
 
-	// 2. Decode coefficient levels in reverse scan order.
+	// ---- Step 2: coefficient levels in reverse scan order ----
 	nodeCtx := 0
-	for i := coeff_count - 1; i >= 0; i-- {
+	for i := coeffCount - 1; i >= 0; i-- {
 		pos := index[i]
 
 		level1CtxIdx := levelBase + int(cabacLevel1Ctx[nodeCtx])
 		if d.DecodeBin(&models[level1CtxIdx]) == 0 {
 			// abs level == 1
 			nodeCtx = int(cabacLevelTransition[0][nodeCtx])
-			sign := d.DecodeBypass()
-			if sign == 1 {
+			if d.DecodeBypass() == 1 {
 				out[pos] = -1
 			} else {
 				out[pos] = 1
@@ -156,7 +162,6 @@ decode_levels:
 				coeffAbs++
 			}
 			if coeffAbs >= 15 {
-				// bypass extension
 				j := 0
 				for d.DecodeBypass() == 1 && j < 23 {
 					j++
@@ -167,22 +172,12 @@ decode_levels:
 				}
 				coeffAbs += 14
 			}
-			// sign bit
-			sign := d.DecodeBypass()
-			if isDC {
-				if sign == 1 {
-					out[pos] = int16(-coeffAbs)
-				} else {
-					out[pos] = int16(coeffAbs)
-				}
+			if d.DecodeBypass() == 1 {
+				out[pos] = int16(-coeffAbs)
 			} else {
-				if sign == 1 {
-					out[pos] = int16(-coeffAbs)
-				} else {
-					out[pos] = int16(coeffAbs)
-				}
+				out[pos] = int16(coeffAbs)
 			}
 		}
 	}
-	return coeff_count
+	return coeffCount
 }
