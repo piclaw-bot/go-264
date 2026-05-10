@@ -270,6 +270,10 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					mvCtx[mbIdx] = skipMV
 					refCtx[mbIdx] = 0
 					writeBackInter4x4(mv4Ctx, ref4Ctx, mv4Stride, mbX, mbY, mbInter)
+					// H.264 spec §7.3.4: end_of_slice_flag decoded after every MB position.
+					if cabacDec.DecodeTerminate() == 1 {
+						break
+					}
 					continue
 				}
 				applyMVPredictors(mbInter, mvCtx, refCtx, mv4Ctx, ref4Ctx, mv4Stride, mbIdx, mbX, mbY, mbWidth)
@@ -1237,9 +1241,10 @@ func decodeCABACIntraMB(dec *entropy.CABACDecoder, models []entropy.CABACCtx, le
 		// I_16x16: luma DC (cat=0) always present; luma AC (cat=1) per block if cbp_luma.
 		var dcBuf [16]int16
 		dec.DecodeCABACResidual(models, 0, 16, dcBuf[:], 0, 0) // DC: bootstrap ctx=0
-		// Scatter DC coefficients into luma block positions.
+		// Scatter DC coefficients into luma block positions using the same
+		// blkXYToIdx mapping as CAVLC: pos → blk = blkXYToIdx[pos/4][pos%4].
 		for pos := 0; pos < 16; pos++ {
-			blk := (pos/4)*4 + (pos % 4)
+			blk := blkXYToIdx[pos/4][pos%4]
 			mb.Coeffs[blk][0] = dcBuf[pos]
 		}
 		cbpLuma := mb.CodedBlockPattern & 0xF
