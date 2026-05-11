@@ -184,6 +184,18 @@ func (d *Decoder) fillChromaInterPred(dst []uint8, plane []uint8, stride, width,
 }
 
 func (d *Decoder) writeChromaInterResidual(f *frame.Frame, mb *syntax.MBInter, predicted []uint8, comp int, mbX, mbY, qp int) {
+	dstBaseX := mbX * 8
+	dstBaseY := mbY * 8
+	plane := f.U
+	if comp != 0 {
+		plane = f.V
+	}
+	if (mb.CBP>>4)&0x3 == 0 {
+		for y := 0; y < 8; y++ {
+			copy(plane[(dstBaseY+y)*f.StrideC+dstBaseX:(dstBaseY+y)*f.StrideC+dstBaseX+8], predicted[y*8:y*8+8])
+		}
+		return
+	}
 	chromaQP := frame.ChromaQP(qp, d.chromaQPOffset)
 	var dc [4]int16
 	for i := 0; i < 4; i++ {
@@ -197,12 +209,6 @@ func (d *Decoder) writeChromaInterResidual(f *frame.Frame, mb *syntax.MBInter, p
 		transform.Dequant4x4AC(residual[blk][:], chromaQP)
 	}
 	transform.IDCT4x4Batch(residual[:])
-	dstBaseX := mbX * 8
-	dstBaseY := mbY * 8
-	plane := f.U
-	if comp != 0 {
-		plane = f.V
-	}
 	for blk := 0; blk < 4; blk++ {
 		bx, by := (blk&1)*4, (blk>>1)*4
 		for y := 0; y < 4; y++ {

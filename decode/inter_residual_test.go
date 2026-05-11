@@ -15,6 +15,14 @@ func patternedPrediction16() [256]uint8 {
 	return predicted
 }
 
+func patternedPrediction8() [64]uint8 {
+	var predicted [64]uint8
+	for i := range predicted {
+		predicted[i] = uint8((i*29 + 5) & 0xff)
+	}
+	return predicted
+}
+
 func assertPredicted16x16(t *testing.T, f *frame.Frame, predicted []uint8, mbX, mbY int) {
 	t.Helper()
 	for y := 0; y < 16; y++ {
@@ -26,6 +34,35 @@ func assertPredicted16x16(t *testing.T, f *frame.Frame, predicted []uint8, mbX, 
 			}
 		}
 	}
+}
+
+func assertPredictedChroma8x8(t *testing.T, f *frame.Frame, comp int, predicted []uint8, mbX, mbY int) {
+	t.Helper()
+	plane := f.U
+	if comp != 0 {
+		plane = f.V
+	}
+	for y := 0; y < 8; y++ {
+		for x := 0; x < 8; x++ {
+			got := plane[(mbY*8+y)*f.StrideC+mbX*8+x]
+			want := predicted[y*8+x]
+			if got != want {
+				t.Fatalf("chroma comp=%d pixel (%d,%d) got %d want %d", comp, x, y, got, want)
+			}
+		}
+	}
+}
+
+func TestWriteChromaInterResidualZeroCBPCopiesPrediction(t *testing.T) {
+	var d Decoder
+	f := frame.NewFrame(16, 16)
+	predicted := patternedPrediction8()
+	mb := &syntax.MBInter{CBP: 0}
+
+	d.writeChromaInterResidual(f, mb, predicted[:], 0, 0, 0, 26)
+	d.writeChromaInterResidual(f, mb, predicted[:], 1, 0, 0, 26)
+	assertPredictedChroma8x8(t, f, 0, predicted[:], 0, 0)
+	assertPredictedChroma8x8(t, f, 1, predicted[:], 0, 0)
 }
 
 func TestWriteInterResidualZeroCBPCopiesPrediction4x4(t *testing.T) {
