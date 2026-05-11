@@ -115,15 +115,18 @@ Current decode profiling has already removed the largest hot-path allocations an
 |---|---:|---:|
 | BBB baseline allocated bytes | ~87.5 MB/op | ~10.9 MB/op |
 | BBB baseline allocations | ~18.8k/op | ~1.3k/op |
-| BBB baseline decode sample | ~125-145 ms/op | ~75-95 ms/op typical sample |
+| BBB baseline decode sample | ~125-145 ms/op | ~51-60 ms/op typical recent sample |
 
 Recent performance/safety work:
 
-- `nal.Reader.ReadBits` has a byte-aligned fast path; `ReadBits`, `BitsLeft`, and raw-position `Seek` have defensive bounds clamps.
-- CAVLC `coeff_token` and `run_before` now have prefix lookup tables with exhaustive scan-vs-lookup invariant tests.
+- `nal.Reader.ReadBits` has a byte-aligned fast path; `ReadBits`, `BitsLeft`, raw-position `Seek`, and `ByteAlign` have defensive bounds/EPB handling.
+- `nal.Reader.PeekBits` has a direct no-EPB window fast path for VLC lookups.
+- CAVLC `coeff_token` and `run_before` now have prefix lookup tables with exhaustive scan-vs-lookup invariant tests; `level_prefix` has a 16-bit leading-zero fast path with capped fallback.
 - `pred.InterPred16x16At` has an unclipped interior fractional-MV fast path; edge/negative coordinates still use the clipped scalar path.
 - `decode.fillChromaInterPred` has an interior 8×8 row-copy fast path with malformed-input guards.
 - Inter residual write-back now writes luma and chroma rows directly into frame planes after the same add + clip operation, avoiding per-pixel setter calls in the hot path.
+- Inter zero-residual paths copy prediction directly: uncoded luma CBP groups, zero-`TotalCoeff` 4×4 blocks, all-zero 8×8 transform groups, and chroma CBP=0.
+- `transform.IDCT4x4BatchMask` skips IDCT for known-zero dense residual slots.
 - `transform.Dequant4x4` uses precomputed per-QP/per-position scales; public `Quant4x4`/`Dequant4x4` helpers defensively handle short blocks and invalid QP values.
 - SIMD/scalar parity gates cover intra prediction wrappers, inter-copy wrappers, SAD, DCT4x4, IDCT4x4, IDCT8x8, and DCT8x8 fallback behavior.
 - `transform.IDCT4x4Batch` is now an integration seam for future true batched AVX2/NEON kernels.
@@ -131,7 +134,7 @@ Recent performance/safety work:
 
 Current CPU candidates for the next SIMD/low-level pass:
 
-1. Unaligned bit reading (`nal.Reader.ReadBit` / `ReadBits`) after current prefix lookups
+1. Remaining bit-reader/CAVLC hotspots after current `PeekBits` and prefix fast paths
 2. True batched AVX2/NEON kernels for IDCT/dequant where profiles justify assembly
 3. Remaining motion-compensation variants not yet covered by row-copy/interior fast paths
 4. Deblocking SIMD once reconstruction parity remains stable
