@@ -99,6 +99,19 @@ func Dequant4x4AC(block []int16, qp int) {
 }
 
 func dequant4x4Range(block []int16, qp int, start int) {
+	if len(block) < 16 {
+		return
+	}
+	if qp < 0 {
+		qp = 0
+	} else if qp > 51 {
+		qp = 51
+	}
+	if start < 0 {
+		start = 0
+	} else if start > 16 {
+		return
+	}
 	scale := dequant4x4Scale[qp]
 	for i := start; i < 16; i++ {
 		if block[i] != 0 {

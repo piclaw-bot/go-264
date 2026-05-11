@@ -47,6 +47,28 @@ func TestDequant4x4ScaleTableMatchesFormula(t *testing.T) {
 	}
 }
 
+func TestDequant4x4DefensiveBounds(t *testing.T) {
+	short := []int16{1, 2, 3}
+	Dequant4x4(short, 26)
+	Dequant4x4AC(short, 26)
+	if short[0] != 1 || short[1] != 2 || short[2] != 3 {
+		t.Fatalf("short block mutated: %v", short)
+	}
+
+	lowQP := [16]int16{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}
+	highQP := lowQP
+	Dequant4x4(lowQP[:], -99)
+	Dequant4x4(highQP[:], 99)
+	wantLowScale := int16(dequant4x4Scale[0][0])
+	wantHighScale := int16(dequant4x4Scale[51][0])
+	if lowQP[0] != wantLowScale {
+		t.Fatalf("low QP clamp got %d want %d", lowQP[0], wantLowScale)
+	}
+	if highQP[0] != wantHighScale {
+		t.Fatalf("high QP clamp got %d want %d", highQP[0], wantHighScale)
+	}
+}
+
 func TestQuantDequant(t *testing.T) {
 	// Full DCT → Quant → Dequant → IDCT roundtrip at low QP
 	block := [16]int16{

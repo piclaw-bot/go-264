@@ -21,14 +21,16 @@ func FuzzDCTRoundtrip(f *testing.F) {
 	f.Add(int16(128), int16(128), int16(128), int16(128), int(0))
 
 	f.Fuzz(func(t *testing.T, v0, v1, v2, v3 int16, qp int) {
-		if qp < 0 || qp > 51 {
-			return
-		}
 		block := [16]int16{v0, v1, v2, v3}
 		DCT4x4(block[:])
-		Quant4x4(block[:], qp)
+		if qp >= 0 && qp <= 51 {
+			Quant4x4(block[:], qp)
+		}
 		Dequant4x4(block[:], qp)
 		IDCT4x4(block[:])
+		short := []int16{v0, v1, v2}
+		Dequant4x4(short, qp)
+		Dequant4x4AC(short, qp)
 		// Should not panic — values may overflow but that's OK
 	})
 }
