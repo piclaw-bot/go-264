@@ -123,6 +123,10 @@ func (r *Reader) ByteAlign() {
 	if r.bit != 7 {
 		r.bit = 7
 		r.pos++
+		if r.pos >= 2 && r.pos < len(r.data) &&
+			r.data[r.pos-2] == 0 && r.data[r.pos-1] == 0 && r.data[r.pos] == 3 {
+			r.pos++
+		}
 	}
 }
 

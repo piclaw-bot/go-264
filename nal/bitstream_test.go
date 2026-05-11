@@ -110,6 +110,20 @@ func TestReadBitsDefensiveBounds(t *testing.T) {
 	}
 }
 
+func TestByteAlignSkipsEmulationPrevention(t *testing.T) {
+	r := NewReader([]byte{0x00, 0x00, 0x03, 0x80})
+	// Consume one bit from the second 0x00, then align. Crossing the byte boundary
+	// lands on the EPB byte, which must be skipped just like ReadBit/readByte.
+	r.Seek(8)
+	if bit := r.ReadBit(); bit != 0 {
+		t.Fatalf("unexpected bit before align: %d", bit)
+	}
+	r.ByteAlign()
+	if got := r.ReadBits(8); got != 0x80 {
+		t.Fatalf("ByteAlign failed to skip EPB: got 0x%02x want 0x80", got)
+	}
+}
+
 func TestPeekBitsFastPathMatchesReadBits(t *testing.T) {
 	data := []byte{0b10110110, 0b01011100, 0b11110000, 0x12, 0x34}
 	for start := 0; start < 24; start++ {
