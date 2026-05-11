@@ -268,14 +268,16 @@ func (d *Decoder) writeInterResidual(f *frame.Frame, mb *syntax.MBInter, predict
 		}
 	} else {
 		var residual [16][16]int16
+		var idctMask uint64
 		for blkIdx := 0; blkIdx < 16; blkIdx++ {
 			group := blkIdx / 4
 			if cbpLuma&(1<<uint(group)) != 0 {
 				residual[blkIdx] = mb.Coeffs[blkIdx]
 				transform.Dequant4x4(residual[blkIdx][:], qp)
+				idctMask |= uint64(1) << uint(blkIdx)
 			}
 		}
-		transform.IDCT4x4Batch(residual[:])
+		transform.IDCT4x4BatchMask(residual[:], idctMask)
 		dstBaseX := mbX * 16
 		dstBaseY := mbY * 16
 		for blkIdx := 0; blkIdx < 16; blkIdx++ {

@@ -177,6 +177,22 @@ func BenchmarkIDCT4x4(b *testing.B) {
 	}
 }
 
+func TestIDCT4x4BatchMask(t *testing.T) {
+	var blocks, want [4][16]int16
+	for i := range blocks {
+		blocks[i] = [16]int16{1048, -44, 46, 4, 40, 0, -4, 6, -40, -4, 12, 2, 2, 0, 2, -4}
+		want[i] = blocks[i]
+	}
+	IDCT4x4BatchMask(blocks[:], 0b0101)
+	IDCT4x4Scalar(want[0][:])
+	IDCT4x4Scalar(want[2][:])
+	for i := range blocks {
+		if blocks[i] != want[i] {
+			t.Fatalf("block %d mismatch: got %v want %v", i, blocks[i], want[i])
+		}
+	}
+}
+
 func BenchmarkIDCT4x4Batch16(b *testing.B) {
 	var blocks [16][16]int16
 	for i := range blocks {
@@ -186,6 +202,18 @@ func BenchmarkIDCT4x4Batch16(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		tmp := blocks
 		IDCT4x4Batch(tmp[:])
+	}
+}
+
+func BenchmarkIDCT4x4BatchMask8(b *testing.B) {
+	var blocks [16][16]int16
+	for i := range blocks {
+		blocks[i] = [16]int16{1048, -44, 46, 4, 40, 0, -4, 6, -40, -4, 12, 2, 2, 0, 2, -4}
+	}
+	b.SetBytes(8 * 16 * 2)
+	for i := 0; i < b.N; i++ {
+		tmp := blocks
+		IDCT4x4BatchMask(tmp[:], 0x00ff)
 	}
 }
 
