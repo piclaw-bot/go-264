@@ -48,20 +48,6 @@ func TestWriteInterResidualZeroCBPCopiesPrediction8x8(t *testing.T) {
 	assertPredicted16x16(t, f, predicted[:], 0, 0)
 }
 
-func TestCoeff4x4NonZero(t *testing.T) {
-	var zero [16]int16
-	if coeff4x4NonZero(zero) {
-		t.Fatal("zero block reported non-zero")
-	}
-	for i := range zero {
-		block := zero
-		block[i] = -1
-		if !coeff4x4NonZero(block) {
-			t.Fatalf("block with coeff %d set reported zero", i)
-		}
-	}
-}
-
 func TestCoeff8x8NonZero(t *testing.T) {
 	var zero [64]int16
 	if coeff8x8NonZero(zero) {
@@ -82,6 +68,7 @@ func TestWriteInterResidualPartialCBPCopiesUncoded4x4Blocks(t *testing.T) {
 	predicted := patternedPrediction16()
 	mb := &syntax.MBInter{CBP: 0x1}
 	mb.Coeffs[0][0] = 64
+	mb.TotalCoeff[0] = 1
 
 	d.writeInterResidual(f, mb, predicted[:], 0, 0, 26)
 	// Groups 1..3 are uncoded and must be exact copies of prediction.
@@ -102,6 +89,7 @@ func TestWriteInterResidualCodedGroupCopiesZeroCoeff4x4Blocks(t *testing.T) {
 	predicted := patternedPrediction16()
 	mb := &syntax.MBInter{CBP: 0x1}
 	mb.Coeffs[0][0] = 64
+	mb.TotalCoeff[0] = 1
 
 	d.writeInterResidual(f, mb, predicted[:], 0, 0, 26)
 	// Block 0 has residual. Blocks 1..3 are in a coded CBP group but have all-zero
