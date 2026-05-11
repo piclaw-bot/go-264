@@ -81,7 +81,7 @@ Still gated:
 | Baseline YUV PSNR | Y=39.58 U=24.87 V=19.12 dB |
 | `bbb-frame0` CABAC avg PSNR | 7.92 dB |
 | BBB baseline decode allocations | ~10.9 MB/op, ~1.3k allocs/op |
-| BBB baseline decode sample | ~90-110 ms/op typical recent sample |
+| BBB baseline decode sample | ~75-95 ms/op typical recent sample |
 
 ## Validation commands
 
@@ -109,19 +109,20 @@ go generate ./entropy/cabac ./entropy/cavlc
 Recent completed guardrails and low-level improvements:
 
 - SIMD/scalar parity tests cover intra prediction wrappers, inter-copy wrappers, SAD, DCT4x4, IDCT4x4, IDCT8x8, and DCT8x8 fallback behavior.
-- `_other.go` and arch-mismatch fallbacks are scalar-safe and nil-guarded where they wrap `unsafe.Slice`.
+- `_other.go` and arch-mismatch fallbacks are scalar-safe and nil/stride-guarded where they wrap `unsafe.Slice`.
 - `DCT8x8_ASM` now delegates to scalar until a real forward-8x8 implementation passes parity.
 - `transform.IDCT4x4Batch` is wired into residual paths as the integration seam for future batched AVX2/NEON kernels.
-- `nal.Reader.ReadBits` has a byte-aligned fast path plus defensive length/EOF clamps.
-- CAVLC `coeff_token` has a 16-bit prefix lookup with exhaustive scan-vs-lookup invariant coverage.
+- `nal.Reader.ReadBits` has a byte-aligned fast path; `ReadBits`, `BitsLeft`, and raw-position `Seek` are defensively clamped.
+- CAVLC `coeff_token` and `run_before` have prefix lookups with exhaustive scan-vs-lookup invariant coverage.
 - `pred.InterPred16x16At` has a fast path for interior fractional-MV bilinear interpolation while preserving the clipped edge path.
 - `decode.fillChromaInterPred` has an interior 8×8 row-copy fast path plus malformed-input guards.
 - Inter luma/chroma residual write-back now writes directly to frame rows after the same add + clip operation, avoiding per-pixel setter calls in the hot path.
+- `transform.Dequant4x4` uses precomputed scale tables; public `Quant4x4`/`Dequant4x4` helpers are hardened for short blocks and invalid QP values.
 
 Current measured targets:
 
-1. Unaligned bit reading (`ReadBit` / `ReadBits`) after CAVLC prefix lookup
-2. Residual dequant/IDCT (`dequant4x4Range`, true batched `IDCT4x4Batch` kernels)
+1. Unaligned bit reading (`ReadBit` / `ReadBits`) after current CAVLC prefix lookups
+2. True batched `IDCT4x4Batch` / dequant kernels for amd64/arm64 if profiling justifies assembly
 3. Remaining motion-compensation variants not yet covered by row-copy/interior fast paths
 4. Deblocking SIMD after reconstruction parity remains stable
 5. Decoder allocation cleanup beyond frame buffers/expected slice state

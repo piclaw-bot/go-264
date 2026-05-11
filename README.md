@@ -115,26 +115,27 @@ Current decode profiling has already removed the largest hot-path allocations an
 |---|---:|---:|
 | BBB baseline allocated bytes | ~87.5 MB/op | ~10.9 MB/op |
 | BBB baseline allocations | ~18.8k/op | ~1.3k/op |
-| BBB baseline decode sample | ~125-145 ms/op | ~90-110 ms/op typical sample |
+| BBB baseline decode sample | ~125-145 ms/op | ~75-95 ms/op typical sample |
 
 Recent performance/safety work:
 
-- `nal.Reader.ReadBits` has a byte-aligned fast path and defensive bounds clamps.
-- CAVLC `coeff_token` has a 16-bit prefix lookup table with exhaustive scan-vs-lookup invariant tests.
+- `nal.Reader.ReadBits` has a byte-aligned fast path; `ReadBits`, `BitsLeft`, and raw-position `Seek` have defensive bounds clamps.
+- CAVLC `coeff_token` and `run_before` now have prefix lookup tables with exhaustive scan-vs-lookup invariant tests.
 - `pred.InterPred16x16At` has an unclipped interior fractional-MV fast path; edge/negative coordinates still use the clipped scalar path.
 - `decode.fillChromaInterPred` has an interior 8×8 row-copy fast path with malformed-input guards.
 - Inter residual write-back now writes luma and chroma rows directly into frame planes after the same add + clip operation, avoiding per-pixel setter calls in the hot path.
+- `transform.Dequant4x4` uses precomputed per-QP/per-position scales; public `Quant4x4`/`Dequant4x4` helpers defensively handle short blocks and invalid QP values.
 - SIMD/scalar parity gates cover intra prediction wrappers, inter-copy wrappers, SAD, DCT4x4, IDCT4x4, IDCT8x8, and DCT8x8 fallback behavior.
 - `transform.IDCT4x4Batch` is now an integration seam for future true batched AVX2/NEON kernels.
-- `unsafe.Slice` scalar fallback wrappers have nil guards for unsupported/non-native architecture paths.
+- `unsafe.Slice` scalar fallback wrappers have nil/stride guards for unsupported/non-native architecture paths.
 
 Current CPU candidates for the next SIMD/low-level pass:
 
-1. Unaligned bit reading (`nal.Reader.ReadBit` / `ReadBits`)
-2. Residual dequant/IDCT (`transform.dequant4x4Range`, `IDCT4x4Batch`)
+1. Unaligned bit reading (`nal.Reader.ReadBit` / `ReadBits`) after current prefix lookups
+2. True batched AVX2/NEON kernels for IDCT/dequant where profiles justify assembly
 3. Remaining motion-compensation variants not yet covered by row-copy/interior fast paths
 4. Deblocking SIMD once reconstruction parity remains stable
-5. True batched AVX2/NEON kernels for IDCT/dequant where profiles justify assembly
+5. Decoder allocation cleanup beyond expected frame buffers/slice state
 
 ## Table generation
 
