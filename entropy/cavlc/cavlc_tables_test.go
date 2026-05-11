@@ -50,6 +50,53 @@ func TestCoeffTokenTablesRoundtrip(t *testing.T) {
 	}
 }
 
+func TestCoeffTokenLookupMatchesScan(t *testing.T) {
+	for _, tbl := range []struct {
+		name string
+		lens *[68]uint8
+		bits *[68]uint8
+		nC   int
+	}{
+		{"nC0", &ctLen0, &ctBits0, 0},
+		{"nC2", &ctLen1, &ctBits1, 2},
+		{"nC4", &ctLen2, &ctBits2, 4},
+		{"nC8", &ctLen3, &ctBits3, 8},
+	} {
+		for tc := 0; tc <= 16; tc++ {
+			maxTO := 3
+			if tc < maxTO {
+				maxTO = tc
+			}
+			for to := 0; to <= maxTO; to++ {
+				idx := tc*4 + to
+				l := int(tbl.lens[idx])
+				if l == 0 {
+					continue
+				}
+				for suffix := uint32(0); suffix < 8; suffix++ {
+					bits := (uint32(tbl.bits[idx]) << 3) | suffix
+					r := bitsToReader(bits, l+3)
+					gotTC, gotTO, ok := decodeCoeffTokenLookup(r, tbl.nC)
+					if !ok || gotTC != tc || gotTO != to || r.Position() != l {
+						t.Fatalf("%s tc=%d to=%d suffix=%03b: got (%d,%d) ok=%v pos=%d want pos=%d",
+							tbl.name, tc, to, suffix, gotTC, gotTO, ok, r.Position(), l)
+					}
+				}
+			}
+		}
+	}
+}
+
+func BenchmarkDecodeCoeffTokenFromTable(b *testing.B) {
+	data := []byte{0x80, 0x40, 0x20, 0x18, 0xff, 0x55, 0x33, 0x77}
+	for i := 0; i < b.N; i++ {
+		r := nal.NewReader(data)
+		for j := 0; j < 16; j++ {
+			_, _ = decodeCoeffTokenFromTable(r, j&7)
+		}
+	}
+}
+
 func TestTotalZerosTablesRoundtrip(t *testing.T) {
 	for totalCoeff := 1; totalCoeff < 16; totalCoeff++ {
 		tableIdx := totalCoeff - 1

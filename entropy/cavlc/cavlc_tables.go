@@ -179,6 +179,9 @@ var ctBits3 = [68]uint8{3, 0, 0, 0, 0, 1, 0, 0, 4, 5, 6, 0, 8, 9, 10, 11, 12, 13
 
 // decodeCoeffTokenFromTable reads coeff_token using FFmpeg VLC tables.
 func decodeCoeffTokenFromTable(r *nal.Reader, nC int) (int, int) {
+	if tc, to, ok := decodeCoeffTokenLookup(r, nC); ok {
+		return tc, to
+	}
 	var ctLen *[68]uint8
 	var ctBits *[68]uint8
 	if nC < 2 {
