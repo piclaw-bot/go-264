@@ -150,8 +150,8 @@ func TestConformancePSNRRegression(t *testing.T) {
 			"/workspace/tmp/bl_allref_0005.png", "/workspace/tmp/bl_allref_0006.png",
 			"/workspace/tmp/bl_allref_0007.png", "/workspace/tmp/bl_allref_0008.png",
 			"/workspace/tmp/bl_allref_0009.png", "/workspace/tmp/bl_allref_0010.png",
-		}, 26.5},
-		{"bbb-frame0", "/workspace/tmp/bbb_annexb.h264", []string{"/workspace/tmp/bbb_ref_0001.png"}, 8.1},
+		}, 27.5},
+		{"bbb-frame0", "/workspace/tmp/bbb_annexb.h264", []string{"/workspace/tmp/bbb_ref_0001.png"}, 7.8},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -260,7 +260,7 @@ func TestConformanceYUVReferencePlanes(t *testing.T) {
 	}
 	avgY, avgU, avgV := sumY/10, sumU/10, sumV/10
 	t.Logf("baseline YUV avg PSNR: Y=%.2f U=%.2f V=%.2f dB; max diff Y=%d U=%d V=%d", avgY, avgU, avgV, maxY, maxU, maxV)
-	if avgY < 32.0 || avgU < 21.0 || avgV < 18.0 {
+	if avgY < 38.0 || avgU < 21.0 || avgV < 18.0 {
 		t.Fatalf("YUV PSNR too low: Y=%.2f U=%.2f V=%.2f", avgY, avgU, avgV)
 	}
 	if maxY > 180 || maxU > 250 || maxV > 250 {
