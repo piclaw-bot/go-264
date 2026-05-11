@@ -273,11 +273,11 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 				}
 				mb = decodeCABACIntraMB(cabacDec, cabacModels, leftNZ, topNZ, leftChromaNZ, topChromaNZ, leftCBP, topCBP, leftMBType, topMBType, leftChromaPred, topChromaPred, pps.Transform8x8Mode, leftEdge8x8, topEdge8x8)
 				mbQPDelta := int(mb.QPDelta)
-				currentQP = (currentQP + mbQPDelta%52 + 52) % 52
+				currentQP = (currentQP + mbQPDelta + 52) % 52 // H.264 §7.4.5: QpY=(QpY+delta+52)%52
 			} else {
 				mb = slice.DecodeMBIntraCtxFull(r, int32(currentQP), pps.EntropyCodingMode, pps.Transform8x8Mode, leftNZ, topNZ, leftChromaNZ, topChromaNZ)
 				mbQPDelta := int(mb.QPDelta)
-				currentQP = (currentQP + mbQPDelta%52 + 52) % 52
+				currentQP = (currentQP + mbQPDelta + 52) % 52 // H.264 §7.4.5: QpY=(QpY+delta+52)%52
 			}
 			d.reconstructMB(f, mb, mbX, mbY, currentQP, sps)
 			nzCtx[mbIdx] = mb.TotalCoeff
@@ -399,7 +399,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 				// DecodeMBInterCtx, so decode the remaining intra payload with the
 				// intra type offset (Table 7-13).
 				mb := slice.DecodeMBIntraCtxWithTypeFull(r, mbInter.MBType-5, int32(currentQP), pps.EntropyCodingMode, pps.Transform8x8Mode, leftNZ, topNZ, leftChromaNZ, topChromaNZ)
-				currentQP = (currentQP + int(mb.QPDelta)%52 + 52) % 52
+				currentQP = (currentQP + int(mb.QPDelta) + 52) % 52
 				d.reconstructMB(f, mb, mbX, mbY, currentQP, sps)
 				nzCtx[mbIdx] = mb.TotalCoeff
 				chromaNZCtx[mbIdx] = mb.ChromaTotalCoeff
@@ -407,7 +407,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 				writeBackIntra4x4(ref4Ctx, mv4Stride, mbX, mbY)
 			} else {
 				applyMVPredictors(mbInter, mvCtx, refCtx, mv4Ctx, ref4Ctx, mv4Stride, mbIdx, mbX, mbY, mbWidth)
-				currentQP = (currentQP + int(mbInter.QPDelta)%52 + 52) % 52
+				currentQP = (currentQP + int(mbInter.QPDelta) + 52) % 52
 				d.reconstructMBInter(f, mbInter, mbX, mbY, currentQP)
 				nzCtx[mbIdx] = mbInter.TotalCoeff
 				chromaNZCtx[mbIdx] = mbInter.ChromaTotalCoeff
@@ -1213,13 +1213,6 @@ func (d *Decoder) reconstructMBBidi(f *frame.Frame, mb *slice.MBBidi, mbX, mbY, 
 
 // DecodedFrame is an alias for frame.Frame for CLI convenience.
 type DecodedFrame = frame.Frame
-
-func absInt16(v int16) int16 {
-	if v < 0 {
-		return -v
-	}
-	return v
-}
 
 func clampInt(v, lo, hi int) int {
 	if v < lo {

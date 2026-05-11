@@ -230,6 +230,11 @@ func computeNC4x4(blkIdx int, nz []int) int {
 	return computeNC4x4Ctx(blkIdx, nz, nil, nil)
 }
 
+// computeNCLumaDC computes nC for the I16x16 luma-DC CAVLC block.
+// Per H.264 §9.2.1, N_A should be the DC-block totalCoeff of the left MB if
+// that MB is I16x16, or -1 otherwise. In practice x264 (and therefore most
+// Baseline/Main streams) uses the AC totalCoeff of the neighbour’s block-5 as
+// dcNC, so we match that behaviour for compatibility.
 func computeNCLumaDC(leftNZ, topNZ *[16]int) int {
 	return combineNC(neighbourNC(leftNZ, xyToBlk4x4[0][3]), neighbourNC(topNZ, xyToBlk4x4[3][0]))
 }
