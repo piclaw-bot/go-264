@@ -1,69 +1,146 @@
 # go-264
 
-H.264/AVC encoder and decoder in pure Go with SIMD assembly and optional GPU acceleration.
+H.264/AVC decoder-first implementation in pure Go with assembly acceleration hooks for amd64/arm64 and optional GPU experiments.
 
-## Goals
+The current focus is a correct, inspectable decoder core. Encoder work remains planned; the implemented code is already useful for Annex B parsing, H.264 syntax tracing, CAVLC/CABAC experimentation, frame reconstruction, PSNR regression testing, and SIMD kernel development.
 
-- **Pure Go** — no CGo, static binary, cross-platform
-- **SIMD assembly** — AVX2+FMA (amd64), NEON (arm64) for hot paths
-- **GPU compute** — optional PTX kernels via purego (no CUDA toolkit needed)
-- **Conformant** — pass ITU H.264 decoder conformance tests
-- **Practical** — encode 1080p in real-time on modern hardware
+## Current status
 
-## Decoder Completion Matrix
+| Area | Status | Notes |
+|---|---:|---|
+| Annex B / NAL parsing | ✅ | Start-code scan, emulation-prevention removal, SPS/PPS parsing |
+| Bitstream reader | ✅ | Fixed-width, Exp-Golomb, fuzz-tested |
+| Slice syntax | ✅ | I/P/B header parsing; macroblock syntax lives in `syntax/` |
+| CAVLC | ✅ | Baseline CAVLC decode is the current hard-gated completion point |
+| CABAC | 🔶 | Real CABAC contexts, P-slice syntax, residuals, CBP/DQP/ref/MVD; I8x8 flag still quality-gated |
+| Intra prediction | ✅ | I4x4, I8x8, I16x16; I8x8 strong reference filter implemented |
+| Inter prediction | ✅ | P skip, P16x16/P16x8/P8x16/P8x8, 4×4 MV/ref cache write-back |
+| Transforms | ✅ | 4×4 and 8×8 integer transforms with scalar + assembly dispatch hooks |
+| Deblocking | ✅ | Scalar correctness tests; SIMD deblock is planned |
+| Frame / DPB | ✅ | YUV420 frame storage, safe pixel reads, reference frame tracking |
+| Validation | ✅ | Syntax parity, FFmpeg/YUV PSNR gates, fuzz/unit tests |
+| Encoder | ⬜ | Planned after decoder/SIMD gates |
 
-| Component | Go (scalar) | AVX2 (amd64) | NEON (arm64) | GPU (PTX) | Tests |
-|---|---|---|---|---|---|
-| **NAL Parser** — Annex B, start codes, emulation prevention | ✅ | — | — | — | 5 + 2 fuzz |
-| **Bitstream Reader** — Exp-Golomb, fixed-length codes | ✅ | — | — | — | 4 + 2 fuzz |
-| **SPS / PPS** — Baseline + High profile parsing | ✅ | — | — | — | 3 + 2 fuzz |
-| **Slice Header** — I/P/B type, QP, deblocking params | ✅ | — | — | — | 1 |
-| **CAVLC Entropy** — coeff_token, levels, zeros, run_before | ✅ | — | — | — | 6 + 1 fuzz |
-| **CABAC Entropy** — Context-adaptive binary arithmetic | ✅ | — | — | — | 6 + 1 fuzz |
-| **Intra Prediction 4×4** — 9 modes (V, H, DC, diagonal…) | ✅ | ✅ | ✅ | 🔶 | 3 |
-| **Intra Prediction 16×16** — V, H, DC, Plane | ✅ | ✅ | ✅ | ✅ | 5 |
-| **Inter Prediction** — Motion compensation, subpel filter | ✅ | ✅ | ✅ | ✅ | 2 |
-| **4×4 Integer DCT** — Forward + inverse transform | ✅ | ✅ | ✅ | ✅ | 4 + 1 fuzz |
-| **8×8 Integer DCT** — High profile transform | ✅ | ✅ | ✅ | ✅ | 4 + 2 bench |
-| **Quantization** — Quant + dequant, all QP levels | ✅ | — | — | — | 1 + 1 fuzz |
-| **Deblocking Filter** — Normal + strong filter, luma | ✅ | 🔶 | 🔶 | ⬜ | 2 |
-| **Frame / DPB** — YUV 4:2:0, reference management | ✅ | — | — | — | 4 |
-| **I-Frame Decode** — End-to-end, verified with ffmpeg | ✅ | ✅ | ✅ | ✅ | 2 + 1 fuzz |
-| **P-Frame Decode** — Motion vectors + inter prediction | ✅ | ✅ | ✅ | ✅ | 4 |
-| **B-Frame Decode** — Bidirectional prediction | ✅ | ✅ | ⬜ | ⬜ | 2 |
+Legend: ✅ implemented · 🔶 partial/quality-gated · ⬜ planned
 
-**Legend:** ✅ Done · 🔶 Partial · ⬜ Planned · — Not applicable
+## Decoder quality gates
 
-**Summary:** 17/17 Go scalar · 17/17 Go · 9/17 AVX2 · 9/17 NEON · 8/17 GPU · 0/17 GPU
-**Tests:** 60 unit + 10 fuzz + 12 bench (34.3M executions, 0 crashes) targets (23.6M fuzz executions, 0 crashes)
-**Code:** 6,200 lines across 62 files (10 asm + GPU), 8 packages
+Current regression gates are intentionally conservative guards, not a claim of full H.264 conformance:
 
-## Architecture
+- Syntax parity: per-slice/MB trace comparison tooling against FFmpeg-derived references
+- Motion parity: representative macroblock MV checks against FFmpeg motion-vector side data
+- Reconstruction parity: frame PSNR and max-diff checks against FFmpeg YUV output
+- Baseline CAVLC: marked complete
+- CABAC: functional but still gated on I8x8 `transform_size_8x8_flag` quality
 
-```
+Recent reference values:
+
+| Fixture | Metric |
+|---|---:|
+| `dark64` | 31.23 dB avg PSNR |
+| Baseline CAVLC | 27.65 dB avg PSNR |
+| Baseline YUV | Y=39.58 U=24.87 V=19.12 dB |
+| `bbb-frame0` CABAC | 7.92 dB avg PSNR |
+
+## Package layout
+
+```text
 go-264/
-├── nal/          NAL parser (SPS, PPS, SEI, bitstream)
-├── slice/        Slice/macroblock decoding
-├── pred/         Intra/inter prediction
-├── transform/    DCT, quantization (+ SIMD assembly)
-├── entropy/      CAVLC, CABAC
-├── filter/       Deblocking filter (+ SIMD)
-├── frame/        YUV frame management, DPB
-├── encode/       Encoder pipeline, rate control
-├── me/           Motion estimation (+ SIMD + GPU)
-├── gpu/          CUDA via purego (reused from go-tinygrad)
+├── nal/              Annex B, NAL units, SPS/PPS, bit reader
+├── frame/            YUV420 frames, DPB helpers, ChromaQP, SafePixelY
+├── entropy/
+│   ├── cabac/        CABAC decoder, context init tables, residual decoder
+│   └── cavlc/        CAVLC block decoder and VLC tables
+├── syntax/           H.264 syntax layer: slice headers, MBIntra/MBInter, CAVLC/CABAC MB syntax
+├── pred/             Intra/inter prediction kernels and SIMD dispatch hooks
+├── transform/        4×4/8×8 integer transforms, dequant, scalar/SIMD fallbacks
+├── filter/           Deblocking filter
+├── me/               Motion-estimation kernels (SAD/SATD)
+├── gpu/              GPU experiment stubs/parity scaffolding
+├── decode/           End-to-end decoder pipeline and conformance tests
+├── internal/tables/  Reproducible table generator commands used by go:generate
 └── cmd/
-    ├── decode/   CLI decoder
-    └── encode/   CLI encoder
+    ├── decode264     Annex B decoder: color PNG, luma PNG, or raw YUV output
+    ├── trace264      CAVLC MB trace tool; rejects CABAC streams loudly for now
+    ├── trace264cmp   Syntax/parity comparison and frame/MB histogram summaries
+    └── trace264diff  Trace diff helper
 ```
 
-## Leveraging go-tinygrad
+The old `slice` package was intentionally renamed to `syntax` to avoid confusion with Go slices. Entropy coding is intentionally split into `entropy/cavlc` and `entropy/cabac` so call sites import the exact coding mode they need.
 
-This project reuses the GPU compute framework from [go-tinygrad](https://github.com/rcarmo/go-tinygrad):
-- CUDA bindings via purego (no CGo)
-- DevBuf device-agnostic buffers
-- PTX kernel compilation at runtime
-- Graceful CPU fallback when no GPU
+## Command-line tools
+
+### Decode Annex B to images/YUV
+
+```bash
+go build -o /workspace/tmp/decode264 ./cmd/decode264
+/workspace/tmp/decode264 -i input.h264 -o frames -f color   # default, BT.601 YUV→RGB PNG
+/workspace/tmp/decode264 -i input.h264 -o frames -f png     # luma-only PNG
+/workspace/tmp/decode264 -i input.h264 -o frames -f yuv     # raw planar YUV420
+```
+
+### Trace CAVLC macroblock syntax
+
+```bash
+go build -o /workspace/tmp/trace264 ./cmd/trace264
+/workspace/tmp/trace264 -i input_baseline.h264 -limit 64
+```
+
+`trace264` is a CAVLC syntax tracer. CABAC streams are rejected explicitly until MB-level CABAC tracing is wired to the decode path; this avoids misleading CAVLC traces for Main/High streams.
+
+### Compare against FFmpeg-derived frame metadata
+
+```bash
+go run ./cmd/trace264cmp -i input.h264 -v
+```
+
+## Validation and profiling
+
+Because some containers mount `/tmp` as `noexec`, set `TMPDIR`/`GOTMPDIR` to a workspace path when running Go tools here:
+
+```bash
+export TMPDIR=/workspace/tmp
+export GOTMPDIR=/workspace/tmp
+
+go test ./...
+go vet ./...
+go test -v ./decode -run 'TestConformancePSNR|TestConformanceYUV|TestSyntaxParity'
+go test ./decode -run '^$' -bench BenchmarkDecode -benchmem
+GOOS=linux GOARCH=arm64 go build ./...
+```
+
+Current decode profiling has already removed the largest hot-path allocations:
+
+| Benchmark | Before | After |
+|---|---:|---:|
+| BBB baseline allocated bytes | ~87.5 MB/op | ~10.9 MB/op |
+| BBB baseline allocations | ~18.8k/op | ~1.3k/op |
+
+Current CPU candidates for the next SIMD/low-level pass:
+
+1. `entropy/cavlc.decodeCoeffTokenFromTable` / `DecodeCAVLCBlock`
+2. `pred.InterPred16x16At`
+3. `decode.fillChromaInterPred`
+4. `decode.writeInterResidual` / `transform.dequant4x4Range`
+5. `nal.Reader.ReadBit` / `ReadBits`
+
+## Table generation
+
+Large VLC/context tables are checked in as generated Go. The generator commands normalize the table files and make accidental hand edits visible:
+
+```bash
+go generate ./entropy/cabac ./entropy/cavlc
+```
+
+Generators live in `internal/tables/` and are marked with `//go:build ignore` so they are run explicitly by `go generate` and not compiled into normal packages.
+
+## Known gaps / tracked work
+
+- CABAC intra-in-P path is not complete.
+- CABAC I8x8 `transform_size_8x8_flag` decode is intentionally disabled because enabling it currently lowers BBB CABAC quality; it remains gated on better I8x8 neighbour-mode inference / reconstruction parity.
+- SIMD acceleration is now in the profiling/planning stage; scalar fallbacks are present for unsupported architectures.
+- Encoder API, rate control, and full x264-like encode pipeline are planned but not yet implemented.
+- GPU work is experimental scaffolding only.
 
 ## License
 

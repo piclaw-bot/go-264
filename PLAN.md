@@ -1,200 +1,168 @@
-# go-264
+# go-264 plan
 
-H.264/AVC encoder and decoder in pure Go with SIMD assembly.
+H.264/AVC decoder-first implementation in pure Go with scalar correctness first, then amd64/arm64 assembly acceleration and optional GPU experiments.
 
-## x264 API Surface
+This file is a durable project overview. The active step-by-step checklist for the current session lives in the Pi plan sidebar, not here.
 
-x264 exposes ~20 public functions. The core pipeline is simple:
+## Strategy
 
-```c
-// Setup
-x264_param_default(&param);
-x264_param_apply_profile(&param, "high");
-x264_t *enc = x264_encoder_open(&param);
+1. **Decoder first** — exercise bitstream parsing, entropy coding, prediction, transforms, frame storage, DPB state, and conformance tooling before building an encoder.
+2. **Reference-grounded fixes** — syntax/MV/prediction changes should be grounded in H.264 text, FFmpeg, or x264 behavior rather than local heuristics.
+3. **Scalar correctness before SIMD** — every assembly/GPU kernel must have a scalar reference and parity tests.
+4. **Low allocation hot paths** — decode benchmarks and profiles are part of the validation loop.
+5. **Intentional breaking refactors** — no compatibility wrappers during package/API cleanup.
 
-// Encode loop
-x264_picture_t pic_in, pic_out;
-x264_nal_t *nals;
-int i_nal;
-while (have_frames) {
-    x264_picture_init(&pic_in);
-    pic_in.img.i_csp = X264_CSP_I420;
-    pic_in.img.plane[0] = y_data;  // Y plane
-    pic_in.img.plane[1] = u_data;  // U plane
-    pic_in.img.plane[2] = v_data;  // V plane
-    
-    x264_encoder_encode(enc, &nals, &i_nal, &pic_in, &pic_out);
-    // nals[] contains NAL units ready for muxing
-}
+## Current implementation layout
 
-// Flush + close
-x264_encoder_close(enc);
+```text
+nal/              Annex B NAL parsing, SPS/PPS, bit reader
+frame/            YUV420 frame storage, DPB helpers, ChromaQP, SafePixelY
+entropy/
+  cabac/          CABAC arithmetic decoder, context init, residual syntax
+  cavlc/          CAVLC block decoder, VLC tables
+syntax/           H.264 syntax layer: slice headers, MBIntra/MBInter, MB-level helpers
+pred/             Intra/inter prediction and SIMD dispatch hooks
+transform/        4×4/8×8 integer transforms, dequant, scalar/SIMD fallbacks
+filter/           In-loop deblocking filter
+me/               Motion-estimation kernels (SAD/SATD)
+gpu/              GPU experiment scaffolding
+decode/           End-to-end decoder pipeline, conformance, benchmarks
+internal/tables/  go:generate commands for checked-in CABAC/CAVLC tables
+cmd/
+  decode264       Decode Annex B to color PNG, luma PNG, or raw YUV
+  trace264        CAVLC MB-level syntax tracer; rejects CABAC streams for now
+  trace264cmp     FFmpeg/showinfo comparison, frame stats, histograms
+  trace264diff    Trace diff helper
 ```
 
-Key types:
-- `x264_param_t` — 200+ fields: resolution, profile, rate control, threading
-- `x264_picture_t` — input/output frame (YUV planes + metadata)
-- `x264_nal_t` — output NAL unit (type, priority, payload bytes)
-- `x264_t` — opaque encoder state
+Historical note: the package formerly named `slice` is now `syntax`, and the old monolithic `entropy` package is split into `entropy/cavlc` and `entropy/cabac`.
 
-## Go API Design
+## Decoder status
+
+### Completed hard gates
+
+- Baseline CAVLC decode is correct enough to be marked complete.
+- Syntax parity tooling exists (`trace264`, `trace264cmp`).
+- Motion-vector parity has been validated on representative P-slice macroblocks.
+- Reconstruction parity has FFmpeg YUV/PSNR regression tests.
+- Chroma dequant now applies `chroma_qp_index_offset` through `frame.ChromaQP`.
+- I4x4 top-right reference availability was fixed per H.264 §8.3.1.1.
+- Refactoring is complete:
+  - `decode/decoder.go` split into focused files.
+  - `slice` renamed to `syntax`.
+  - `entropy` split into `entropy/cavlc` and `entropy/cabac`.
+  - CAVLC/CABAC table generation commands live under `internal/tables/`.
+  - Under-covered packages gained focused tests.
+
+### CABAC state
+
+Implemented:
+
+- CABAC context initialization from FFmpeg/spec tables.
+- P-slice `mb_type` decision tree.
+- CABAC ref_idx, MVD, CBP, DQP syntax helpers.
+- CABAC coded-block-flag and residual decoding.
+- CABAC end-of-slice terminate handling.
+- H.264 zigzag scan mapping for residual output.
+- I8x8 prediction modes and strong reference-pixel filtering.
+- Inter-MB `transform_size_8x8_flag` decode path and 8×8 residual category support.
+
+Still gated:
+
+- CABAC intra-in-P is not complete.
+- CABAC I8x8 `transform_size_8x8_flag` remains disabled in the intra path because enabling it currently lowers BBB CABAC quality. This should not be toggled on without a reference-grounded fix and PSNR/syntax parity proof.
+
+### Current reference metrics
+
+| Fixture | Current value |
+|---|---:|
+| `dark64` avg PSNR | 31.23 dB |
+| Baseline CAVLC avg PSNR | 27.65 dB |
+| Baseline YUV PSNR | Y=39.58 U=24.87 V=19.12 dB |
+| `bbb-frame0` CABAC avg PSNR | 7.92 dB |
+| BBB baseline decode allocations | ~10.9 MB/op, ~1.3k allocs/op |
+
+## Validation commands
+
+Use a workspace temp directory in this container because `/tmp` may be mounted `noexec`:
+
+```bash
+export TMPDIR=/workspace/tmp
+export GOTMPDIR=/workspace/tmp
+
+go test ./...
+go vet ./...
+go test -v ./decode -run 'TestConformancePSNR|TestConformanceYUV|TestSyntaxParity'
+go test ./decode -run '^$' -bench BenchmarkDecode -benchmem
+GOOS=linux GOARCH=arm64 go build ./...
+```
+
+Regenerate checked-in tables:
+
+```bash
+go generate ./entropy/cabac ./entropy/cavlc
+```
+
+## SIMD acceleration plan
+
+Profiling has identified these first-order targets:
+
+1. CAVLC table/bit-reader hot path (`DecodeCAVLCBlock`, `decodeCoeffTokenFromTable`, `ReadBit/ReadBits`)
+2. Luma inter prediction (`pred.InterPred16x16At`)
+3. Chroma inter prediction (`decode.fillChromaInterPred`)
+4. Residual write/dequant (`writeInterResidual`, `dequant4x4Range`)
+5. Deblocking SIMD after reconstruction parity is stable
+
+Planned implementation shape:
+
+- amd64: AVX2/SSE2 kernels where the data shape justifies assembly.
+- arm64: NEON kernels matching the existing assembly dispatch pattern.
+- `_other.go` / arch-mismatch functions must remain scalar-safe, not panic.
+- SIMD parity tests must compare scalar vs assembly pixel-exact or coefficient-exact outputs.
+- Benchmarks should report before/after fps, bytes/op, and allocs/op.
+
+## Encoder roadmap
+
+Encoder work remains future work after decoder/SIMD stabilization.
+
+Target public shape:
 
 ```go
-// Encoder
-enc, _ := h264.NewEncoder(h264.Config{
+enc, err := h264.NewEncoder(h264.Config{
     Width: 1920, Height: 1080,
     Profile: h264.ProfileHigh,
-    Preset:  h264.PresetMedium,
+    Preset: h264.PresetMedium,
     RateControl: h264.CRF(23),
 })
+if err != nil { /* handle */ }
 defer enc.Close()
 
-nals, _ := enc.Encode(frame)  // frame is *h264.YUVFrame
-for _, nal := range nals {
-    out.Write(nal.Bytes())     // write to file/network
-}
-
-// Decoder
-dec := h264.NewDecoder()
-for {
-    frame, err := dec.Decode(nalBytes)
-    if err == h264.ErrNeedMoreData { continue }
-    // frame.Y, frame.U, frame.V contain decoded planes
-}
+nals, err := enc.Encode(frame) // frame is YUV420 input
 ```
 
-## Implementation Approach
+Phases:
 
-### Phase 1: Decoder (Baseline Profile)
+1. Baseline encoder: I/P slices, CAVLC, integer transforms, simple rate control.
+2. Main/High: CABAC, B-frames, 8×8 transform, weighted prediction.
+3. Motion estimation: scalar full search first, then SAD/SATD SIMD.
+4. Mode decision / RDO.
+5. Optional GPU experiments for embarrassingly parallel search/transform work.
 
-The decoder is simpler and exercises all the core data structures.
+## GPU notes
 
-```
-nal/           NAL unit parser (start codes, emulation prevention)
-  bitstream.go   — exp-Golomb, CABAC/CAVLC bit reader
-  nal.go         — NAL unit types, header parsing
-  sps.go         — Sequence Parameter Set
-  pps.go         — Picture Parameter Set
-  sei.go         — Supplemental Enhancement Info
+GPU acceleration is experimental and should be treated as optional. Likely GPU-friendly workloads are motion search, batched SAD/SATD, batched transform, and possibly deblocking experiments. CABAC is inherently sequential and not a GPU target.
 
-slice/         Slice layer decoding
-  slice.go       — slice header, macroblock loop
-  mb.go          — macroblock types, sub-mb partition
+## Profiles and levels
 
-pred/          Prediction
-  intra.go       — intra 4x4 (9 modes), 8x8, 16x16
-  inter.go       — inter prediction, motion compensation
-  mv.go          — motion vector decoding, spatial/temporal prediction
+Initial implementation targets:
 
-transform/     Transform + quantization
-  dct.go         — 4x4 integer DCT, inverse DCT
-  quant.go       — quantization, dequantization, QP scaling
-  dct_amd64.s    — SIMD: 4-wide butterfly
-  dct_arm64.s    — NEON: 4-wide butterfly
+- **Baseline**: I + P slices, CAVLC, no B-frames.
+- **Main**: B-frames, CABAC, weighted prediction.
+- **High**: 8×8 transform, I8x8 prediction, adaptive quantization.
 
-entropy/       Entropy coding
-  cavlc.go       — CAVLC (Context-Adaptive Variable-Length Coding)
-  cabac.go       — CABAC (Context-Adaptive Binary Arithmetic Coding)
-  tables.go      — coding tables (zig-zag scan, level/run tables)
+Useful levels:
 
-filter/        In-loop deblocking
-  deblock.go     — edge filtering (luma/chroma, strong/weak)
-  deblock_amd64.s — SIMD deblocking
-
-frame/         Frame management
-  frame.go       — YUV frame, plane access
-  dpb.go         — decoded picture buffer (reference frames)
-  reorder.go     — frame reordering (POC)
-```
-
-### Phase 2: Encoder (Baseline → High Profile)
-
-```
-encode/        Encoder pipeline
-  encoder.go     — top-level encode loop
-  ratecontrol.go — CRF, CBR, VBR rate control
-  lookahead.go   — frame type decision
-
-me/            Motion estimation (biggest compute cost)
-  fullsearch.go  — full-pixel exhaustive search
-  diamond.go     — diamond/hexagon search patterns
-  subpel.go      — half-pel, quarter-pel refinement
-  sad_amd64.s    — SIMD SAD (sum of absolute differences)
-  satd_amd64.s   — SIMD SATD (Hadamard transform)
-  sad_arm64.s    — NEON SAD
-  me_gpu.go      — GPU-accelerated motion search (PTX)
-
-analysis/      Mode decision
-  intra.go       — intra mode analysis (RDO)
-  inter.go       — inter mode analysis (RDO)
-  rdo.go         — rate-distortion optimization
-```
-
-### Phase 3: GPU Acceleration
-
-Reuse the go-tinygrad GPU framework:
-
-```
-gpu/           GPU compute (from go-tinygrad)
-  cuda_purego.go  — CUDA via dlopen (no CGo)
-  devbuf.go       — device-agnostic buffers
-  me_ptx.go       — motion estimation PTX kernel
-  dct_ptx.go      — batch DCT/IDCT on GPU
-  deblock_ptx.go  — parallel deblocking
-```
-
-GPU-acceleratable operations and expected speedup:
-
-| Operation | CPU (SIMD) | GPU (PTX) | Speedup |
-|---|---|---|---|
-| SAD 16×16 (full search) | ~1 cycle/pixel | 1024 blocks parallel | 50-100× |
-| SATD 4×4 (Hadamard) | 8×8 butterfly | batch all MBs | 20-50× |
-| DCT 4×4 batch | 4-wide SIMD | 1 MB per thread | 10-20× |
-| Deblocking | sequential edges | parallel edges | 5-10× |
-| CABAC | sequential (cannot GPU) | — | — |
-
-### What transfers from go-tinygrad
-
-| Component | Reuse | Adaptation |
-|---|---|---|
-| `gpu/cuda_purego.go` | Direct | Same CUDA bindings |
-| `gpu/devbuf.go` | Direct | Same CPU/GPU dispatch |
-| `gpu/sgemm_ptx.go` | Reference | Replace with SAD/DCT PTX |
-| `gpu/nv_ioctl.go` | Direct | Same device init |
-| SIMD assembly pattern | Template | SAD/SATD instead of dot/gemm |
-| Build system | Direct | Same pure Go + assembly |
-
-### Profiles and Levels
-
-Start with Baseline (most common for real-time):
-- **Baseline**: I + P slices, CAVLC only, no B-frames
-- **Main**: + B-frames, CABAC, weighted prediction
-- **High**: + 8×8 transform, 8×8 intra, adaptive quantization
-
-Levels (resolution/bitrate caps):
 - Level 3.0: 720p30
 - Level 4.0: 1080p30
 - Level 4.1: 1080p60
 - Level 5.1: 4K30
-
-### Integer-only arithmetic
-
-H.264's transform is specifically designed for integer arithmetic (no floating-point drift):
-- 4×4 integer DCT (not true DCT — scaled Hadamard-like)
-- All prediction is integer pixel operations
-- Deblocking uses clipping and integer thresholds
-- Only rate-distortion analysis uses floating-point (encoder-side)
-
-This maps perfectly to Go's integer SIMD:
-- `VPADDD` (AVX2) for 8-wide int32 add
-- `VPABSD` for absolute difference
-- `VPMADDWD` for multiply-accumulate
-- ARM NEON: `VABD`, `VADDL`, `VMLA`
-
-### Testing Strategy
-
-1. **Bitstream conformance**: Decode ITU conformance test vectors
-2. **Round-trip**: Encode → Decode → PSNR check
-3. **Numpy reference**: DCT/IDCT/quantize verified against scipy
-4. **SIMD verification**: Assembly output matches scalar reference
-5. **GPU verification**: GPU output matches CPU for all kernels
