@@ -251,6 +251,12 @@ func (d *Decoder) writeInterResidual(f *frame.Frame, mb *syntax.MBInter, predict
 					block[sub*16+j] = mb.Coeffs[group*4+sub][j]
 				}
 			}
+			if !coeff8x8NonZero(block) {
+				for py := 0; py < 8; py++ {
+					copy(f.Y[(dstY+py)*f.StrideY+dstX:(dstY+py)*f.StrideY+dstX+8], predicted[(groupY+py)*16+groupX:(groupY+py)*16+groupX+8])
+				}
+				continue
+			}
 			transform.Dequant8x8(block[:], qp)
 			transform.IDCT8x8(block[:])
 			for py := 0; py < 8; py++ {
@@ -316,6 +322,15 @@ func coeff4x4NonZero(block [16]int16) bool {
 		block[4]|block[5]|block[6]|block[7]|
 		block[8]|block[9]|block[10]|block[11]|
 		block[12]|block[13]|block[14]|block[15] != 0
+}
+
+func coeff8x8NonZero(block [64]int16) bool {
+	for i := range block {
+		if block[i] != 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func (d *Decoder) reconstructMBBidi(f *frame.Frame, mb *syntax.MBBidi, mbX, mbY, qp int) {

@@ -62,6 +62,20 @@ func TestCoeff4x4NonZero(t *testing.T) {
 	}
 }
 
+func TestCoeff8x8NonZero(t *testing.T) {
+	var zero [64]int16
+	if coeff8x8NonZero(zero) {
+		t.Fatal("zero 8x8 block reported non-zero")
+	}
+	for _, idx := range []int{0, 1, 31, 63} {
+		block := zero
+		block[idx] = 7
+		if !coeff8x8NonZero(block) {
+			t.Fatalf("8x8 block with coeff %d set reported zero", idx)
+		}
+	}
+}
+
 func TestWriteInterResidualPartialCBPCopiesUncoded4x4Blocks(t *testing.T) {
 	var d Decoder
 	f := frame.NewFrame(16, 16)
@@ -105,6 +119,16 @@ func TestWriteInterResidualCodedGroupCopiesZeroCoeff4x4Blocks(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestWriteInterResidualCodedGroupCopiesZeroCoeff8x8Group(t *testing.T) {
+	var d Decoder
+	f := frame.NewFrame(16, 16)
+	predicted := patternedPrediction16()
+	mb := &syntax.MBInter{CBP: 0x1, Use8x8Transform: true}
+
+	d.writeInterResidual(f, mb, predicted[:], 0, 0, 26)
+	assertPredicted16x16(t, f, predicted[:], 0, 0)
 }
 
 func TestWriteInterResidualPartialCBPCopiesUncoded8x8Groups(t *testing.T) {
