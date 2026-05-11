@@ -122,6 +122,14 @@ func dequant4x4Range(block []int16, qp int, start int) {
 
 // Quant4x4 quantizes a 4×4 block of transform coefficients.
 func Quant4x4(block []int16, qp int) {
+	if len(block) < 16 {
+		return
+	}
+	if qp < 0 {
+		qp = 0
+	} else if qp > 51 {
+		qp = 51
+	}
 	qpDiv6 := qp / 6
 	qpMod6 := qp % 6
 	qbits := uint(15 + qpDiv6)

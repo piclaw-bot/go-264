@@ -47,8 +47,9 @@ func TestDequant4x4ScaleTableMatchesFormula(t *testing.T) {
 	}
 }
 
-func TestDequant4x4DefensiveBounds(t *testing.T) {
+func TestQuantDequant4x4DefensiveBounds(t *testing.T) {
 	short := []int16{1, 2, 3}
+	Quant4x4(short, 26)
 	Dequant4x4(short, 26)
 	Dequant4x4AC(short, 26)
 	if short[0] != 1 || short[1] != 2 || short[2] != 3 {
@@ -66,6 +67,19 @@ func TestDequant4x4DefensiveBounds(t *testing.T) {
 	}
 	if highQP[0] != wantHighScale {
 		t.Fatalf("high QP clamp got %d want %d", highQP[0], wantHighScale)
+	}
+
+	quantLow := [16]int16{1024, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+	quantHigh := quantLow
+	Quant4x4(quantLow[:], -99)
+	Quant4x4(quantHigh[:], 99)
+	wantLow := int16((int32(1024)*int32(quantMF[0][0]) + int32(1<<15)/3) >> 15)
+	wantHigh := int16((int32(1024)*int32(quantMF[51%6][0]) + int32(1<<uint(15+51/6))/3) >> uint(15+51/6))
+	if quantLow[0] != wantLow {
+		t.Fatalf("low QP quant clamp got %d want %d", quantLow[0], wantLow)
+	}
+	if quantHigh[0] != wantHigh {
+		t.Fatalf("high QP quant clamp got %d want %d", quantHigh[0], wantHigh)
 	}
 }
 
