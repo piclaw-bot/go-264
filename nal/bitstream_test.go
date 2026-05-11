@@ -68,3 +68,64 @@ func TestEmulationPrevention(t *testing.T) {
 		t.Fatalf("got %02x %02x %02x, want 00 00 01", b0, b1, b2)
 	}
 }
+
+func TestReadBitsFastPathEmulationPrevention(t *testing.T) {
+	data := []byte{0x12, 0x00, 0x00, 0x03, 0x45, 0x67}
+	r := NewReader(data)
+	if v := r.ReadBits(24); v != 0x120000 {
+		t.Fatalf("ReadBits(24)=0x%06x want 0x120000", v)
+	}
+	if v := r.ReadBits(16); v != 0x4567 {
+		t.Fatalf("ReadBits(16)=0x%04x want 0x4567", v)
+	}
+}
+
+func TestReadBitsMixedAlignmentFastPath(t *testing.T) {
+	r := NewReader([]byte{0b10110110, 0b01011100, 0b11110000})
+	if v := r.ReadBits(3); v != 0b101 {
+		t.Fatalf("first bits=%03b", v)
+	}
+	if v := r.ReadBits(13); v != 0b1011001011100 {
+		t.Fatalf("mixed bits=%013b", v)
+	}
+	if v := r.ReadBits(8); v != 0b11110000 {
+		t.Fatalf("final byte=%08b", v)
+	}
+}
+
+func BenchmarkReadBitsByteAligned(b *testing.B) {
+	data := make([]byte, 4096)
+	for i := range data {
+		data[i] = uint8(i*37 + 11)
+	}
+	b.SetBytes(int64(len(data)))
+	for i := 0; i < b.N; i++ {
+		r := NewReader(data)
+		var sum uint32
+		for !r.EOF() {
+			sum ^= r.ReadBits(8)
+		}
+		if sum == 0xdeadbeef {
+			b.Fatal(sum)
+		}
+	}
+}
+
+func BenchmarkReadBitsUnaligned(b *testing.B) {
+	data := make([]byte, 4096)
+	for i := range data {
+		data[i] = uint8(i*37 + 11)
+	}
+	b.SetBytes(int64(len(data)))
+	for i := 0; i < b.N; i++ {
+		r := NewReader(data)
+		_ = r.ReadBits(3)
+		var sum uint32
+		for r.BitsLeft() >= 5 {
+			sum ^= r.ReadBits(5)
+		}
+		if sum == 0xdeadbeef {
+			b.Fatal(sum)
+		}
+	}
+}

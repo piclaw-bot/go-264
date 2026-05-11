@@ -34,9 +34,29 @@ func (r *Reader) ReadBit() uint32 {
 	return v
 }
 
+// readByte reads one rbsp byte at a byte-aligned position and advances past
+// any emulation-prevention byte (0x00 0x00 0x03). It mirrors the byte-boundary
+// transition logic in ReadBit.
+func (r *Reader) readByte() uint32 {
+	if r.pos >= len(r.data) {
+		return 0
+	}
+	v := uint32(r.data[r.pos])
+	r.pos++
+	if r.pos >= 2 && r.pos < len(r.data) &&
+		r.data[r.pos-2] == 0 && r.data[r.pos-1] == 0 && r.data[r.pos] == 3 {
+		r.pos++
+	}
+	return v
+}
+
 // ReadBits reads n bits (up to 32) as a uint32.
 func (r *Reader) ReadBits(n int) uint32 {
 	var v uint32
+	for n >= 8 && r.bit == 7 {
+		v = (v << 8) | r.readByte()
+		n -= 8
+	}
 	for i := 0; i < n; i++ {
 		v = (v << 1) | r.ReadBit()
 	}
