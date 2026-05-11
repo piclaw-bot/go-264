@@ -30,8 +30,12 @@ func TestDCT8x8_Roundtrip(t *testing.T) {
 	maxErr := int16(0)
 	for i := range original {
 		d := block[i] - original[i]
-		if d < 0 { d = -d }
-		if d > maxErr { maxErr = d }
+		if d < 0 {
+			d = -d
+		}
+		if d > maxErr {
+			maxErr = d
+		}
 	}
 	t.Logf("8x8 roundtrip (no quant): max error=%d", maxErr)
 	// Without quant/dequant, the scaling factor causes ~10-15 error
@@ -58,7 +62,9 @@ func TestZigZag8x8(t *testing.T) {
 
 func BenchmarkDCT8x8(b *testing.B) {
 	var block [64]int16
-	for i := range block { block[i] = int16(50 + i) }
+	for i := range block {
+		block[i] = int16(50 + i)
+	}
 	for i := 0; i < b.N; i++ {
 		tmp := block
 		DCT8x8(tmp[:])
@@ -67,7 +73,9 @@ func BenchmarkDCT8x8(b *testing.B) {
 
 func BenchmarkIDCT8x8(b *testing.B) {
 	var block [64]int16
-	block[0] = 512; block[1] = 64; block[8] = -32
+	block[0] = 512
+	block[1] = 64
+	block[8] = -32
 	for i := 0; i < b.N; i++ {
 		tmp := block
 		IDCT8x8(tmp[:])
@@ -75,7 +83,9 @@ func BenchmarkIDCT8x8(b *testing.B) {
 }
 
 func TestIDCT8x8_ASMvsScalar(t *testing.T) {
-	if !HasAVX2 { t.Skip("no AVX2") }
+	if !HasAVX2 {
+		t.Skip("no AVX2")
+	}
 	for seed := 0; seed < 50; seed++ {
 		var blockASM, blockScalar [64]int16
 		for i := range blockASM {
@@ -94,10 +104,36 @@ func TestIDCT8x8_ASMvsScalar(t *testing.T) {
 	t.Log("IDCT8x8 ASM matches scalar for 50 inputs ✓")
 }
 
+func TestDCT8x8_ASMvsScalar(t *testing.T) {
+	if !HasAVX2 {
+		t.Skip("no AVX2")
+	}
+	for seed := 0; seed < 50; seed++ {
+		var blockASM, blockScalar [64]int16
+		for i := range blockASM {
+			blockASM[i] = int16((seed*11 + i*17 - 300) % 512)
+		}
+		copy(blockScalar[:], blockASM[:])
+		DCT8x8_ASM(&blockASM[0])
+		DCT8x8(blockScalar[:])
+		for i := range blockASM {
+			if blockASM[i] != blockScalar[i] {
+				t.Fatalf("seed=%d pos=%d: asm=%d scalar=%d", seed, i, blockASM[i], blockScalar[i])
+			}
+		}
+	}
+
+	t.Log("DCT8x8 ASM matches scalar for 50 inputs ✓")
+}
+
 func BenchmarkIDCT8x8_ASM(b *testing.B) {
-	if !HasAVX2 { b.Skip("no AVX2") }
+	if !HasAVX2 {
+		b.Skip("no AVX2")
+	}
 	var block [64]int16
-	block[0] = 512; block[1] = 64; block[8] = -32
+	block[0] = 512
+	block[1] = 64
+	block[8] = -32
 	for i := 0; i < b.N; i++ {
 		tmp := block
 		IDCT8x8_ASM(&tmp[0])

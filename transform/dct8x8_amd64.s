@@ -172,8 +172,8 @@ vloop8:
 vloop8_done:
     RET
 
-// func DCT8x8_ASM(block *int16)
-// Forward 8×8 DCT — same butterfly structure, different output ordering.
-// For now, delegate to Go scalar (8×8 forward DCT is encoder-only, less critical).
-TEXT ·DCT8x8_ASM(SB), NOSPLIT, $0-8
+// dct8x8ASMDisabled is a placeholder for a future forward 8×8 DCT assembly
+// implementation. The exported Go DCT8x8_ASM wrapper intentionally delegates
+// to scalar until a real assembly body passes parity tests.
+TEXT ·dct8x8ASMDisabled(SB), NOSPLIT, $0-8
     RET
