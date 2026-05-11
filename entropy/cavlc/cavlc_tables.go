@@ -1,9 +1,5 @@
 package cavlc
 
-//go:generate go run ../../../internal/tables/gen_cavlc_tables.go -o cavlc_tables.go
-// Source: ITU-T H.264 Table 9-4, 9-5, 9-6; mirroring FFmpeg h264_cavlc.c VLC tables.
-// Re-run the generator after any spec table update; do not hand-edit this file.
-
 //go:generate go run ../../internal/tables/gen_cavlc_tables.go -o cavlc_tables.go
 // Source: ITU-T H.264 Table 9-4, 9-5, 9-6; mirroring FFmpeg h264_cavlc.c VLC tables.
 // Re-run the generator after any spec table update; do not hand-edit this file.
