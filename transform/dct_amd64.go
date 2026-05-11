@@ -4,12 +4,16 @@
 
 package transform
 
+import "unsafe"
+
 // IDCT4x4_AVX2 performs 4×4 inverse integer DCT using AVX2.
 // The block is 16 int16 values in row-major order.
+//
 //go:noescape
 func IDCT4x4_AVX2(block *int16)
 
 // DCT4x4_AVX2 performs 4×4 forward integer DCT using AVX2.
+//
 //go:noescape
 func DCT4x4_AVX2(block *int16)
 
@@ -25,5 +29,6 @@ func detectAVX2() bool {
 func cpuidHasAVX2() bool
 
 var HasNEON = false
-func IDCT4x4_NEON(block *int16) { panic("no NEON on amd64") }
-func DCT4x4_NEON(block *int16) { panic("no NEON on amd64") }
+
+func IDCT4x4_NEON(block *int16) { IDCT4x4Scalar(unsafe.Slice(block, 16)) }
+func DCT4x4_NEON(block *int16)  { DCT4x4Scalar(unsafe.Slice(block, 16)) }

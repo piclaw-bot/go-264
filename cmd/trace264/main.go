@@ -12,27 +12,24 @@ import (
 func main() {
 	input := flag.String("i", "", "input Annex B H.264 bitstream")
 	limit := flag.Int("limit", 64, "maximum macroblocks to trace per slice")
-	cabac := flag.Bool("cabac", false, "enable CABAC-mode tracing (High/Main profile streams)")
+	cabac := flag.Bool("cabac", false, "enable CABAC-mode tracing (currently rejects CABAC streams instead of mis-tracing them)")
 	flag.Parse()
 	if *input == "" {
 		fmt.Fprintln(os.Stderr, "usage: trace264 -i input.h264 [-limit N] [-cabac]")
 		os.Exit(2)
-	}
-	if *cabac {
-		fmt.Fprintln(os.Stderr, "note: CABAC tracing uses the full decode path; MB-level detail is from decode/pipeline.go")
 	}
 	data, err := os.ReadFile(*input)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "read: %v\n", err)
 		os.Exit(1)
 	}
-	if err := trace(data, *limit); err != nil {
+	if err := trace(data, *limit, *cabac); err != nil {
 		fmt.Fprintf(os.Stderr, "trace: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-func trace(data []byte, limit int) error {
+func trace(data []byte, limit int, cabacTrace bool) error {
 	units := nal.SplitNALUnits(data)
 	spsMap := map[uint32]*nal.SPS{}
 	ppsMap := map[uint32]*nal.PPS{}
@@ -53,7 +50,7 @@ func trace(data []byte, limit int) error {
 			ppsMap[pps.PPSID] = pps
 			fmt.Printf("nal=%d type=PPS id=%d sps=%d entropy=%d initQP=%d refsL0=%d\n", nalIdx, pps.PPSID, pps.SPSID, pps.EntropyCodingMode, pps.PicInitQP, pps.NumRefIdxL0Active)
 		case nal.TypeSliceIDR, nal.TypeSliceNonIDR:
-			if err := traceSlice(nalIdx, unit, spsMap, ppsMap, limit); err != nil {
+			if err := traceSlice(nalIdx, unit, spsMap, ppsMap, limit, cabacTrace); err != nil {
 				return err
 			}
 		}
@@ -61,7 +58,7 @@ func trace(data []byte, limit int) error {
 	return nil
 }
 
-func traceSlice(nalIdx int, unit nal.Unit, spsMap map[uint32]*nal.SPS, ppsMap map[uint32]*nal.PPS, limit int) error {
+func traceSlice(nalIdx int, unit nal.Unit, spsMap map[uint32]*nal.SPS, ppsMap map[uint32]*nal.PPS, limit int, cabacTrace bool) error {
 	peek := nal.NewReader(unit.Payload)
 	_ = peek.ReadUE()
 	_ = peek.ReadUE()
@@ -75,6 +72,12 @@ func traceSlice(nalIdx int, unit nal.Unit, spsMap map[uint32]*nal.SPS, ppsMap ma
 		return fmt.Errorf("nal %d slice: SPS %d not available", nalIdx, pps.SPSID)
 	}
 	hdr, r := syntax.ParseHeader(unit.Payload, unit.Type, sps, pps)
+	if pps.EntropyCodingMode != 0 {
+		if cabacTrace {
+			return fmt.Errorf("nal %d slice: CABAC MB-level tracing is not implemented yet; use decode conformance/profiling tools for CABAC streams", nalIdx)
+		}
+		return fmt.Errorf("nal %d slice: CABAC stream requires -cabac, but MB-level CABAC tracing is not implemented yet", nalIdx)
+	}
 	mbWidth := int(sps.PicWidthInMbs)
 	mbHeight := int(sps.PicHeightInMapUnits)
 	maxMBs := mbWidth * mbHeight
@@ -123,8 +126,7 @@ func traceSlice(nalIdx int, unit nal.Unit, spsMap map[uint32]*nal.SPS, ppsMap ma
 			writeBackIntra4x4(ref4Ctx, mv4Stride, mbX, mbY)
 			fmt.Printf("  mb=%04d x=%02d y=%02d bits=%d..%d type=I:%d cbp=%02x chromaMode=%d qpd=%d qp=%d tc=%v\n", mbIdx, mbX, mbY, start, r.Position(), mb.MBType, mb.CodedBlockPattern, mb.ChromaPredMode, mb.QPDelta, currentQP, mb.TotalCoeff)
 			if mb.MBType > syntax.MBTypeIPCM || mb.ChromaPredMode > 3 {
-				fmt.Printf("  !! invalid intra syntax at mb=%d: mb_type=%d chroma_mode=%d nextBit=%d\n", mbIdx, mb.MBType, mb.ChromaPredMode, r.Position())
-				return nil
+				return fmt.Errorf("invalid intra syntax at mb=%d: mb_type=%d chroma_mode=%d nextBit=%d", mbIdx, mb.MBType, mb.ChromaPredMode, r.Position())
 			}
 			continue
 		}
@@ -163,8 +165,7 @@ func traceSlice(nalIdx int, unit nal.Unit, spsMap map[uint32]*nal.SPS, ppsMap ma
 			writeBackIntra4x4(ref4Ctx, mv4Stride, mbX, mbY)
 			fmt.Printf("  mb=%04d x=%02d y=%02d bits=%d..%d type=P:I:%d cbp=%02x chromaMode=%d qpd=%d qp=%d tc=%v\n", mbIdx, mbX, mbY, start, r.Position(), intra.MBType, intra.CodedBlockPattern, intra.ChromaPredMode, intra.QPDelta, currentQP, intra.TotalCoeff)
 			if intra.MBType > syntax.MBTypeIPCM || intra.ChromaPredMode > 3 {
-				fmt.Printf("  !! invalid P-intra syntax at mb=%d: mb_type=%d chroma_mode=%d nextBit=%d\n", mbIdx, intra.MBType, intra.ChromaPredMode, r.Position())
-				return nil
+				return fmt.Errorf("invalid P-intra syntax at mb=%d: mb_type=%d chroma_mode=%d nextBit=%d", mbIdx, intra.MBType, intra.ChromaPredMode, r.Position())
 			}
 			continue
 		}

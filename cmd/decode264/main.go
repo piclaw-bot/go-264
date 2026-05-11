@@ -125,13 +125,19 @@ func writeFrameYUV(f *decode.DecodedFrame, path string) error {
 	}
 	defer out.Close()
 	for y := 0; y < f.Height; y++ {
-		out.Write(f.Y[y*f.StrideY : y*f.StrideY+f.Width])
+		if _, err := out.Write(f.Y[y*f.StrideY : y*f.StrideY+f.Width]); err != nil {
+			return err
+		}
 	}
 	for y := 0; y < f.Height/2; y++ {
-		out.Write(f.U[y*f.StrideC : y*f.StrideC+f.Width/2])
+		if _, err := out.Write(f.U[y*f.StrideC : y*f.StrideC+f.Width/2]); err != nil {
+			return err
+		}
 	}
 	for y := 0; y < f.Height/2; y++ {
-		out.Write(f.V[y*f.StrideC : y*f.StrideC+f.Width/2])
+		if _, err := out.Write(f.V[y*f.StrideC : y*f.StrideC+f.Width/2]); err != nil {
+			return err
+		}
 	}
 	return nil
 }
