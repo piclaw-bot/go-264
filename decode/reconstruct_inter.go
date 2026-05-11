@@ -193,23 +193,27 @@ func (d *Decoder) writeChromaInterResidual(f *frame.Frame, mb *syntax.MBInter, p
 		transform.Dequant4x4AC(residual[blk][:], chromaQP)
 	}
 	transform.IDCT4x4Batch(residual[:])
+	dstBaseX := mbX * 8
+	dstBaseY := mbY * 8
+	plane := f.U
+	if comp != 0 {
+		plane = f.V
+	}
 	for blk := 0; blk < 4; blk++ {
 		bx, by := (blk&1)*4, (blk>>1)*4
 		for y := 0; y < 4; y++ {
+			dstRow := plane[(dstBaseY+by+y)*f.StrideC+dstBaseX+bx:]
+			predRow := predicted[(by+y)*8+bx:]
+			resRow := residual[blk][y*4:]
 			for x := 0; x < 4; x++ {
-				v := int(predicted[(by+y)*8+bx+x]) + int(residual[blk][y*4+x])
+				v := int(predRow[x]) + int(resRow[x])
 				if v < 0 {
 					v = 0
 				}
 				if v > 255 {
 					v = 255
 				}
-				cx, cy := mbX*8+bx+x, mbY*8+by+y
-				if comp == 0 {
-					f.SetPixelU(cx, cy, uint8(v))
-				} else {
-					f.SetPixelV(cx, cy, uint8(v))
-				}
+				dstRow[x] = uint8(v)
 			}
 		}
 	}
