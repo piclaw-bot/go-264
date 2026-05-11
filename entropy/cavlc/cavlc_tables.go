@@ -110,6 +110,9 @@ func DecodeRunBefore(r *nal.Reader, zerosLeft int) int {
 	if zerosLeft <= 0 {
 		return 0
 	}
+	if run, ok := decodeRunBeforeLookup(r, zerosLeft); ok {
+		return run
+	}
 
 	tableIdx := zerosLeft - 1
 	if tableIdx > 6 {

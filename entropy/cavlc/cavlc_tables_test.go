@@ -236,6 +236,75 @@ func TestChromaDCTablesRoundtrip(t *testing.T) {
 	}
 }
 
+func decodeRunBeforeScan(r *nal.Reader, zerosLeft int) int {
+	if zerosLeft <= 0 {
+		return 0
+	}
+	tableIdx := zerosLeft - 1
+	if tableIdx > 6 {
+		tableIdx = 6
+	}
+	maxRun := zerosLeft
+	if maxRun > 15 {
+		maxRun = 15
+	}
+	avail := r.BitsLeft()
+	peekLen := 11
+	if avail < peekLen {
+		peekLen = avail
+	}
+	if peekLen <= 0 {
+		return 0
+	}
+	bits := r.PeekBits(peekLen)
+	for run := 0; run <= maxRun; run++ {
+		cLen := int(runBeforeLen[tableIdx][run])
+		cBits := uint32(runBeforeBits[tableIdx][run])
+		if cLen == 0 || cLen > peekLen {
+			continue
+		}
+		shift := uint(peekLen - cLen)
+		if (bits >> shift) == cBits {
+			r.ReadBits(cLen)
+			return run
+		}
+	}
+	r.ReadBit()
+	return 0
+}
+
+func TestRunBeforeLookupAllPrefixesMatchScan(t *testing.T) {
+	for _, zerosLeft := range []int{1, 2, 3, 4, 5, 6, 7, 15} {
+		for prefix := 0; prefix < 1<<11; prefix++ {
+			data := []byte{byte(prefix >> 3), byte(prefix << 5), 0xff}
+			fast := nal.NewReader(data)
+			scan := nal.NewReader(data)
+			got, ok := decodeRunBeforeLookup(fast, zerosLeft)
+			want := decodeRunBeforeScan(scan, zerosLeft)
+			if !ok {
+				if fast.Position() != 0 {
+					t.Fatalf("zerosLeft=%d prefix=0x%03x lookup miss advanced to %d", zerosLeft, prefix, fast.Position())
+				}
+				continue
+			}
+			if got != want || fast.Position() != scan.Position() {
+				t.Fatalf("zerosLeft=%d prefix=0x%03x: lookup=%d pos=%d scan=%d pos=%d",
+					zerosLeft, prefix, got, fast.Position(), want, scan.Position())
+			}
+		}
+	}
+}
+
+func BenchmarkDecodeRunBefore(b *testing.B) {
+	data := []byte{0xff, 0x7f, 0x3f, 0x1f, 0x0f, 0x55, 0xaa, 0x33}
+	for i := 0; i < b.N; i++ {
+		r := nal.NewReader(data)
+		for j := 1; j <= 15; j++ {
+			_ = DecodeRunBefore(r, j)
+		}
+	}
+}
+
 func TestRunBeforeTablesRoundtrip(t *testing.T) {
 	for zerosLeft := 1; zerosLeft <= 15; zerosLeft++ {
 		tableIdx := zerosLeft - 1
