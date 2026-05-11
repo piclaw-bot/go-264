@@ -1,0 +1,103 @@
+package decode
+
+// decode/context.go — per-MB context helpers, block-index lookup tables,
+// and CABAC context utility functions.
+
+import "github.com/rcarmo/go-264/slice"
+
+// blk4x4X/Y: pixel offset of each luma 4x4 block within the 16×16 macroblock.
+// Derived from slice.Blk4x4Col/Row (column/row index 0-3) multiplied by 4.
+var blk4x4X = func() [16]int {
+	var a [16]int
+	for i := 0; i < 16; i++ {
+		a[i] = slice.Blk4x4Col[i] * 4
+	}
+	return a
+}()
+
+var blk4x4Y = func() [16]int {
+	var a [16]int
+	for i := 0; i < 16; i++ {
+		a[i] = slice.Blk4x4Row[i] * 4
+	}
+	return a
+}()
+
+// blkXYToIdx aliases the canonical table from the slice package.
+var blkXYToIdx = slice.BlkXYToIdx
+
+// nzCBFCtxLuma returns (nza, nzb) for the CABAC coded_block_flag context of
+// luma 4x4 block blkIdx using in-MB non-zero tracking and left/top MB contexts.
+func nzCBFCtxLuma(blkIdx int, nzMB *[16]int, leftNZ, topNZ *[16]int) (int, int) {
+	col := slice.Blk4x4Col[blkIdx]
+	row := slice.Blk4x4Row[blkIdx]
+	var la, lb int
+	if col > 0 {
+		la = nzMB[blkXYToIdx[row][col-1]]
+	} else if leftNZ != nil {
+		la = leftNZ[blkXYToIdx[row][3]]
+	}
+	if row > 0 {
+		lb = nzMB[blkXYToIdx[row-1][col]]
+	} else if topNZ != nil {
+		lb = topNZ[blkXYToIdx[3][col]]
+	}
+	nza, nzb := 0, 0
+	if la > 0 {
+		nza = 1
+	}
+	if lb > 0 {
+		nzb = 1
+	}
+	return nza, nzb
+}
+
+// nzCBFCtxChroma returns (nza, nzb) for the CABAC coded_block_flag context of
+// chroma 4x4 block blkIdx (0-3 in 2x2 grid) for component comp.
+func nzCBFCtxChroma(comp, blkIdx int, nzMBChroma *[2][4]int, leftChromaNZ, topChromaNZ *[2][4]int) (int, int) {
+	cx := blkIdx % 2
+	cy := blkIdx / 2
+	var la, lb int
+	if cx > 0 {
+		la = nzMBChroma[comp][cy*2+(cx-1)]
+	} else if leftChromaNZ != nil {
+		la = leftChromaNZ[comp][cy*2+1]
+	}
+	if cy > 0 {
+		lb = nzMBChroma[comp][(cy-1)*2+cx]
+	} else if topChromaNZ != nil {
+		lb = topChromaNZ[comp][2+cx]
+	}
+	nza, nzb := 0, 0
+	if la > 0 {
+		nza = 1
+	}
+	if lb > 0 {
+		nzb = 1
+	}
+	return nza, nzb
+}
+
+// cabacMBTypeFlag returns the CABAC mb_type context flag: 1 if I_16x16 or
+// I_PCM (used as left/top neighbour gate in decode_cabac_intra_mb_type), 0
+// otherwise.
+func cabacMBTypeFlag(mbType uint32) uint32 {
+	if mbType >= 1 && mbType <= 25 {
+		return 1
+	}
+	return 0
+}
+
+// isCABACIntra16orPCM returns the stored mb_type flag directly (1 = I_16x16 or
+// I_PCM, 0 = other). Used for the CABAC intra mb_type context calculation.
+func isCABACIntra16orPCM(f uint32) uint32 { return f }
+
+func clampInt(v, lo, hi int) int {
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
+}

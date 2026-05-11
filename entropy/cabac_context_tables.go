@@ -1,5 +1,9 @@
 package entropy
 
+//go:generate go run ../../internal/tables/gen_cabac_context_tables.go -o cabac_context_tables.go
+// Source: ITU-T H.264 Table 9-12..9-34, mirroring FFmpeg's cabac_context_init_I/P tables.
+// Re-run the generator after any spec table update; do not hand-edit this file.
+
 // Code generated from FFmpeg libavcodec/h264_cabac.c cabac_context_init_* tables; DO NOT EDIT.
 
 var cabacContextInitI = [1024][2]int8{

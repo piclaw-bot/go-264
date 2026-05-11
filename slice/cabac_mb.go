@@ -1,0 +1,140 @@
+package slice
+
+// CABAC macroblock-level syntax decoders.
+// These decode pure H.264 syntax elements and carry no dependency on
+// frame reconstruction; they belong in the slice package alongside the
+// CAVLC equivalents in macroblock.go and pslice.go.
+
+import "github.com/rcarmo/go-264/entropy"
+
+// DecodeCABACCBP decodes the CABAC coded_block_pattern for one macroblock.
+// H.264 §9.3.2.6 / FFmpeg h264_cabac.c decode_cabac_mb_cbp_luma/chroma.
+func DecodeCABACCBP(dec *entropy.CABACDecoder, models []entropy.CABACCtx, leftCBP, topCBP uint32) uint32 {
+	if dec == nil || len(models) <= 83 {
+		return 0
+	}
+	cbpA, cbpB := int(leftCBP), int(topCBP)
+	cbp := uint32(0)
+	ctx := boolInt(cbpA&0x02 == 0) + 2*boolInt(cbpB&0x04 == 0)
+	cbp |= dec.DecodeBin(&models[73+ctx])
+	ctx = boolInt(cbp&0x01 == 0) + 2*boolInt(cbpB&0x08 == 0)
+	cbp |= dec.DecodeBin(&models[73+ctx]) << 1
+	ctx = boolInt(cbpA&0x08 == 0) + 2*boolInt(cbp&0x01 == 0)
+	cbp |= dec.DecodeBin(&models[73+ctx]) << 2
+	ctx = boolInt(cbp&0x04 == 0) + 2*boolInt(cbp&0x02 == 0)
+	cbp |= dec.DecodeBin(&models[73+ctx]) << 3
+
+	ctx = 0
+	if (leftCBP>>4)&0x03 > 0 {
+		ctx++
+	}
+	if (topCBP>>4)&0x03 > 0 {
+		ctx += 2
+	}
+	if dec.DecodeBin(&models[77+ctx]) != 0 {
+		ctx = 4
+		if (leftCBP>>4)&0x03 == 2 {
+			ctx++
+		}
+		if (topCBP>>4)&0x03 == 2 {
+			ctx += 2
+		}
+		cbp |= (1 + dec.DecodeBin(&models[77+ctx])) << 4
+	}
+	return cbp
+}
+
+// DecodeCABACDQP decodes the CABAC QP delta for one macroblock.
+// H.264 §9.3.2.7 / FFmpeg h264_cabac.c decode_cabac_mb_dqp.
+func DecodeCABACDQP(dec *entropy.CABACDecoder, models []entropy.CABACCtx, lastQScaleDiff int) int {
+	if dec == nil || len(models) <= 63 {
+		return 0
+	}
+	if dec.DecodeBin(&models[60+boolInt(lastQScaleDiff != 0)]) == 0 {
+		return 0
+	}
+	val := 1
+	ctx := 2
+	for dec.DecodeBin(&models[60+ctx]) == 1 {
+		ctx = 3
+		val++
+		if val > 102 {
+			return 0
+		}
+	}
+	if val&1 != 0 {
+		return (val + 1) >> 1
+	}
+	return -((val + 1) >> 1)
+}
+
+// DecodeCABACRef decodes a CABAC reference frame index.
+// H.264 §9.3.2.3 / FFmpeg h264_cabac.c decode_cabac_mb_ref.
+func DecodeCABACRef(dec *entropy.CABACDecoder, models []entropy.CABACCtx, ctx int) uint32 {
+	if dec == nil || len(models) <= 58 {
+		return 0
+	}
+	ref := uint32(0)
+	for dec.DecodeBin(&models[54+ctx]) == 1 {
+		ref++
+		ctx = (ctx >> 2) + 4
+		if ref >= 32 {
+			return 0
+		}
+	}
+	return ref
+}
+
+// DecodeCABACMVD decodes one CABAC motion vector difference component.
+// ctxBase: 40 for mvd_x, 47 for mvd_y.
+// amvd: |left_mvd| + |top_mvd| context sum (0 when unavailable).
+// H.264 §9.3.2.4 / FFmpeg h264_cabac.c decode_cabac_mb_mvd.
+func DecodeCABACMVD(dec *entropy.CABACDecoder, models []entropy.CABACCtx, ctxBase int, amvd int) int16 {
+	if dec == nil || len(models) <= ctxBase+6 {
+		return 0
+	}
+	ctx := 0
+	if amvd > 2 {
+		ctx++
+	}
+	if amvd > 32 {
+		ctx++
+	}
+	if dec.DecodeBin(&models[ctxBase+ctx]) == 0 {
+		return 0
+	}
+	mvd := 1
+	ctxBase += 3
+	ctx = ctxBase
+	for mvd < 9 && dec.DecodeBin(&models[ctx]) == 1 {
+		if mvd < 4 {
+			ctx++
+		}
+		mvd++
+	}
+	if mvd >= 9 {
+		k := 3
+		for dec.DecodeBypass() == 1 {
+			mvd += 1 << uint(k)
+			k++
+			if k > 24 {
+				return 0
+			}
+		}
+		for k >= 0 {
+			mvd += int(dec.DecodeBypass()) << uint(k)
+			k--
+		}
+	}
+	if dec.DecodeBypass() == 1 {
+		return int16(mvd)
+	}
+	return int16(-mvd)
+}
+
+func boolInt(v bool) int {
+	if v {
+		return 1
+	}
+	return 0
+}

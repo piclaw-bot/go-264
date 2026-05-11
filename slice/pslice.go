@@ -41,39 +41,41 @@ type MBInter struct {
 	ChromaTotalCoeff [2][4]int
 }
 
-// DecodeMBInter decodes one inter macroblock from a P-slice.
-func DecodeMBInter(r *nal.Reader, sliceQP int32, numRefFrames uint32) *MBInter {
-	return DecodeMBInterCtx(r, sliceQP, numRefFrames, nil, nil)
+// InterDecodeOpts carries context for CAVLC inter macroblock decoding.
+// Zero-value is safe (no neighbour context, QP=0, single reference frame).
+type InterDecodeOpts struct {
+	SliceQP      int32
+	NumRefFrames uint32
+	LeftNZ       *[16]int
+	TopNZ        *[16]int
+	LeftChromaNZ *[2][4]int
+	TopChromaNZ  *[2][4]int
 }
 
-// DecodeMBInterCtx decodes one inter macroblock with optional left/top CAVLC
-// nC context from neighbouring macroblocks.
-func DecodeMBInterCtx(r *nal.Reader, sliceQP int32, numRefFrames uint32, leftNZ, topNZ *[16]int) *MBInter {
-	return DecodeMBInterCtxFull(r, sliceQP, numRefFrames, leftNZ, topNZ, nil, nil)
-}
-
-func DecodeMBInterCtxFull(r *nal.Reader, sliceQP int32, numRefFrames uint32, leftNZ, topNZ *[16]int, leftChromaNZ, topChromaNZ *[2][4]int) *MBInter {
+// DecodeMBInter decodes one CAVLC inter macroblock from a P-slice.
+// If the decoded mb_type indicates an intra MB (>= PMBTypeIntra), the returned
+// MBInter.MBType is set but no intra payload is consumed; the caller must then
+// call DecodeMBIntraWithType(r, mb.MBType-PMBTypeIntra, opts) to consume the
+// remainder.
+func DecodeMBInter(r *nal.Reader, opts InterDecodeOpts) *MBInter {
 	mb := &MBInter{}
 	mb.MBType = r.ReadUE()
-
-	// Check if this is actually an intra MB in a P-slice. The caller is
-	// responsible for decoding the remaining intra payload with
-	// DecodeMBIntraCtxWithType(mb_type-5); returning here would otherwise leave
-	// the bitstream positioned at mb_pred().
-	if mb.MBType >= 5 {
-		return mb
+	if mb.MBType >= PMBTypeIntra {
+		return mb // caller handles intra payload
 	}
+
+	numRefFrames := opts.NumRefFrames
+	leftNZ, topNZ := opts.LeftNZ, opts.TopNZ
+	leftChromaNZ, topChromaNZ := opts.LeftChromaNZ, opts.TopChromaNZ
 
 	switch mb.MBType {
 	case PMBTypeP16x16:
-		// One partition, one MV
 		if numRefFrames > 1 {
-			mb.RefIdx[0] = int8(readTE(r, int(numRefFrames-1))) // ref_idx_l0, te(v)
+			mb.RefIdx[0] = int8(readTE(r, int(numRefFrames-1)))
 		}
-		mb.MV[0] = decodeMVD(r) // mvd_l0
+		mb.MV[0] = decodeMVD(r)
 
 	case PMBTypeP16x8:
-		// Two 16x8 partitions
 		for i := 0; i < 2; i++ {
 			if numRefFrames > 1 {
 				mb.RefIdx[i] = int8(readTE(r, int(numRefFrames-1)))
@@ -84,7 +86,6 @@ func DecodeMBInterCtxFull(r *nal.Reader, sliceQP int32, numRefFrames uint32, lef
 		}
 
 	case PMBTypeP8x16:
-		// Two 8x16 partitions
 		for i := 0; i < 2; i++ {
 			if numRefFrames > 1 {
 				mb.RefIdx[i] = int8(readTE(r, int(numRefFrames-1)))
@@ -95,7 +96,6 @@ func DecodeMBInterCtxFull(r *nal.Reader, sliceQP int32, numRefFrames uint32, lef
 		}
 
 	case PMBTypeP8x8, PMBTypeP8x8ref0:
-		// Four 8x8 sub-partitions
 		for i := 0; i < 4; i++ {
 			mb.SubMBType[i] = r.ReadUE()
 		}
@@ -112,16 +112,11 @@ func DecodeMBInterCtxFull(r *nal.Reader, sliceQP int32, numRefFrames uint32, lef
 		}
 	}
 
-	// Coded block pattern
 	mb.CBP = decodeCBPInter(r)
-
 	if mb.CBP > 0 {
 		mb.QPDelta = r.ReadSE()
 	}
 
-	// Residual data (CAVLC). Approximate nC using already-decoded blocks within
-	// the current macroblock; cross-MB nC is handled later when neighbour state is
-	// threaded through the slice decoder.
 	if mb.CBP > 0 {
 		cbpLuma := mb.CBP & 0xF
 		var nzCoeffs [16]int
@@ -167,13 +162,11 @@ func readTE(r *nal.Reader, maxVal int) uint32 {
 		return 0
 	}
 	if maxVal == 1 {
-		// te(v) with range 1 is coded as a single inverted bit: 1 -> 0, 0 -> 1.
 		return 1 - r.ReadBit()
 	}
 	return r.ReadUE()
 }
 
-// decodeMVD reads a motion vector difference (mvd_l0).
 func decodeMVD(r *nal.Reader) MotionVector {
 	return MotionVector{
 		X: int16(r.ReadSE()),
@@ -181,7 +174,6 @@ func decodeMVD(r *nal.Reader) MotionVector {
 	}
 }
 
-// subMBPartCount returns the number of sub-partitions for a sub-MB type.
 func subMBPartCount(subType uint32) int {
 	switch subType {
 	case 0:
@@ -196,10 +188,8 @@ func subMBPartCount(subType uint32) int {
 	return 1
 }
 
-// decodeCBPInter decodes coded_block_pattern for inter macroblocks.
 func decodeCBPInter(r *nal.Reader) uint32 {
 	codeNum := r.ReadUE()
-	// Table 9-4: Inter CBP mapping
 	cbpInterTable := [48]uint32{
 		0, 16, 1, 2, 4, 8, 32, 3, 5, 10, 12, 15, 47, 7, 11, 13,
 		14, 6, 9, 31, 35, 37, 42, 44, 33, 34, 36, 40, 39, 43, 45, 46,
@@ -212,8 +202,8 @@ func decodeCBPInter(r *nal.Reader) uint32 {
 }
 
 // PredictMV computes the predicted motion vector using median prediction.
-// ITU-T H.264 §8.4.1.3
-// A = left, B = top, C = top-right (or top-left if C unavailable)
+// ITU-T H.264 §8.4.1.3.
+// A = left, B = top, C = top-right (or top-left if C unavailable).
 func PredictMV(a, b, c MotionVector, availA, availB, availC bool) MotionVector {
 	if !availA && !availB && !availC {
 		return MotionVector{0, 0}
@@ -224,8 +214,6 @@ func PredictMV(a, b, c MotionVector, availA, availB, availC bool) MotionVector {
 	if !availA && availB && !availC {
 		return b
 	}
-
-	// Median of three
 	return MotionVector{
 		X: median3(a.X, b.X, c.X),
 		Y: median3(a.Y, b.Y, c.Y),

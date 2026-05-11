@@ -13,6 +13,19 @@ const (
 	MBTypeIPCM      = 25 // I_PCM (raw samples)
 )
 
+// H.264 4x4 block scan-order index maps (§6.4.3).
+// Blk4x4Col/Row: column/row index (0-3) within the 4x4 MB grid for each blkIdx.
+// BlkXYToIdx: inverse map — BlkXYToIdx[row][col] → blkIdx.
+// Matches FFmpeg's blk4x4ToX/Y and xyToBlk4x4 conventions.
+var Blk4x4Col = [16]int{0, 1, 0, 1, 2, 3, 2, 3, 0, 1, 0, 1, 2, 3, 2, 3}
+var Blk4x4Row = [16]int{0, 0, 1, 1, 0, 0, 1, 1, 2, 2, 3, 3, 2, 2, 3, 3}
+var BlkXYToIdx = [4][4]int{
+	{0, 1, 4, 5},
+	{2, 3, 6, 7},
+	{8, 9, 12, 13},
+	{10, 11, 14, 15},
+}
+
 // MBIntra describes a decoded intra macroblock.
 type MBIntra struct {
 	MBType             uint32
@@ -27,48 +40,47 @@ type MBIntra struct {
 	CoeffsChroma       [2][4][16]int16 // chroma blocks [U/V][4 blocks][16 coeffs]
 	TotalCoeff         [16]int         // CAVLC totalCoeff per luma 4x4 block (for nC context)
 	ChromaTotalCoeff   [2][4]int       // CAVLC totalCoeff per chroma 4x4 block [U/V][block]
+	LumaDCTotalCoeff   int             // totalCoeff of luma DC block (for I16x16 dcNC context)
 }
 
-// DecodeMBIntra decodes one intra macroblock from the bitstream.
-// Returns the macroblock data needed for reconstruction.
-func DecodeMBIntra(r *nal.Reader, sliceQP int32, ppsEntropy uint32, transform8x8 bool) *MBIntra {
-	return DecodeMBIntraCtx(r, sliceQP, ppsEntropy, transform8x8, nil, nil)
+// IntraDecodeOpts carries context for CAVLC intra macroblock decoding.
+// Zero-value is safe (no neighbour context, QP=0, no 8x8 transform).
+type IntraDecodeOpts struct {
+	SliceQP      int32
+	Transform8x8 bool
+	LeftNZ       *[16]int
+	TopNZ        *[16]int
+	LeftChromaNZ *[2][4]int
+	TopChromaNZ  *[2][4]int
 }
 
-// DecodeMBIntraCtx decodes an intra macroblock with optional left/top nC
-// context from neighbouring macroblocks. leftNZ/topNZ are indexed by the H.264
-// 4x4 block index within the neighbouring macroblock.
-func DecodeMBIntraCtx(r *nal.Reader, sliceQP int32, ppsEntropy uint32, transform8x8 bool, leftNZ, topNZ *[16]int) *MBIntra {
-	return DecodeMBIntraCtxFull(r, sliceQP, ppsEntropy, transform8x8, leftNZ, topNZ, nil, nil)
-}
-
-func DecodeMBIntraCtxFull(r *nal.Reader, sliceQP int32, ppsEntropy uint32, transform8x8 bool, leftNZ, topNZ *[16]int, leftChromaNZ, topChromaNZ *[2][4]int) *MBIntra {
+// DecodeMBIntra reads mb_type from the bitstream and decodes one CAVLC intra
+// macroblock. Use DecodeMBIntraWithType when mb_type was already consumed by
+// the caller (e.g. intra MBs embedded in a P-slice).
+func DecodeMBIntra(r *nal.Reader, opts IntraDecodeOpts) *MBIntra {
 	mbType := r.ReadUE()
-	return DecodeMBIntraCtxWithTypeFull(r, mbType, sliceQP, ppsEntropy, transform8x8, leftNZ, topNZ, leftChromaNZ, topChromaNZ)
+	return DecodeMBIntraWithType(r, mbType, opts)
 }
 
-// DecodeMBIntraCtxWithType decodes the intra macroblock payload after the
-// caller has already consumed an enclosing slice-specific mb_type. P/B slices
-// encode intra macroblock types as offsets from the inter type range.
-func DecodeMBIntraCtxWithType(r *nal.Reader, mbType uint32, sliceQP int32, ppsEntropy uint32, transform8x8 bool, leftNZ, topNZ *[16]int) *MBIntra {
-	return DecodeMBIntraCtxWithTypeFull(r, mbType, sliceQP, ppsEntropy, transform8x8, leftNZ, topNZ, nil, nil)
-}
-
-func DecodeMBIntraCtxWithTypeFull(r *nal.Reader, mbType uint32, sliceQP int32, ppsEntropy uint32, transform8x8 bool, leftNZ, topNZ *[16]int, leftChromaNZ, topChromaNZ *[2][4]int) *MBIntra {
+// DecodeMBIntraWithType decodes the intra macroblock payload after the caller
+// has already consumed an enclosing slice-specific mb_type. P/B slices encode
+// intra macroblock types as offsets from the inter type range.
+func DecodeMBIntraWithType(r *nal.Reader, mbType uint32, opts IntraDecodeOpts) *MBIntra {
 	mb := &MBIntra{MBType: mbType}
+	leftNZ, topNZ := opts.LeftNZ, opts.TopNZ
+	leftChromaNZ, topChromaNZ := opts.LeftChromaNZ, opts.TopChromaNZ
 
 	if mb.MBType == 0 {
-		// I_NxN: always 16 prediction modes (4x4 block-level modes)
-		numModes := 16
-		for i := 0; i < numModes; i++ {
-			if r.ReadBool() { // prev_intra_pred_mode_flag
-				mb.IntraPredMode[i] = -1 // use predicted mode
+		// I_NxN: 16 prediction modes (4x4 block-level modes)
+		for i := 0; i < 16; i++ {
+			if r.ReadBool() {
+				mb.IntraPredMode[i] = -1 // prev_intra_pred_mode_flag: use predicted
 			} else {
 				mb.IntraPredMode[i] = int8(r.ReadBits(3)) // rem_intra_pred_mode
 			}
 		}
 	} else if mb.MBType >= 1 && mb.MBType <= 24 {
-		// I_16x16: prediction mode, CBP coded in mb_type
+		// I_16x16: prediction mode and CBP coded in mb_type
 		mb.Intra16x16PredMode = int8((mb.MBType - 1) % 4)
 		cbpChroma := (mb.MBType - 1) / 4 % 3
 		cbpLuma := uint32(0)
@@ -78,9 +90,9 @@ func DecodeMBIntraCtxWithTypeFull(r *nal.Reader, mbType uint32, sliceQP int32, p
 		mb.CodedBlockPattern = cbpLuma | (cbpChroma << 4)
 	}
 
-	// Chroma intra pred mode (for NxN and 16x16)
+	// Chroma intra pred mode
 	if mb.MBType != MBTypeIPCM {
-		mb.ChromaPredMode = int8(r.ReadUE()) // intra_chroma_pred_mode
+		mb.ChromaPredMode = int8(r.ReadUE())
 	}
 
 	// Coded block pattern (only for I_NxN, I_16x16 has it in mb_type)
@@ -89,7 +101,7 @@ func DecodeMBIntraCtxWithTypeFull(r *nal.Reader, mbType uint32, sliceQP int32, p
 	}
 
 	use8x8 := false
-	if transform8x8 && mb.MBType == 0 && (mb.CodedBlockPattern&0xF) != 0 {
+	if opts.Transform8x8 && mb.MBType == 0 && (mb.CodedBlockPattern&0xF) != 0 {
 		use8x8 = r.ReadBool()
 	}
 
@@ -98,81 +110,68 @@ func DecodeMBIntraCtxWithTypeFull(r *nal.Reader, mbType uint32, sliceQP int32, p
 		mb.QPDelta = r.ReadSE()
 	}
 
-	if ppsEntropy == 0 {
-		if mb.MBType >= 1 && mb.MBType <= 24 {
-			// I_16x16: decode the 16 luma DC coefficients as a separate CAVLC
-			// block. Its coeff_token still uses neighbouring nC prediction from
-			// the corresponding luma block context rather than a hard-coded nC=0.
-			dcNC := computeNCLumaDC(leftNZ, topNZ)
-			dcBlock, _ := entropy.DecodeCAVLCBlock(r, dcNC)
-			for pos := 0; pos < 16; pos++ {
-				blk := xyToBlk4x4[pos/4][pos%4]
-				mb.Coeffs[blk][0] = dcBlock[pos]
+	// CAVLC residual decode
+	if mb.MBType >= 1 && mb.MBType <= 24 {
+		// I_16x16: decode the 16 luma DC coefficients as a separate CAVLC block.
+		dcNC := computeNCLumaDC(leftNZ, topNZ)
+		dcBlock, dcTC := entropy.DecodeCAVLCBlock(r, dcNC)
+		mb.LumaDCTotalCoeff = dcTC
+		for pos := 0; pos < 16; pos++ {
+			blk := BlkXYToIdx[pos/4][pos%4]
+			mb.Coeffs[blk][0] = dcBlock[pos]
+		}
+		cbpLuma := mb.CodedBlockPattern & 0xF
+		if cbpLuma != 0 {
+			var nzCoeffs [16]int
+			for blk := 0; blk < 16; blk++ {
+				nC := computeNC4x4Ctx(blk, nzCoeffs[:], leftNZ, topNZ)
+				acBlock, tc := entropy.DecodeCAVLCBlockAC(r, nC)
+				for j := 1; j < 16; j++ {
+					mb.Coeffs[blk][j] = acBlock[j]
+				}
+				nzCoeffs[blk] = tc
+				mb.TotalCoeff[blk] = tc
 			}
-			// Decode AC coefficients for each 4x4 block if CBP indicates. These
-			// residual blocks also use neighbouring nC prediction; only coefficient
-			// position 0 is skipped because the luma DC block was decoded above.
-			cbpLuma := mb.CodedBlockPattern & 0xF
-			if cbpLuma != 0 {
-				var nzCoeffs [16]int
-				for blk := 0; blk < 16; blk++ {
-					nC := computeNC4x4Ctx(blk, nzCoeffs[:], leftNZ, topNZ)
-					acBlock, tc := entropy.DecodeCAVLCBlockAC(r, nC)
-					// AC coefficients are already positioned at raster slots 1..15.
-					for j := 1; j < 16; j++ {
-						mb.Coeffs[blk][j] = acBlock[j]
+		}
+	} else if mb.MBType == 0 && mb.CodedBlockPattern > 0 {
+		cbpLuma := mb.CodedBlockPattern & 0xF
+		var nzCoeffs [16]int
+		if use8x8 {
+			for blk8 := 0; blk8 < 4; blk8++ {
+				if cbpLuma&(1<<uint(blk8)) != 0 {
+					for sub := 0; sub < 4; sub++ {
+						blk4 := blk8*4 + sub
+						nC := computeNC4x4Ctx(blk4, nzCoeffs[:], leftNZ, topNZ)
+						block, tc := entropy.DecodeCAVLCBlock(r, nC)
+						mb.Coeffs[blk4] = [16]int16(block)
+						nzCoeffs[blk4] = tc
+						mb.TotalCoeff[blk4] = tc
 					}
+				}
+			}
+		} else {
+			for blk := 0; blk < 16; blk++ {
+				group := blk / 4
+				if cbpLuma&(1<<uint(group)) != 0 {
+					nC := computeNC4x4Ctx(blk, nzCoeffs[:], leftNZ, topNZ)
+					block, tc := entropy.DecodeCAVLCBlock(r, nC)
+					mb.Coeffs[blk] = [16]int16(block)
 					nzCoeffs[blk] = tc
 					mb.TotalCoeff[blk] = tc
-				}
-			}
-		} else if mb.MBType == 0 && mb.CodedBlockPattern > 0 {
-			cbpLuma := mb.CodedBlockPattern & 0xF
-			var nzCoeffs [16]int
-			if use8x8 {
-				// I_8x8: each 8x8 block decoded as 4 sub-blocks
-				for blk8 := 0; blk8 < 4; blk8++ {
-					if cbpLuma&(1<<uint(blk8)) != 0 {
-						// 4 sub-blocks per 8x8 block
-						for sub := 0; sub < 4; sub++ {
-							blk4 := blk8*4 + sub
-							nC := computeNC4x4Ctx(blk4, nzCoeffs[:], leftNZ, topNZ)
-							block, tc := entropy.DecodeCAVLCBlock(r, nC)
-							mb.Coeffs[blk4] = [16]int16(block)
-							nzCoeffs[blk4] = tc
-							mb.TotalCoeff[blk4] = tc
-						}
-					}
-				}
-			} else {
-				// I_4x4: decode each 4x4 block independently
-				for blk := 0; blk < 16; blk++ {
-					group := blk / 4
-					if cbpLuma&(1<<uint(group)) != 0 {
-						nC := computeNC4x4Ctx(blk, nzCoeffs[:], leftNZ, topNZ)
-						block, tc := entropy.DecodeCAVLCBlock(r, nC)
-						mb.Coeffs[blk] = [16]int16(block)
-						nzCoeffs[blk] = tc
-						mb.TotalCoeff[blk] = tc
-					}
 				}
 			}
 		}
 	}
 
-	// Decode chroma residual if CBP indicates
+	// Chroma residual
 	cbpChroma := mb.CodedBlockPattern >> 4
-	if ppsEntropy == 0 && cbpChroma > 0 {
-		// Chroma DC: 2×2 block for each Cb and Cr
+	if cbpChroma > 0 {
 		for comp := 0; comp < 2; comp++ {
 			dcBlock4 := entropy.DecodeCAVLCChromaDC(r)
-			// Store DC values (only first 4 from 4x4 block)
 			for i := 0; i < 4; i++ {
 				mb.CoeffsChroma[comp][i][0] = dcBlock4[i]
 			}
 		}
-		// Chroma AC (if cbpChroma == 2). Chroma has its own 2x2
-		// neighbouring nC context per component.
 		if cbpChroma == 2 {
 			for comp := 0; comp < 2; comp++ {
 				var nzChroma [4]int
@@ -192,11 +191,9 @@ func DecodeMBIntraCtxWithTypeFull(r *nal.Reader, mbType uint32, sliceQP int32, p
 	return mb
 }
 
-// decodeCBPIntra decodes coded_block_pattern for intra macroblocks.
-// Uses Table 9-4 mapping from codeNum to CBP.
+// decodeCBPIntra decodes coded_block_pattern for intra macroblocks (Table 9-4).
 func decodeCBPIntra(r *nal.Reader) uint32 {
 	codeNum := r.ReadUE()
-	// Table 9-4: Intra CBP mapping (subset)
 	cbpIntraTable := [48]uint32{
 		47, 31, 15, 0, 23, 27, 29, 30, 7, 11, 13, 14, 39, 43, 45, 46,
 		16, 3, 5, 10, 12, 19, 21, 26, 28, 35, 37, 42, 44, 1, 2, 4,
@@ -208,8 +205,7 @@ func decodeCBPIntra(r *nal.Reader) uint32 {
 	return 0
 }
 
-// computeNC4x4 computes the nC context for a 4x4 block within a macroblock.
-// Uses the totalCoeff of the left and top neighboring 4x4 blocks.
+// Block-index to column/row lookup helpers used by nC context computations.
 // Block layout within MB (H.264 raster scan §6.4.3):
 //
 //	0  1  4  5
@@ -217,15 +213,6 @@ func decodeCBPIntra(r *nal.Reader) uint32 {
 //	8  9 12 13
 //
 // 10 11 14 15
-var blk4x4ToX = [16]int{0, 1, 0, 1, 2, 3, 2, 3, 0, 1, 0, 1, 2, 3, 2, 3}
-var blk4x4ToY = [16]int{0, 0, 1, 1, 0, 0, 1, 1, 2, 2, 3, 3, 2, 2, 3, 3}
-var xyToBlk4x4 = [4][4]int{
-	{0, 1, 4, 5},
-	{2, 3, 6, 7},
-	{8, 9, 12, 13},
-	{10, 11, 14, 15},
-}
-
 func computeNC4x4(blkIdx int, nz []int) int {
 	return computeNC4x4Ctx(blkIdx, nz, nil, nil)
 }
@@ -233,25 +220,25 @@ func computeNC4x4(blkIdx int, nz []int) int {
 // computeNCLumaDC computes nC for the I16x16 luma-DC CAVLC block.
 // Per H.264 §9.2.1, N_A should be the DC-block totalCoeff of the left MB if
 // that MB is I16x16, or -1 otherwise. In practice x264 (and therefore most
-// Baseline/Main streams) uses the AC totalCoeff of the neighbour’s block-5 as
+// Baseline/Main streams) uses the AC totalCoeff of the neighbour's block-5 as
 // dcNC, so we match that behaviour for compatibility.
 func computeNCLumaDC(leftNZ, topNZ *[16]int) int {
-	return combineNC(neighbourNC(leftNZ, xyToBlk4x4[0][3]), neighbourNC(topNZ, xyToBlk4x4[3][0]))
+	return combineNC(neighbourNC(leftNZ, BlkXYToIdx[0][3]), neighbourNC(topNZ, BlkXYToIdx[3][0]))
 }
 
 func computeNC4x4Ctx(blkIdx int, nz []int, leftNZ, topNZ *[16]int) int {
-	x := blk4x4ToX[blkIdx]
-	y := blk4x4ToY[blkIdx]
+	x := Blk4x4Col[blkIdx]
+	y := Blk4x4Row[blkIdx]
 	nA, nB := -1, -1
 	if x > 0 {
-		nA = nz[xyToBlk4x4[y][x-1]]
+		nA = nz[BlkXYToIdx[y][x-1]]
 	} else if leftNZ != nil {
-		nA = leftNZ[xyToBlk4x4[y][3]]
+		nA = leftNZ[BlkXYToIdx[y][3]]
 	}
 	if y > 0 {
-		nB = nz[xyToBlk4x4[y-1][x]]
+		nB = nz[BlkXYToIdx[y-1][x]]
 	} else if topNZ != nil {
-		nB = topNZ[xyToBlk4x4[3][x]]
+		nB = topNZ[BlkXYToIdx[3][x]]
 	}
 	return combineNC(nA, nB)
 }
@@ -281,14 +268,14 @@ func neighbourNC(nz *[16]int, idx int) int {
 }
 
 func combineNC(nA, nB int) int {
-	if nA >= 0 && nB >= 0 {
-		return (nA + nB + 1) >> 1
+	if nA < 0 && nB < 0 {
+		return 0
 	}
-	if nA >= 0 {
-		return nA
-	}
-	if nB >= 0 {
+	if nA < 0 {
 		return nB
 	}
-	return 0
+	if nB < 0 {
+		return nA
+	}
+	return (nA + nB + 1) >> 1
 }
