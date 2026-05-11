@@ -39,8 +39,33 @@ func InterPred16x16At(out []uint8, ref []uint8, stride int, baseX, baseY int, mv
 	sx := baseX + ix
 	sy := baseY + iy
 
-	if fx == 0 && fy == 0 && (HasSSE2 || hasNEONPred()) && sx >= 0 && sy >= 0 && sx+16 <= stride && sy+16 <= refH {
-		InterPred16x16Copy_ASM(&out[0], &ref[sy*stride+sx], 16, stride)
+	if fx == 0 && fy == 0 && sx >= 0 && sy >= 0 && sx+16 <= stride && sy+16 <= refH {
+		if HasSSE2 || hasNEONPred() {
+			InterPred16x16Copy_ASM(&out[0], &ref[sy*stride+sx], 16, stride)
+			return
+		}
+		for y := 0; y < 16; y++ {
+			copy(out[y*16:y*16+16], ref[(sy+y)*stride+sx:(sy+y)*stride+sx+16])
+		}
+		return
+	}
+	if sx >= 0 && sy >= 0 && sx+17 <= stride && sy+17 <= refH {
+		w00 := (4 - fx) * (4 - fy)
+		w10 := fx * (4 - fy)
+		w01 := (4 - fx) * fy
+		w11 := fx * fy
+		for y := 0; y < 16; y++ {
+			row0 := (sy+y)*stride + sx
+			row1 := row0 + stride
+			outRow := y * 16
+			for x := 0; x < 16; x++ {
+				a := int(ref[row0+x])
+				b := int(ref[row0+x+1])
+				c := int(ref[row1+x])
+				d := int(ref[row1+x+1])
+				out[outRow+x] = uint8((a*w00 + b*w10 + c*w01 + d*w11 + 8) >> 4)
+			}
+		}
 		return
 	}
 	clip := func(x, y int) int {

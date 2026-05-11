@@ -58,16 +58,74 @@ func TestInterPred16x16At(t *testing.T) {
 	}
 }
 
+func TestInterPred16x16AtFractionalInteriorMatchesClippedPath(t *testing.T) {
+	stride := 40
+	ref := make([]uint8, stride*40)
+	for y := 0; y < 40; y++ {
+		for x := 0; x < 40; x++ {
+			ref[y*stride+x] = uint8((x*11 + y*17) & 0xff)
+		}
+	}
+	var fast, want [256]uint8
+	mv := MotionVector{1, 2} // fractional, interior fast path
+	InterPred16x16At(fast[:], ref, stride, 8, 9, mv)
+	for y := 0; y < 16; y++ {
+		for x := 0; x < 16; x++ {
+			sx, sy := 8+x, 9+y
+			a := int(ref[sy*stride+sx])
+			b := int(ref[sy*stride+sx+1])
+			c := int(ref[(sy+1)*stride+sx])
+			d := int(ref[(sy+1)*stride+sx+1])
+			want[y*16+x] = uint8((a*6 + b*2 + c*6 + d*2 + 8) >> 4)
+		}
+	}
+	if fast != want {
+		t.Fatalf("fractional interior fast path mismatch")
+	}
+}
+
 func BenchmarkInterPred16x16At(b *testing.B) {
 	stride := 1920
 	ref := make([]uint8, stride*1080)
 	out := make([]uint8, 256)
-	for i := range ref { ref[i] = uint8(i) }
+	for i := range ref {
+		ref[i] = uint8(i)
+	}
 	mv := MotionVector{4, 4}
 	b.ReportAllocs()
 	b.SetBytes(256)
 	for i := 0; i < b.N; i++ {
 		InterPred16x16At(out, ref, stride, 256, 256, mv)
+	}
+}
+
+func BenchmarkInterPred16x16AtFractional(b *testing.B) {
+	stride := 1920
+	ref := make([]uint8, stride*1080)
+	out := make([]uint8, 256)
+	for i := range ref {
+		ref[i] = uint8(i)
+	}
+	mv := MotionVector{1, 2}
+	b.ReportAllocs()
+	b.SetBytes(256)
+	for i := 0; i < b.N; i++ {
+		InterPred16x16At(out, ref, stride, 256, 256, mv)
+	}
+}
+
+func BenchmarkInterPred16x16AtFractionalClipped(b *testing.B) {
+	stride := 1920
+	ref := make([]uint8, stride*1080)
+	out := make([]uint8, 256)
+	for i := range ref {
+		ref[i] = uint8(i)
+	}
+	mv := MotionVector{1, 2}
+	b.ReportAllocs()
+	b.SetBytes(256)
+	for i := 0; i < b.N; i++ {
+		InterPred16x16At(out, ref, stride, -1, -1, mv)
 	}
 }
 
