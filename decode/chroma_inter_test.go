@@ -62,6 +62,20 @@ func TestFillChromaInterPredFastPathMatchesReference(t *testing.T) {
 	}
 }
 
+func TestFillChromaInterPredMalformedInputsDoNotPanic(t *testing.T) {
+	var d Decoder
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("fillChromaInterPred panicked on malformed input: %v", r)
+		}
+	}()
+	var dst [64]uint8
+	d.fillChromaInterPred(dst[:], nil, 8, 8, 8, 0, 0, syntax.MotionVector{})
+	d.fillChromaInterPred(dst[:], []uint8{1, 2, 3}, 8, 8, 8, 0, 0, syntax.MotionVector{})
+	d.fillChromaInterPred(dst[:], make([]uint8, 64), 4, 8, 8, 0, 0, syntax.MotionVector{})
+	d.fillChromaInterPred(dst[:4], make([]uint8, 64), 8, 8, 8, 0, 0, syntax.MotionVector{})
+}
+
 func BenchmarkFillChromaInterPredInterior(b *testing.B) {
 	const stride = 960
 	const width = 960
