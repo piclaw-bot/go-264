@@ -34,6 +34,19 @@ func TestIDCT4x4(t *testing.T) {
 	// Should produce a smooth gradient
 }
 
+func TestDequant4x4ScaleTableMatchesFormula(t *testing.T) {
+	for qp := 0; qp < 52; qp++ {
+		qpDiv6 := uint(qp / 6)
+		qpMod6 := qp % 6
+		for i := 0; i < 16; i++ {
+			want := int32(dequantV[qpMod6][posToV[i]]) << qpDiv6
+			if got := dequant4x4Scale[qp][i]; got != want {
+				t.Fatalf("qp=%d pos=%d scale=%d want %d", qp, i, got, want)
+			}
+		}
+	}
+}
+
 func TestQuantDequant(t *testing.T) {
 	// Full DCT → Quant → Dequant → IDCT roundtrip at low QP
 	block := [16]int16{
@@ -93,6 +106,22 @@ func TestZigZag(t *testing.T) {
 		if !v {
 			t.Fatalf("zig-zag misses position %d", i)
 		}
+	}
+}
+
+func BenchmarkDequant4x4(b *testing.B) {
+	block := [16]int16{1048, -44, 46, 4, 40, 0, -4, 6, -40, -4, 12, 2, 2, 0, 2, -4}
+	for i := 0; i < b.N; i++ {
+		tmp := block
+		Dequant4x4(tmp[:], 26)
+	}
+}
+
+func BenchmarkDequant4x4AC(b *testing.B) {
+	block := [16]int16{1048, -44, 46, 4, 40, 0, -4, 6, -40, -4, 12, 2, 2, 0, 2, -4}
+	for i := 0; i < b.N; i++ {
+		tmp := block
+		Dequant4x4AC(tmp[:], 26)
 	}
 }
 

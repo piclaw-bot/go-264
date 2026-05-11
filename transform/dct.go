@@ -73,6 +73,18 @@ var posToV = [16]int{
 	2, 1, 2, 1,
 }
 
+var dequant4x4Scale [52][16]int32
+
+func init() {
+	for qp := 0; qp < 52; qp++ {
+		qpDiv6 := uint(qp / 6)
+		qpMod6 := qp % 6
+		for i := 0; i < 16; i++ {
+			dequant4x4Scale[qp][i] = int32(dequantV[qpMod6][posToV[i]]) << qpDiv6
+		}
+	}
+}
+
 // Dequant4x4 dequantizes a 4×4 block of transform coefficients.
 // QP range: 0-51.
 func Dequant4x4(block []int16, qp int) {
@@ -87,12 +99,10 @@ func Dequant4x4AC(block []int16, qp int) {
 }
 
 func dequant4x4Range(block []int16, qp int, start int) {
-	qpDiv6 := uint(qp / 6)
-	qpMod6 := qp % 6
+	scale := dequant4x4Scale[qp]
 	for i := start; i < 16; i++ {
 		if block[i] != 0 {
-			v := int32(dequantV[qpMod6][posToV[i]])
-			block[i] = int16(int32(block[i]) * v << qpDiv6)
+			block[i] = int16(int32(block[i]) * scale[i])
 		}
 	}
 }
