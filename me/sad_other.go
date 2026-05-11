@@ -7,7 +7,7 @@ import "unsafe"
 var hasSSE2 = false
 
 func SAD16x16_ASM(a, b *uint8, strideA, strideB int) uint32 {
-	if a == nil || b == nil || strideA <= 0 || strideB <= 0 {
+	if a == nil || b == nil || strideA < 16 || strideB < 16 {
 		return 0
 	}
 	aa := unsafe.Slice(a, strideA*16)
