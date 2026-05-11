@@ -1,10 +1,10 @@
-package slice
+package syntax
 
 // P-slice macroblock types and motion vector decoding.
 // ITU-T H.264 §7.3.5, §7.4.5
 
 import (
-	"github.com/rcarmo/go-264/entropy"
+	cavlc "github.com/rcarmo/go-264/entropy/cavlc"
 	"github.com/rcarmo/go-264/nal"
 )
 
@@ -124,7 +124,7 @@ func DecodeMBInter(r *nal.Reader, opts InterDecodeOpts) *MBInter {
 			group := blk / 4
 			if cbpLuma&(1<<uint(group)) != 0 {
 				nC := computeNC4x4Ctx(blk, nzCoeffs[:], leftNZ, topNZ)
-				block, tc := entropy.DecodeCAVLCBlock(r, nC)
+				block, tc := cavlc.DecodeCAVLCBlock(r, nC)
 				mb.Coeffs[blk] = [16]int16(block)
 				nzCoeffs[blk] = tc
 				mb.TotalCoeff[blk] = tc
@@ -133,7 +133,7 @@ func DecodeMBInter(r *nal.Reader, opts InterDecodeOpts) *MBInter {
 		cbpChroma := mb.CBP >> 4
 		if cbpChroma > 0 {
 			for comp := 0; comp < 2; comp++ {
-				dcBlock4 := entropy.DecodeCAVLCChromaDC(r)
+				dcBlock4 := cavlc.DecodeCAVLCChromaDC(r)
 				for i := 0; i < 4; i++ {
 					mb.CoeffsChroma[comp][i][0] = dcBlock4[i]
 				}
@@ -143,7 +143,7 @@ func DecodeMBInter(r *nal.Reader, opts InterDecodeOpts) *MBInter {
 					var nzChroma [4]int
 					for blk := 0; blk < 4; blk++ {
 						nC := computeNCChroma4x4Ctx(blk, nzChroma[:], leftChromaNZ, topChromaNZ, comp)
-						acBlock, tc := entropy.DecodeCAVLCBlockAC(r, nC)
+						acBlock, tc := cavlc.DecodeCAVLCBlockAC(r, nC)
 						for j := 1; j < 16; j++ {
 							mb.CoeffsChroma[comp][blk][j] = acBlock[j]
 						}

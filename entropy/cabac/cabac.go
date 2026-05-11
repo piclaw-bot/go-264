@@ -1,4 +1,4 @@
-package entropy
+package cabac
 
 // CABAC (Context-Adaptive Binary Arithmetic Coding) decoder.
 // ITU-T H.264 §9.3

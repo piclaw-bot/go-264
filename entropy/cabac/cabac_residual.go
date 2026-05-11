@@ -1,4 +1,4 @@
-package entropy
+package cabac
 
 // CABAC residual coefficient decoding.
 // Implements decode_cabac_residual_internal from FFmpeg h264_cabac.c.

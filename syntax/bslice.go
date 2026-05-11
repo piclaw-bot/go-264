@@ -1,4 +1,4 @@
-package slice
+package syntax
 
 // B-slice macroblock types and bidirectional prediction.
 // ITU-T H.264 §7.3.5, Table 7-14

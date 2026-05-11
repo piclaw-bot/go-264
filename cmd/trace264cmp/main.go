@@ -73,34 +73,42 @@ func compare(input string, verbose bool) error {
 		return fmt.Errorf("frame count mismatch: our=%d ffmpeg=%d", len(ourFrames), len(ffmpegFrames))
 	}
 
-	// --- Step 4: compare per-frame type + pixel stats ---
+	// --- Step 4: compare per-frame type + pixel stats + MB-type histogram ---
 	mismatches := 0
+	mbTypeHist := make(map[string]int) // accumulated across all frames
 	for i, ref := range ffmpegFrames {
 		our := ourFrames[i]
-		// Frame type
 		ourType := "P"
 		if our.IsIDR {
 			ourType = "I"
 		}
-		// Check frame type (IDR = I, non-IDR = P for these fixtures)
 		if ourType != ref.pType && !(ourType == "P" && ref.pType == "I" && !ref.isKey) {
 			fmt.Printf("  frame %d: TYPE MISMATCH our=%s ffmpeg=%s\n", i, ourType, ref.pType)
 			mismatches++
 		}
 
-		// Compute our pixel mean (Y only) and compare against FFmpeg's
 		ourMean := computeMeanY(our)
 		diff := math.Abs(ourMean - ref.mean[0])
-		ok := diff < 5.0 // allow up to 5 intensity units difference in mean
+		ok := diff < 5.0
 		status := "OK"
 		if !ok {
 			status = "MISMATCH"
 			mismatches++
 		}
+		mbTypeHist[ourType]++
 		if verbose || !ok {
 			fmt.Printf("  frame %d type=%s/%s: our_mean_Y=%.1f ffmpeg_mean_Y=%.1f diff=%.1f %s\n",
 				i, ourType, ref.pType, ourMean, ref.mean[0], diff, status)
 		}
+	}
+
+	// --- MB-type histogram summary ---
+	if verbose {
+		fmt.Printf("frame type histogram:")
+		for t, n := range mbTypeHist {
+			fmt.Printf(" %s=%d", t, n)
+		}
+		fmt.Println()
 	}
 
 	// --- Step 5: verify NAL frame-type sequence ---

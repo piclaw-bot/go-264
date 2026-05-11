@@ -5,10 +5,10 @@ package decode
 import (
 	"fmt"
 
-	"github.com/rcarmo/go-264/entropy"
+	cabac "github.com/rcarmo/go-264/entropy/cabac"
 	"github.com/rcarmo/go-264/frame"
 	"github.com/rcarmo/go-264/nal"
-	"github.com/rcarmo/go-264/slice"
+	"github.com/rcarmo/go-264/syntax"
 )
 
 // Decoder is an H.264 Annex B bitstream decoder.
@@ -100,7 +100,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 		return nil, fmt.Errorf("SPS %d not available", pps.SPSID)
 	}
 
-	hdr, r := slice.ParseHeader(unit.Payload, unit.Type, sps, pps)
+	hdr, r := syntax.ParseHeader(unit.Payload, unit.Type, sps, pps)
 	isIntra := hdr.IsIntra()
 	qp := hdr.QP(pps.PicInitQP)
 	d.chromaQPOffset = int(pps.ChromaQPIndexOffset)
@@ -139,24 +139,24 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 	for i := range intra8x8ModeCtx {
 		intra8x8ModeCtx[i] = -1
 	}
-	mvCtx := make([]slice.MotionVector, maxMBs)
+	mvCtx := make([]syntax.MotionVector, maxMBs)
 	refCtx := make([]int8, maxMBs)
 	for i := range refCtx {
 		refCtx[i] = -1
 	}
 	mv4Stride := mbWidth * 4
-	mv4Ctx := make([]slice.MotionVector, mv4Stride*mbHeight*4)
+	mv4Ctx := make([]syntax.MotionVector, mv4Stride*mbHeight*4)
 	ref4Ctx := make([]int8, mv4Stride*mbHeight*4)
 	for i := range ref4Ctx {
 		ref4Ctx[i] = -2
 	}
 	skipRun := 0
 	decodeAfterSkipRun := false
-	var cabacDec *entropy.CABACDecoder
-	var cabacModels []entropy.CABACCtx
+	var cabacDec *cabac.CABACDecoder
+	var cabacModels []cabac.CABACCtx
 	if pps.EntropyCodingMode == 1 {
-		cabacDec = entropy.NewCABACDecoder(r)
-		cabacModels = entropy.InitContextModels(currentQP, int(hdr.CabacInitIDC), isIntra)
+		cabacDec = cabac.NewCABACDecoder(r)
+		cabacModels = cabac.InitContextModels(currentQP, int(hdr.CabacInitIDC), isIntra)
 	}
 
 	for mbIdx := int(hdr.FirstMbInSlice); mbIdx < maxMBs; mbIdx++ {
@@ -185,7 +185,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 		}
 
 		if isIntra {
-			var mb *slice.MBIntra
+			var mb *syntax.MBIntra
 			if pps.EntropyCodingMode == 1 {
 				var leftEdge8x8, topEdge8x8 [2]int8
 				for br := 0; br < 2; br++ {
@@ -205,7 +205,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 				mb = decodeCABACIntraMB(cabacDec, cabacModels, leftNZ, topNZ, leftChromaNZ, topChromaNZ, leftCBP, topCBP, leftMBType, topMBType, leftChromaPred, topChromaPred, pps.Transform8x8Mode, leftEdge8x8, topEdge8x8)
 				currentQP = (currentQP + int(mb.QPDelta) + 52) % 52
 			} else {
-				mb = slice.DecodeMBIntra(r, slice.IntraDecodeOpts{
+				mb = syntax.DecodeMBIntra(r, syntax.IntraDecodeOpts{
 					SliceQP: int32(currentQP), Transform8x8: pps.Transform8x8Mode,
 					LeftNZ: leftNZ, TopNZ: topNZ, LeftChromaNZ: leftChromaNZ, TopChromaNZ: topChromaNZ,
 				})
@@ -260,7 +260,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 				break
 			}
 
-		} else if hdr.SliceType == slice.SliceTypeP {
+		} else if hdr.SliceType == syntax.SliceTypeP {
 			if pps.EntropyCodingMode == 1 {
 				mbInter, skipped := decodeCABACPInterMB(cabacDec, cabacModels, hdr.NumRefIdxL0Active, leftNZ, topNZ, leftChromaNZ, topChromaNZ, leftCBP, topCBP, pps.Transform8x8Mode)
 				if skipped {
@@ -295,7 +295,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 				}
 				if skipRun > 0 {
 					skipMV := predictSkipMV(mvCtx, refCtx, predMV, mbIdx, mbX, mbY, mbWidth)
-					mbSkip := &slice.MBInter{MBType: slice.PMBTypeP16x16}
+					mbSkip := &syntax.MBInter{MBType: syntax.PMBTypeP16x16}
 					mbSkip.MV[0] = skipMV
 					d.reconstructMBInter(f, mbSkip, mbX, mbY, currentQP)
 					mvCtx[mbIdx] = skipMV
@@ -307,12 +307,12 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 				}
 				decodeAfterSkipRun = false
 			}
-			mbInter := slice.DecodeMBInter(r, slice.InterDecodeOpts{
+			mbInter := syntax.DecodeMBInter(r, syntax.InterDecodeOpts{
 				SliceQP: int32(currentQP), NumRefFrames: hdr.NumRefIdxL0Active,
 				LeftNZ: leftNZ, TopNZ: topNZ, LeftChromaNZ: leftChromaNZ, TopChromaNZ: topChromaNZ,
 			})
-			if mbInter.MBType >= slice.PMBTypeIntra {
-				mb := slice.DecodeMBIntraWithType(r, mbInter.MBType-slice.PMBTypeIntra, slice.IntraDecodeOpts{
+			if mbInter.MBType >= syntax.PMBTypeIntra {
+				mb := syntax.DecodeMBIntraWithType(r, mbInter.MBType-syntax.PMBTypeIntra, syntax.IntraDecodeOpts{
 					SliceQP: int32(currentQP), Transform8x8: pps.Transform8x8Mode,
 					LeftNZ: leftNZ, TopNZ: topNZ, LeftChromaNZ: leftChromaNZ, TopChromaNZ: topChromaNZ,
 				})
@@ -333,9 +333,9 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 			}
 		} else {
 			// B-slice
-			mbBidi := slice.DecodeMBBidi(r, qp, hdr.NumRefIdxL0Active, hdr.NumRefIdxL1Active)
-			if mbBidi.MBType >= slice.BMBTypeIntra {
-				mb := &slice.MBIntra{MBType: mbBidi.MBType - slice.BMBTypeIntra}
+			mbBidi := syntax.DecodeMBBidi(r, qp, hdr.NumRefIdxL0Active, hdr.NumRefIdxL1Active)
+			if mbBidi.MBType >= syntax.BMBTypeIntra {
+				mb := &syntax.MBIntra{MBType: mbBidi.MBType - syntax.BMBTypeIntra}
 				d.reconstructMB(f, mb, mbX, mbY, int(qp), sps)
 			} else {
 				d.reconstructMBBidi(f, mbBidi, mbX, mbY, int(qp))

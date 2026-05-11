@@ -4,12 +4,12 @@ package decode
 // write-back. All functions are pure computations on the MV cache slices with
 // no dependency on the frame or reconstruction path.
 
-import "github.com/rcarmo/go-264/slice"
+import "github.com/rcarmo/go-264/syntax"
 
 // writeBackInter4x4 fills the 4x4 MV/ref cache for an inter macroblock after
 // decoding. Each luma4x4BlkIdx cell is written with the partition MV and ref.
-func writeBackInter4x4(mv4 []slice.MotionVector, ref4 []int8, stride4, mbX, mbY int, mb *slice.MBInter) {
-	fill := func(x4, y4, w4, h4 int, mv slice.MotionVector, ref int8) {
+func writeBackInter4x4(mv4 []syntax.MotionVector, ref4 []int8, stride4, mbX, mbY int, mb *syntax.MBInter) {
+	fill := func(x4, y4, w4, h4 int, mv syntax.MotionVector, ref int8) {
 		baseX, baseY := mbX*4+x4, mbY*4+y4
 		for y := 0; y < h4; y++ {
 			row := (baseY+y)*stride4 + baseX
@@ -20,15 +20,15 @@ func writeBackInter4x4(mv4 []slice.MotionVector, ref4 []int8, stride4, mbX, mbY 
 		}
 	}
 	switch mb.MBType {
-	case slice.PMBTypeP16x16:
+	case syntax.PMBTypeP16x16:
 		fill(0, 0, 4, 4, mb.MV[0], mb.RefIdx[0])
-	case slice.PMBTypeP16x8:
+	case syntax.PMBTypeP16x8:
 		fill(0, 0, 4, 2, mb.MV[0], mb.RefIdx[0])
 		fill(0, 2, 4, 2, mb.MV[1], mb.RefIdx[1])
-	case slice.PMBTypeP8x16:
+	case syntax.PMBTypeP8x16:
 		fill(0, 0, 2, 4, mb.MV[0], mb.RefIdx[0])
 		fill(2, 0, 2, 4, mb.MV[1], mb.RefIdx[1])
-	case slice.PMBTypeP8x8, slice.PMBTypeP8x8ref0:
+	case syntax.PMBTypeP8x8, syntax.PMBTypeP8x8ref0:
 		for part := 0; part < 4; part++ {
 			baseX := (part & 1) * 2
 			baseY := (part >> 1) * 2
@@ -67,11 +67,11 @@ func writeBackIntra4x4(ref4 []int8, stride4, mbX, mbY int) {
 // representativeRightEdgeMV returns the MV/ref from the rightmost partition,
 // used as the representative L0 context for the current macroblock in future
 // MV predictor lookups.
-func representativeRightEdgeMV(mb *slice.MBInter) (slice.MotionVector, int8) {
+func representativeRightEdgeMV(mb *syntax.MBInter) (syntax.MotionVector, int8) {
 	switch mb.MBType {
-	case slice.PMBTypeP8x16:
+	case syntax.PMBTypeP8x16:
 		return mb.MV[1], mb.RefIdx[1]
-	case slice.PMBTypeP8x8, slice.PMBTypeP8x8ref0:
+	case syntax.PMBTypeP8x8, syntax.PMBTypeP8x8ref0:
 		return mb.SubMV[4], mb.RefIdx[1]
 	default:
 		return mb.MV[0], mb.RefIdx[0]
@@ -81,21 +81,21 @@ func representativeRightEdgeMV(mb *slice.MBInter) (slice.MotionVector, int8) {
 // predictSkipMV returns the MV predictor for a P-skip macroblock.
 // It uses the 4x4 cache via predictSkipMV4x4; the predMV argument (from the
 // skip path) is returned unchanged as a pass-through.
-func predictSkipMV(ctx []slice.MotionVector, refCtx []int8, pred slice.MotionVector, mbIdx, mbX, mbY, mbWidth int) slice.MotionVector {
+func predictSkipMV(ctx []syntax.MotionVector, refCtx []int8, pred syntax.MotionVector, mbIdx, mbX, mbY, mbWidth int) syntax.MotionVector {
 	return pred
 }
 
 // predictSkipMV4x4 computes the P-skip MV predictor directly from the 4x4
 // cache, matching FFmpeg's pred_pskip_motion / h264_mv_pred_skip path.
-func predictSkipMV4x4(mv4 []slice.MotionVector, ref4 []int8, stride4, x4, y4 int) slice.MotionVector {
+func predictSkipMV4x4(mv4 []syntax.MotionVector, ref4 []int8, stride4, x4, y4 int) syntax.MotionVector {
 	const partNotAvailable int8 = -2
 	left, leftRef := getMV4(mv4, ref4, stride4, x4-1, y4)
 	top, topRef := getMV4(mv4, ref4, stride4, x4, y4-1)
 	if leftRef == partNotAvailable || topRef == partNotAvailable {
-		return slice.MotionVector{}
+		return syntax.MotionVector{}
 	}
 	if (leftRef == 0 && left.X == 0 && left.Y == 0) || (topRef == 0 && top.X == 0 && top.Y == 0) {
-		return slice.MotionVector{}
+		return syntax.MotionVector{}
 	}
 	c, cRef := getMV4(mv4, ref4, stride4, x4+4, y4-1)
 	if cRef == partNotAvailable {
@@ -112,7 +112,7 @@ func predictSkipMV4x4(mv4 []slice.MotionVector, ref4 []int8, stride4, x4, y4 int
 		matchCount++
 	}
 	if matchCount > 1 {
-		return slice.MotionVector{X: median3(left.X, top.X, c.X), Y: median3(left.Y, top.Y, c.Y)}
+		return syntax.MotionVector{X: median3(left.X, top.X, c.X), Y: median3(left.Y, top.Y, c.Y)}
 	}
 	if matchCount == 1 {
 		if leftRef == 0 {
@@ -123,24 +123,24 @@ func predictSkipMV4x4(mv4 []slice.MotionVector, ref4 []int8, stride4, x4, y4 int
 		}
 		return c
 	}
-	return slice.MotionVector{X: median3(left.X, top.X, c.X), Y: median3(left.Y, top.Y, c.Y)}
+	return syntax.MotionVector{X: median3(left.X, top.X, c.X), Y: median3(left.Y, top.Y, c.Y)}
 }
 
-func predictMBMV(ctx []slice.MotionVector, refCtx []int8, targetRef int8, mbIdx, mbX, mbY, mbWidth int) slice.MotionVector {
+func predictMBMV(ctx []syntax.MotionVector, refCtx []int8, targetRef int8, mbIdx, mbX, mbY, mbWidth int) syntax.MotionVector {
 	a, b, c, availA, availB, availC := neighbourMVs(ctx, refCtx, targetRef, mbIdx, mbX, mbY, mbWidth)
-	return slice.PredictMV(a, b, c, availA, availB, availC)
+	return syntax.PredictMV(a, b, c, availA, availB, availC)
 }
 
-func getMV4(mv4 []slice.MotionVector, ref4 []int8, stride4, x4, y4 int) (slice.MotionVector, int8) {
+func getMV4(mv4 []syntax.MotionVector, ref4 []int8, stride4, x4, y4 int) (syntax.MotionVector, int8) {
 	const partNotAvailable int8 = -2
 	if x4 < 0 || y4 < 0 || x4 >= stride4 || y4*stride4+x4 >= len(ref4) {
-		return slice.MotionVector{}, partNotAvailable
+		return syntax.MotionVector{}, partNotAvailable
 	}
 	idx := y4*stride4 + x4
 	return mv4[idx], ref4[idx]
 }
 
-func predictMotion4x4(mv4 []slice.MotionVector, ref4 []int8, stride4, x4, y4, partWidth4 int, targetRef int8) slice.MotionVector {
+func predictMotion4x4(mv4 []syntax.MotionVector, ref4 []int8, stride4, x4, y4, partWidth4 int, targetRef int8) syntax.MotionVector {
 	const partNotAvailable int8 = -2
 	a, refA := getMV4(mv4, ref4, stride4, x4-1, y4)
 	b, refB := getMV4(mv4, ref4, stride4, x4, y4-1)
@@ -159,7 +159,7 @@ func predictMotion4x4(mv4 []slice.MotionVector, ref4 []int8, stride4, x4, y4, pa
 		matchCount++
 	}
 	if matchCount > 1 {
-		return slice.MotionVector{X: median3(a.X, b.X, c.X), Y: median3(a.Y, b.Y, c.Y)}
+		return syntax.MotionVector{X: median3(a.X, b.X, c.X), Y: median3(a.Y, b.Y, c.Y)}
 	}
 	if matchCount == 1 {
 		if refA == targetRef {
@@ -173,10 +173,10 @@ func predictMotion4x4(mv4 []slice.MotionVector, ref4 []int8, stride4, x4, y4, pa
 	if refB == partNotAvailable && refC == partNotAvailable && refA != partNotAvailable {
 		return a
 	}
-	return slice.MotionVector{X: median3(a.X, b.X, c.X), Y: median3(a.Y, b.Y, c.Y)}
+	return syntax.MotionVector{X: median3(a.X, b.X, c.X), Y: median3(a.Y, b.Y, c.Y)}
 }
 
-func predict16x8Motion4x4(mv4 []slice.MotionVector, ref4 []int8, stride4, x4, y4 int, part int, targetRef int8) slice.MotionVector {
+func predict16x8Motion4x4(mv4 []syntax.MotionVector, ref4 []int8, stride4, x4, y4 int, part int, targetRef int8) syntax.MotionVector {
 	if part == 0 {
 		b, refB := getMV4(mv4, ref4, stride4, x4, y4-1)
 		if refB == targetRef {
@@ -191,7 +191,7 @@ func predict16x8Motion4x4(mv4 []slice.MotionVector, ref4 []int8, stride4, x4, y4
 	return predictMotion4x4(mv4, ref4, stride4, x4, y4+2, 4, targetRef)
 }
 
-func predict8x16Motion4x4(mv4 []slice.MotionVector, ref4 []int8, stride4, x4, y4 int, part int, targetRef int8) slice.MotionVector {
+func predict8x16Motion4x4(mv4 []syntax.MotionVector, ref4 []int8, stride4, x4, y4 int, part int, targetRef int8) syntax.MotionVector {
 	if part == 0 {
 		a, refA := getMV4(mv4, ref4, stride4, x4-1, y4)
 		if refA == targetRef {
@@ -209,7 +209,7 @@ func predict8x16Motion4x4(mv4 []slice.MotionVector, ref4 []int8, stride4, x4, y4
 	return predictMotion4x4(mv4, ref4, stride4, x4+2, y4, 2, targetRef)
 }
 
-func fillMV4(mv4 []slice.MotionVector, ref4 []int8, stride4, x4, y4, w4, h4 int, mv slice.MotionVector, ref int8) {
+func fillMV4(mv4 []syntax.MotionVector, ref4 []int8, stride4, x4, y4, w4, h4 int, mv syntax.MotionVector, ref int8) {
 	for y := 0; y < h4; y++ {
 		row := (y4+y)*stride4 + x4
 		for x := 0; x < w4; x++ {
@@ -234,7 +234,7 @@ func median3(a, b, c int16) int16 {
 	return b
 }
 
-func neighbourMVs(ctx []slice.MotionVector, refCtx []int8, targetRef int8, mbIdx, mbX, mbY, mbWidth int) (a, b, c slice.MotionVector, availA, availB, availC bool) {
+func neighbourMVs(ctx []syntax.MotionVector, refCtx []int8, targetRef int8, mbIdx, mbX, mbY, mbWidth int) (a, b, c syntax.MotionVector, availA, availB, availC bool) {
 	availA = mbX > 0 && refCtx[mbIdx-1] == targetRef
 	availB = mbY > 0 && refCtx[mbIdx-mbWidth] == targetRef
 	availC = mbY > 0 && mbX+1 < mbWidth && refCtx[mbIdx-mbWidth+1] == targetRef
@@ -253,22 +253,22 @@ func neighbourMVs(ctx []slice.MotionVector, refCtx []int8, targetRef int8, mbIdx
 	return
 }
 
-func addMV(mv *slice.MotionVector, pred slice.MotionVector) {
+func addMV(mv *syntax.MotionVector, pred syntax.MotionVector) {
 	mv.X += pred.X
 	mv.Y += pred.Y
 }
 
-func applyMVPredictors(mb *slice.MBInter, ctx []slice.MotionVector, refCtx []int8, mv4 []slice.MotionVector, ref4 []int8, stride4 int, mbIdx, mbX, mbY, mbWidth int) {
+func applyMVPredictors(mb *syntax.MBInter, ctx []syntax.MotionVector, refCtx []int8, mv4 []syntax.MotionVector, ref4 []int8, stride4 int, mbIdx, mbX, mbY, mbWidth int) {
 	switch mb.MBType {
-	case slice.PMBTypeP16x16:
+	case syntax.PMBTypeP16x16:
 		addMV(&mb.MV[0], predictMotion4x4(mv4, ref4, stride4, mbX*4, mbY*4, 4, mb.RefIdx[0]))
-	case slice.PMBTypeP16x8:
+	case syntax.PMBTypeP16x8:
 		pred0 := predict16x8Motion4x4(mv4, ref4, stride4, mbX*4, mbY*4, 0, mb.RefIdx[0])
 		pred1 := predict16x8Motion4x4(mv4, ref4, stride4, mbX*4, mbY*4, 1, mb.RefIdx[1])
 		addMV(&mb.MV[0], pred0)
 		addMV(&mb.MV[1], pred1)
-	case slice.PMBTypeP8x16:
-		localMV4 := append([]slice.MotionVector(nil), mv4...)
+	case syntax.PMBTypeP8x16:
+		localMV4 := append([]syntax.MotionVector(nil), mv4...)
 		localRef4 := append([]int8(nil), ref4...)
 		x4, y4 := mbX*4, mbY*4
 		pred0 := predict8x16Motion4x4(localMV4, localRef4, stride4, x4, y4, 0, mb.RefIdx[0])
@@ -276,8 +276,8 @@ func applyMVPredictors(mb *slice.MBInter, ctx []slice.MotionVector, refCtx []int
 		fillMV4(localMV4, localRef4, stride4, x4, y4, 2, 4, mb.MV[0], mb.RefIdx[0])
 		pred1 := predict8x16Motion4x4(localMV4, localRef4, stride4, x4, y4, 1, mb.RefIdx[1])
 		addMV(&mb.MV[1], pred1)
-	case slice.PMBTypeP8x8, slice.PMBTypeP8x8ref0:
-		localMV4 := append([]slice.MotionVector(nil), mv4...)
+	case syntax.PMBTypeP8x8, syntax.PMBTypeP8x8ref0:
+		localMV4 := append([]syntax.MotionVector(nil), mv4...)
 		localRef4 := append([]int8(nil), ref4...)
 		mbBaseX, mbBaseY := mbX*4, mbY*4
 		for part := 0; part < 4; part++ {

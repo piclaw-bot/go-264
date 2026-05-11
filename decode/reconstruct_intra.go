@@ -7,11 +7,11 @@ import (
 	"github.com/rcarmo/go-264/frame"
 	"github.com/rcarmo/go-264/nal"
 	"github.com/rcarmo/go-264/pred"
-	"github.com/rcarmo/go-264/slice"
+	"github.com/rcarmo/go-264/syntax"
 	"github.com/rcarmo/go-264/transform"
 )
 
-func (d *Decoder) reconstructMB(f *frame.Frame, mb *slice.MBIntra, mbX, mbY int, qp int, sps *nal.SPS) {
+func (d *Decoder) reconstructMB(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY int, qp int, sps *nal.SPS) {
 	if mb.MBType >= 1 && mb.MBType <= 24 {
 		d.reconstruct16x16(f, mb, mbX, mbY, qp)
 	} else if mb.MBType == 0 {
@@ -25,7 +25,7 @@ func (d *Decoder) reconstructMB(f *frame.Frame, mb *slice.MBIntra, mbX, mbY int,
 	// I_PCM: raw samples (rare, skip)
 }
 
-func (d *Decoder) reconstruct16x16(f *frame.Frame, mb *slice.MBIntra, mbX, mbY, qp int) {
+func (d *Decoder) reconstruct16x16(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY, qp int) {
 	mode := int(mb.Intra16x16PredMode)
 	top := make([]uint8, 16)
 	left := make([]uint8, 16)
@@ -128,7 +128,7 @@ func (d *Decoder) reconstruct16x16(f *frame.Frame, mb *slice.MBIntra, mbX, mbY, 
 	}
 }
 
-func (d *Decoder) reconstruct4x4(f *frame.Frame, mb *slice.MBIntra, mbX, mbY, qp int) {
+func (d *Decoder) reconstruct4x4(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY, qp int) {
 	for blkIdx := 0; blkIdx < 16; blkIdx++ {
 		bx := blk4x4X[blkIdx]
 		by := blk4x4Y[blkIdx]
@@ -262,7 +262,7 @@ func (d *Decoder) reconstruct4x4(f *frame.Frame, mb *slice.MBIntra, mbX, mbY, qp
 
 // reconstruct8x8 handles I_NxN macroblocks using 8×8 DCT (High profile
 // transform_size_8x8_flag=1).
-func (d *Decoder) reconstruct8x8(f *frame.Frame, mb *slice.MBIntra, mbX, mbY, qp int) {
+func (d *Decoder) reconstruct8x8(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY, qp int) {
 	blk8x8Offsets := [4][2]int{{0, 0}, {8, 0}, {0, 8}, {8, 8}}
 	for b8 := 0; b8 < 4; b8++ {
 		bx := blk8x8Offsets[b8][0]
@@ -328,7 +328,7 @@ func (d *Decoder) reconstruct8x8(f *frame.Frame, mb *slice.MBIntra, mbX, mbY, qp
 	}
 }
 
-func (d *Decoder) reconstructChromaIntra(f *frame.Frame, mb *slice.MBIntra, mbX, mbY, qp int) {
+func (d *Decoder) reconstructChromaIntra(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY, qp int) {
 	chromaQP := frame.ChromaQP(qp, d.chromaQPOffset)
 	for comp := 0; comp < 2; comp++ {
 		predicted := d.predictChroma8x8(f, comp, mbX, mbY, int(mb.ChromaPredMode))

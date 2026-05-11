@@ -1,4 +1,4 @@
-package entropy
+package cavlc
 
 import "github.com/rcarmo/go-264/nal"
 

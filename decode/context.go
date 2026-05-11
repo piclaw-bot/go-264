@@ -3,14 +3,14 @@ package decode
 // decode/context.go — per-MB context helpers, block-index lookup tables,
 // and CABAC context utility functions.
 
-import "github.com/rcarmo/go-264/slice"
+import "github.com/rcarmo/go-264/syntax"
 
 // blk4x4X/Y: pixel offset of each luma 4x4 block within the 16×16 macroblock.
-// Derived from slice.Blk4x4Col/Row (column/row index 0-3) multiplied by 4.
+// Derived from syntax.Blk4x4Col/Row (column/row index 0-3) multiplied by 4.
 var blk4x4X = func() [16]int {
 	var a [16]int
 	for i := 0; i < 16; i++ {
-		a[i] = slice.Blk4x4Col[i] * 4
+		a[i] = syntax.Blk4x4Col[i] * 4
 	}
 	return a
 }()
@@ -18,19 +18,19 @@ var blk4x4X = func() [16]int {
 var blk4x4Y = func() [16]int {
 	var a [16]int
 	for i := 0; i < 16; i++ {
-		a[i] = slice.Blk4x4Row[i] * 4
+		a[i] = syntax.Blk4x4Row[i] * 4
 	}
 	return a
 }()
 
 // blkXYToIdx aliases the canonical table from the slice package.
-var blkXYToIdx = slice.BlkXYToIdx
+var blkXYToIdx = syntax.BlkXYToIdx
 
 // nzCBFCtxLuma returns (nza, nzb) for the CABAC coded_block_flag context of
 // luma 4x4 block blkIdx using in-MB non-zero tracking and left/top MB contexts.
 func nzCBFCtxLuma(blkIdx int, nzMB *[16]int, leftNZ, topNZ *[16]int) (int, int) {
-	col := slice.Blk4x4Col[blkIdx]
-	row := slice.Blk4x4Row[blkIdx]
+	col := syntax.Blk4x4Col[blkIdx]
+	row := syntax.Blk4x4Row[blkIdx]
 	var la, lb int
 	if col > 0 {
 		la = nzMB[blkXYToIdx[row][col-1]]

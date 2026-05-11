@@ -1,18 +1,18 @@
 package decode
 
 // decode/cabac_mb.go — CABAC macroblock decode for P-slice inter and I-slice
-// intra macroblocks. Calls slice.DecodeCABACCBP/DQP/Ref/MVD for pure syntax;
-// residual coefficients are decoded via entropy.CABACDecoder.DecodeCABACResidual.
+// intra macroblocks. Calls syntax.DecodeCABACCBP/DQP/Ref/MVD for pure syntax;
+// residual coefficients are decoded via cabac.CABACDecoder.DecodeCABACResidual.
 
 import (
-	"github.com/rcarmo/go-264/entropy"
-	"github.com/rcarmo/go-264/slice"
+	cabac "github.com/rcarmo/go-264/entropy/cabac"
+	"github.com/rcarmo/go-264/syntax"
 )
 
 // decodeCABACPInterMB decodes one CABAC-coded P-slice inter macroblock.
 // Returns (mb, skipped=true) for P-skip macroblocks.
-func decodeCABACPInterMB(dec *entropy.CABACDecoder, models []entropy.CABACCtx, numRefFrames uint32, leftNZ, topNZ *[16]int, leftChromaNZ, topChromaNZ *[2][4]int, leftCBP, topCBP uint32, transform8x8Mode bool) (*slice.MBInter, bool) {
-	mb := &slice.MBInter{MBType: slice.PMBTypeP16x16}
+func decodeCABACPInterMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, numRefFrames uint32, leftNZ, topNZ *[16]int, leftChromaNZ, topChromaNZ *[2][4]int, leftCBP, topCBP uint32, transform8x8Mode bool) (*syntax.MBInter, bool) {
+	mb := &syntax.MBInter{MBType: syntax.PMBTypeP16x16}
 	if dec == nil || len(models) < 20 {
 		return mb, true
 	}
@@ -28,43 +28,43 @@ func decodeCABACPInterMB(dec *entropy.CABACDecoder, models []entropy.CABACCtx, n
 			mb.MBType = 2 - dec.DecodeBin(&models[17]) // P8x16 or P16x8
 		}
 	} else {
-		mb.MBType = slice.PMBTypeP16x16 // TODO: full intra-in-P CABAC path
+		mb.MBType = syntax.PMBTypeP16x16 // TODO: full intra-in-P CABAC path
 	}
 	parts := 1
 	switch mb.MBType {
-	case slice.PMBTypeP16x8, slice.PMBTypeP8x16:
+	case syntax.PMBTypeP16x8, syntax.PMBTypeP8x16:
 		parts = 2
-	case slice.PMBTypeP8x8, slice.PMBTypeP8x8ref0:
+	case syntax.PMBTypeP8x8, syntax.PMBTypeP8x8ref0:
 		parts = 4
 		for i := 0; i < 4; i++ {
 			mb.SubMBType[i] = 0
 		}
 	}
-	if numRefFrames > 1 && mb.MBType != slice.PMBTypeP8x8ref0 {
+	if numRefFrames > 1 && mb.MBType != syntax.PMBTypeP8x8ref0 {
 		for i := 0; i < parts; i++ {
-			mb.RefIdx[i] = int8(slice.DecodeCABACRef(dec, models, 0))
+			mb.RefIdx[i] = int8(syntax.DecodeCABACRef(dec, models, 0))
 		}
 	}
-	if mb.MBType == slice.PMBTypeP8x8 || mb.MBType == slice.PMBTypeP8x8ref0 {
+	if mb.MBType == syntax.PMBTypeP8x8 || mb.MBType == syntax.PMBTypeP8x8ref0 {
 		for i := 0; i < 4; i++ {
-			mdx := slice.DecodeCABACMVD(dec, models, 40, 0)
-			mdy := slice.DecodeCABACMVD(dec, models, 47, 0)
-			mb.SubMV[i*4] = slice.MotionVector{X: mdx, Y: mdy}
+			mdx := syntax.DecodeCABACMVD(dec, models, 40, 0)
+			mdy := syntax.DecodeCABACMVD(dec, models, 47, 0)
+			mb.SubMV[i*4] = syntax.MotionVector{X: mdx, Y: mdy}
 		}
 		mb.DecodedMVDX = mb.SubMV[0].X
 		mb.DecodedMVDY = mb.SubMV[0].Y
 	} else {
 		for i := 0; i < parts; i++ {
-			mdx := slice.DecodeCABACMVD(dec, models, 40, 0)
-			mdy := slice.DecodeCABACMVD(dec, models, 47, 0)
-			mb.MV[i] = slice.MotionVector{X: mdx, Y: mdy}
+			mdx := syntax.DecodeCABACMVD(dec, models, 40, 0)
+			mdy := syntax.DecodeCABACMVD(dec, models, 47, 0)
+			mb.MV[i] = syntax.MotionVector{X: mdx, Y: mdy}
 		}
 		mb.DecodedMVDX = mb.MV[0].X
 		mb.DecodedMVDY = mb.MV[0].Y
 	}
-	mb.CBP = slice.DecodeCABACCBP(dec, models, leftCBP, topCBP)
+	mb.CBP = syntax.DecodeCABACCBP(dec, models, leftCBP, topCBP)
 	if mb.CBP != 0 {
-		mb.QPDelta = int32(slice.DecodeCABACDQP(dec, models, 0))
+		mb.QPDelta = int32(syntax.DecodeCABACDQP(dec, models, 0))
 		use8x8Residual := false
 		if transform8x8Mode && mb.CBP&0xF != 0 {
 			if dec.DecodeBin(&models[399]) == 1 {
@@ -131,8 +131,8 @@ func decodeCABACPInterMB(dec *entropy.CABACDecoder, models []entropy.CABACCtx, n
 // decodeCABACIntraMB decodes one CABAC-coded I-slice intra macroblock.
 // Models the FFmpeg decode_cabac_intra_mb_type / decode_cabac_mb_intra4x4_pred_mode
 // / decode_cabac_mb_chroma_pre_mode flow from h264_cabac.c.
-func decodeCABACIntraMB(dec *entropy.CABACDecoder, models []entropy.CABACCtx, leftNZ, topNZ *[16]int, leftChromaNZ, topChromaNZ *[2][4]int, leftCBP, topCBP uint32, leftMBType, topMBType uint32, leftChromaPred, topChromaPred int8, transform8x8Mode bool, leftEdge8x8, topEdge8x8 [2]int8) *slice.MBIntra {
-	mb := &slice.MBIntra{}
+func decodeCABACIntraMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, leftNZ, topNZ *[16]int, leftChromaNZ, topChromaNZ *[2][4]int, leftCBP, topCBP uint32, leftMBType, topMBType uint32, leftChromaPred, topChromaPred int8, transform8x8Mode bool, leftEdge8x8, topEdge8x8 [2]int8) *syntax.MBIntra {
+	mb := &syntax.MBIntra{}
 	if dec == nil || len(models) < 128 {
 		return mb
 	}
@@ -250,12 +250,12 @@ func decodeCABACIntraMB(dec *entropy.CABACDecoder, models []entropy.CABACCtx, le
 
 	// CBP for I_NxN (I_16x16 CBP is in mb_type already)
 	if mb.MBType == 0 {
-		mb.CodedBlockPattern = slice.DecodeCABACCBP(dec, models, leftCBP, topCBP)
+		mb.CodedBlockPattern = syntax.DecodeCABACCBP(dec, models, leftCBP, topCBP)
 	}
 
 	// QP delta
 	if mb.CodedBlockPattern > 0 || (mb.MBType >= 1 && mb.MBType <= 24) {
-		mb.QPDelta = int32(slice.DecodeCABACDQP(dec, models, 0))
+		mb.QPDelta = int32(syntax.DecodeCABACDQP(dec, models, 0))
 	}
 
 	// Residual coefficients

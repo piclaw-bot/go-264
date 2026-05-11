@@ -1,7 +1,7 @@
-package slice
+package syntax
 
 import (
-	"github.com/rcarmo/go-264/entropy"
+	cavlc "github.com/rcarmo/go-264/entropy/cavlc"
 	"github.com/rcarmo/go-264/nal"
 )
 
@@ -114,7 +114,7 @@ func DecodeMBIntraWithType(r *nal.Reader, mbType uint32, opts IntraDecodeOpts) *
 	if mb.MBType >= 1 && mb.MBType <= 24 {
 		// I_16x16: decode the 16 luma DC coefficients as a separate CAVLC block.
 		dcNC := computeNCLumaDC(leftNZ, topNZ)
-		dcBlock, dcTC := entropy.DecodeCAVLCBlock(r, dcNC)
+		dcBlock, dcTC := cavlc.DecodeCAVLCBlock(r, dcNC)
 		mb.LumaDCTotalCoeff = dcTC
 		for pos := 0; pos < 16; pos++ {
 			blk := BlkXYToIdx[pos/4][pos%4]
@@ -125,7 +125,7 @@ func DecodeMBIntraWithType(r *nal.Reader, mbType uint32, opts IntraDecodeOpts) *
 			var nzCoeffs [16]int
 			for blk := 0; blk < 16; blk++ {
 				nC := computeNC4x4Ctx(blk, nzCoeffs[:], leftNZ, topNZ)
-				acBlock, tc := entropy.DecodeCAVLCBlockAC(r, nC)
+				acBlock, tc := cavlc.DecodeCAVLCBlockAC(r, nC)
 				for j := 1; j < 16; j++ {
 					mb.Coeffs[blk][j] = acBlock[j]
 				}
@@ -142,7 +142,7 @@ func DecodeMBIntraWithType(r *nal.Reader, mbType uint32, opts IntraDecodeOpts) *
 					for sub := 0; sub < 4; sub++ {
 						blk4 := blk8*4 + sub
 						nC := computeNC4x4Ctx(blk4, nzCoeffs[:], leftNZ, topNZ)
-						block, tc := entropy.DecodeCAVLCBlock(r, nC)
+						block, tc := cavlc.DecodeCAVLCBlock(r, nC)
 						mb.Coeffs[blk4] = [16]int16(block)
 						nzCoeffs[blk4] = tc
 						mb.TotalCoeff[blk4] = tc
@@ -154,7 +154,7 @@ func DecodeMBIntraWithType(r *nal.Reader, mbType uint32, opts IntraDecodeOpts) *
 				group := blk / 4
 				if cbpLuma&(1<<uint(group)) != 0 {
 					nC := computeNC4x4Ctx(blk, nzCoeffs[:], leftNZ, topNZ)
-					block, tc := entropy.DecodeCAVLCBlock(r, nC)
+					block, tc := cavlc.DecodeCAVLCBlock(r, nC)
 					mb.Coeffs[blk] = [16]int16(block)
 					nzCoeffs[blk] = tc
 					mb.TotalCoeff[blk] = tc
@@ -167,7 +167,7 @@ func DecodeMBIntraWithType(r *nal.Reader, mbType uint32, opts IntraDecodeOpts) *
 	cbpChroma := mb.CodedBlockPattern >> 4
 	if cbpChroma > 0 {
 		for comp := 0; comp < 2; comp++ {
-			dcBlock4 := entropy.DecodeCAVLCChromaDC(r)
+			dcBlock4 := cavlc.DecodeCAVLCChromaDC(r)
 			for i := 0; i < 4; i++ {
 				mb.CoeffsChroma[comp][i][0] = dcBlock4[i]
 			}
@@ -177,7 +177,7 @@ func DecodeMBIntraWithType(r *nal.Reader, mbType uint32, opts IntraDecodeOpts) *
 				var nzChroma [4]int
 				for blk := 0; blk < 4; blk++ {
 					nC := computeNCChroma4x4Ctx(blk, nzChroma[:], leftChromaNZ, topChromaNZ, comp)
-					acBlock, tc := entropy.DecodeCAVLCBlockAC(r, nC)
+					acBlock, tc := cavlc.DecodeCAVLCBlockAC(r, nC)
 					for j := 1; j < 16; j++ {
 						mb.CoeffsChroma[comp][blk][j] = acBlock[j]
 					}

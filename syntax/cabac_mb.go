@@ -1,15 +1,15 @@
-package slice
+package syntax
 
 // CABAC macroblock-level syntax decoders.
 // These decode pure H.264 syntax elements and carry no dependency on
 // frame reconstruction; they belong in the slice package alongside the
 // CAVLC equivalents in macroblock.go and pslice.go.
 
-import "github.com/rcarmo/go-264/entropy"
+import cabac "github.com/rcarmo/go-264/entropy/cabac"
 
 // DecodeCABACCBP decodes the CABAC coded_block_pattern for one macroblock.
 // H.264 §9.3.2.6 / FFmpeg h264_cabac.c decode_cabac_mb_cbp_luma/chroma.
-func DecodeCABACCBP(dec *entropy.CABACDecoder, models []entropy.CABACCtx, leftCBP, topCBP uint32) uint32 {
+func DecodeCABACCBP(dec *cabac.CABACDecoder, models []cabac.CABACCtx, leftCBP, topCBP uint32) uint32 {
 	if dec == nil || len(models) <= 83 {
 		return 0
 	}
@@ -46,7 +46,7 @@ func DecodeCABACCBP(dec *entropy.CABACDecoder, models []entropy.CABACCtx, leftCB
 
 // DecodeCABACDQP decodes the CABAC QP delta for one macroblock.
 // H.264 §9.3.2.7 / FFmpeg h264_cabac.c decode_cabac_mb_dqp.
-func DecodeCABACDQP(dec *entropy.CABACDecoder, models []entropy.CABACCtx, lastQScaleDiff int) int {
+func DecodeCABACDQP(dec *cabac.CABACDecoder, models []cabac.CABACCtx, lastQScaleDiff int) int {
 	if dec == nil || len(models) <= 63 {
 		return 0
 	}
@@ -70,7 +70,7 @@ func DecodeCABACDQP(dec *entropy.CABACDecoder, models []entropy.CABACCtx, lastQS
 
 // DecodeCABACRef decodes a CABAC reference frame index.
 // H.264 §9.3.2.3 / FFmpeg h264_cabac.c decode_cabac_mb_ref.
-func DecodeCABACRef(dec *entropy.CABACDecoder, models []entropy.CABACCtx, ctx int) uint32 {
+func DecodeCABACRef(dec *cabac.CABACDecoder, models []cabac.CABACCtx, ctx int) uint32 {
 	if dec == nil || len(models) <= 58 {
 		return 0
 	}
@@ -89,7 +89,7 @@ func DecodeCABACRef(dec *entropy.CABACDecoder, models []entropy.CABACCtx, ctx in
 // ctxBase: 40 for mvd_x, 47 for mvd_y.
 // amvd: |left_mvd| + |top_mvd| context sum (0 when unavailable).
 // H.264 §9.3.2.4 / FFmpeg h264_cabac.c decode_cabac_mb_mvd.
-func DecodeCABACMVD(dec *entropy.CABACDecoder, models []entropy.CABACCtx, ctxBase int, amvd int) int16 {
+func DecodeCABACMVD(dec *cabac.CABACDecoder, models []cabac.CABACCtx, ctxBase int, amvd int) int16 {
 	if dec == nil || len(models) <= ctxBase+6 {
 		return 0
 	}

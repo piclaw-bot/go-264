@@ -1,4 +1,4 @@
-package entropy
+package cavlc
 
 import (
 	"testing"

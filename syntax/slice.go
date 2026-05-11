@@ -1,4 +1,4 @@
-package slice
+package syntax
 
 import "github.com/rcarmo/go-264/nal"
 

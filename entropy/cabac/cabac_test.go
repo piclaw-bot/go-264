@@ -1,4 +1,4 @@
-package entropy
+package cabac
 
 import (
 	"testing"

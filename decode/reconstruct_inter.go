@@ -7,7 +7,7 @@ package decode
 import (
 	"github.com/rcarmo/go-264/frame"
 	"github.com/rcarmo/go-264/pred"
-	"github.com/rcarmo/go-264/slice"
+	"github.com/rcarmo/go-264/syntax"
 	"github.com/rcarmo/go-264/transform"
 )
 
@@ -22,7 +22,7 @@ func (d *Decoder) refL0(refIdx int8) *frame.Frame {
 	return d.DPB.Frames[len(d.DPB.Frames)-1-idx]
 }
 
-func (d *Decoder) reconstructMBInter(f *frame.Frame, mb *slice.MBInter, mbX, mbY, qp int) {
+func (d *Decoder) reconstructMBInter(f *frame.Frame, mb *syntax.MBInter, mbX, mbY, qp int) {
 	ref := d.refL0(mb.RefIdx[0])
 	if ref == nil {
 		for y := 0; y < 16; y++ {
@@ -34,14 +34,14 @@ func (d *Decoder) reconstructMBInter(f *frame.Frame, mb *slice.MBInter, mbX, mbY
 	}
 
 	switch mb.MBType {
-	case slice.PMBTypeP16x16:
+	case syntax.PMBTypeP16x16:
 		mv := mb.MV[0]
 		predicted := make([]uint8, 256)
 		pred.InterPred16x16At(predicted, ref.Y, ref.StrideY, mbX*16, mbY*16, pred.MotionVector{X: mv.X, Y: mv.Y})
 		d.writeInterResidual(f, mb, predicted, mbX, mbY, qp)
 		d.reconstructChromaInter(f, ref, mb, mbX, mbY, qp)
 
-	case slice.PMBTypeP16x8:
+	case syntax.PMBTypeP16x8:
 		predicted := make([]uint8, 256)
 		tmp := make([]uint8, 256)
 		ref0 := d.refL0(mb.RefIdx[0])
@@ -65,7 +65,7 @@ func (d *Decoder) reconstructMBInter(f *frame.Frame, mb *slice.MBInter, mbX, mbY
 		d.writeInterResidual(f, mb, predicted, mbX, mbY, qp)
 		d.reconstructChromaInter(f, ref, mb, mbX, mbY, qp)
 
-	case slice.PMBTypeP8x16:
+	case syntax.PMBTypeP8x16:
 		predicted := make([]uint8, 256)
 		tmp := make([]uint8, 256)
 		ref0 := d.refL0(mb.RefIdx[0])
@@ -89,11 +89,11 @@ func (d *Decoder) reconstructMBInter(f *frame.Frame, mb *slice.MBInter, mbX, mbY
 		d.writeInterResidual(f, mb, predicted, mbX, mbY, qp)
 		d.reconstructChromaInter(f, ref, mb, mbX, mbY, qp)
 
-	case slice.PMBTypeP8x8, slice.PMBTypeP8x8ref0:
+	case syntax.PMBTypeP8x8, syntax.PMBTypeP8x8ref0:
 		predicted := make([]uint8, 256)
 		for part := 0; part < 4; part++ {
 			partRef := ref
-			if mb.MBType != slice.PMBTypeP8x8ref0 {
+			if mb.MBType != syntax.PMBTypeP8x8ref0 {
 				if r := d.refL0(mb.RefIdx[part]); r != nil {
 					partRef = r
 				}
@@ -134,10 +134,10 @@ func (d *Decoder) reconstructMBInter(f *frame.Frame, mb *slice.MBInter, mbX, mbY
 	}
 }
 
-func (d *Decoder) reconstructChromaInter(f, ref *frame.Frame, mb *slice.MBInter, mbX, mbY, qp int) {
+func (d *Decoder) reconstructChromaInter(f, ref *frame.Frame, mb *syntax.MBInter, mbX, mbY, qp int) {
 	var predU, predV [64]uint8
 	mv := mb.MV[0]
-	if mb.MBType == slice.PMBTypeP8x8 || mb.MBType == slice.PMBTypeP8x8ref0 {
+	if mb.MBType == syntax.PMBTypeP8x8 || mb.MBType == syntax.PMBTypeP8x8ref0 {
 		mv = mb.SubMV[0]
 	}
 	d.fillChromaInterPred(predU[:], ref.U, ref.StrideC, ref.Width/2, ref.Height/2, mbX*8, mbY*8, mv)
@@ -146,7 +146,7 @@ func (d *Decoder) reconstructChromaInter(f, ref *frame.Frame, mb *slice.MBInter,
 	d.writeChromaInterResidual(f, mb, predV[:], 1, mbX, mbY, qp)
 }
 
-func (d *Decoder) fillChromaInterPred(dst []uint8, plane []uint8, stride, width, height, baseX, baseY int, mv slice.MotionVector) {
+func (d *Decoder) fillChromaInterPred(dst []uint8, plane []uint8, stride, width, height, baseX, baseY int, mv syntax.MotionVector) {
 	dx := int(mv.X) >> 3
 	dy := int(mv.Y) >> 3
 	for y := 0; y < 8; y++ {
@@ -169,7 +169,7 @@ func (d *Decoder) fillChromaInterPred(dst []uint8, plane []uint8, stride, width,
 	}
 }
 
-func (d *Decoder) writeChromaInterResidual(f *frame.Frame, mb *slice.MBInter, predicted []uint8, comp int, mbX, mbY, qp int) {
+func (d *Decoder) writeChromaInterResidual(f *frame.Frame, mb *syntax.MBInter, predicted []uint8, comp int, mbX, mbY, qp int) {
 	chromaQP := frame.ChromaQP(qp, d.chromaQPOffset)
 	var dc [4]int16
 	for i := 0; i < 4; i++ {
@@ -205,7 +205,7 @@ func (d *Decoder) writeChromaInterResidual(f *frame.Frame, mb *slice.MBInter, pr
 	}
 }
 
-func (d *Decoder) copyInterSubRect(dst []uint8, ref *frame.Frame, srcBaseX, srcBaseY, dstX, dstY, w, h int, mv slice.MotionVector) {
+func (d *Decoder) copyInterSubRect(dst []uint8, ref *frame.Frame, srcBaseX, srcBaseY, dstX, dstY, w, h int, mv syntax.MotionVector) {
 	var tmp [256]uint8
 	pred.InterPred16x16At(tmp[:], ref.Y, ref.StrideY, srcBaseX, srcBaseY, pred.MotionVector{X: mv.X, Y: mv.Y})
 	for y := 0; y < h; y++ {
@@ -213,7 +213,7 @@ func (d *Decoder) copyInterSubRect(dst []uint8, ref *frame.Frame, srcBaseX, srcB
 	}
 }
 
-func (d *Decoder) writeInterResidual(f *frame.Frame, mb *slice.MBInter, predicted []uint8, mbX, mbY, qp int) {
+func (d *Decoder) writeInterResidual(f *frame.Frame, mb *syntax.MBInter, predicted []uint8, mbX, mbY, qp int) {
 	cbpLuma := mb.CBP & 0xF
 	if mb.Use8x8Transform {
 		for group := 0; group < 4; group++ {
@@ -274,7 +274,7 @@ func (d *Decoder) writeInterResidual(f *frame.Frame, mb *slice.MBInter, predicte
 	}
 }
 
-func (d *Decoder) reconstructMBBidi(f *frame.Frame, mb *slice.MBBidi, mbX, mbY, qp int) {
+func (d *Decoder) reconstructMBBidi(f *frame.Frame, mb *syntax.MBBidi, mbX, mbY, qp int) {
 	var refL0, refL1 *frame.Frame
 	if len(d.DPB.Frames) > 0 {
 		refL0 = d.DPB.Frames[len(d.DPB.Frames)-1]
@@ -306,10 +306,10 @@ func (d *Decoder) reconstructMBBidi(f *frame.Frame, mb *slice.MBBidi, mbX, mbY, 
 	}
 
 	blended := make([]uint8, 256)
-	useBi := mb.MBType == slice.BMBTypeBi16x16 || mb.MBType == slice.BMBTypeDirect16x16
+	useBi := mb.MBType == syntax.BMBTypeBi16x16 || mb.MBType == syntax.BMBTypeDirect16x16
 	if useBi {
-		slice.BiPredBlend(blended, predL0, predL1, 256)
-	} else if slice.BMBTypeL116x16 == mb.MBType {
+		syntax.BiPredBlend(blended, predL0, predL1, 256)
+	} else if syntax.BMBTypeL116x16 == mb.MBType {
 		copy(blended, predL1)
 	} else {
 		copy(blended, predL0)
