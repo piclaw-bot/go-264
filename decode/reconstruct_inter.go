@@ -240,17 +240,21 @@ func (d *Decoder) writeInterResidual(f *frame.Frame, mb *syntax.MBInter, predict
 			transform.IDCT8x8(block[:])
 			groupX := (group % 2) * 8
 			groupY := (group / 2) * 8
+			dstX := mbX*16 + groupX
+			dstY := mbY*16 + groupY
 			for py := 0; py < 8; py++ {
+				dstRow := f.Y[(dstY+py)*f.StrideY+dstX:]
+				predRow := predicted[(groupY+py)*16+groupX:]
+				blockRow := block[py*8:]
 				for px := 0; px < 8; px++ {
-					pidx := (groupY+py)*16 + (groupX + px)
-					v := int(predicted[pidx]) + int(block[py*8+px])
+					v := int(predRow[px]) + int(blockRow[px])
 					if v < 0 {
 						v = 0
 					}
 					if v > 255 {
 						v = 255
 					}
-					f.SetPixelY(mbX*16+groupX+px, mbY*16+groupY+py, uint8(v))
+					dstRow[px] = uint8(v)
 				}
 			}
 		}
@@ -264,20 +268,24 @@ func (d *Decoder) writeInterResidual(f *frame.Frame, mb *syntax.MBInter, predict
 			}
 		}
 		transform.IDCT4x4Batch(residual[:])
+		dstBaseX := mbX * 16
+		dstBaseY := mbY * 16
 		for blkIdx := 0; blkIdx < 16; blkIdx++ {
 			bx := blk4x4X[blkIdx]
 			by := blk4x4Y[blkIdx]
 			for py := 0; py < 4; py++ {
+				dstRow := f.Y[(dstBaseY+by+py)*f.StrideY+dstBaseX+bx:]
+				predRow := predicted[(by+py)*16+bx:]
+				resRow := residual[blkIdx][py*4:]
 				for px := 0; px < 4; px++ {
-					pidx := (by+py)*16 + (bx + px)
-					v := int(predicted[pidx]) + int(residual[blkIdx][py*4+px])
+					v := int(predRow[px]) + int(resRow[px])
 					if v < 0 {
 						v = 0
 					}
 					if v > 255 {
 						v = 255
 					}
-					f.SetPixelY(mbX*16+bx+px, mbY*16+by+py, uint8(v))
+					dstRow[px] = uint8(v)
 				}
 			}
 		}
