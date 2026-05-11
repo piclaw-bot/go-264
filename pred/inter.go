@@ -17,9 +17,9 @@ func InterPred16x16(out []uint8, ref []uint8, stride int, mv MotionVector) {
 	InterPred16x16At(out, ref, stride, 0, 0, mv)
 }
 
-// InterPred16x16At performs full-pixel motion compensation for a 16x16 block at
-// macroblock origin (baseX, baseY). Fractional MV bits are currently truncated,
-// matching the existing decoder path.
+// InterPred16x16At performs motion compensation for a 16x16 block at
+// macroblock origin (baseX, baseY) using bilinear interpolation for
+// fractional MVs. Integer MVs use the fast SIMD copy path.
 //
 // Fast path: when the requested 16x16 source rectangle is fully inside the
 // reference plane, copy rows with the platform SIMD routine:

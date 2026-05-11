@@ -166,7 +166,14 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 	isIntra := hdr.IsIntra()
 
 	qp := hdr.QP(pps.PicInitQP)
-	f := frame.NewFrame(sps.Width, sps.Height)
+	// Allocate frame at MB-aligned dimensions to prevent out-of-bounds writes
+	// when sps.Height is not a multiple of 16 (crop case). The display dimensions
+	// are set separately so callers see the correct crop dimensions.
+	mbAlignedW := int(sps.PicWidthInMbs) * 16
+	mbAlignedH := int(sps.PicHeightInMapUnits) * 16
+	f := frame.NewFrame(mbAlignedW, mbAlignedH)
+	f.Width = sps.Width   // display / crop width
+	f.Height = sps.Height // display / crop height
 	f.IsIDR = unit.Type == nal.TypeSliceIDR
 	f.IsRef = unit.RefIDC > 0
 	f.FrameNum = int(hdr.FrameNum)
@@ -204,8 +211,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 	}
 	// CABAC MVD cache for amvd context (|left_mvd| + |top_mvd| used as context for MVD bins).
 	// Stores the per-MB representative decoded MVD (X and Y separately).
-	mvdCtxX := make([]int16, maxMBs)            // left0/top0 horizontal MVD sum per MB
-	mvdCtxY := make([]int16, maxMBs)            // left0/top0 vertical MVD sum per MB
+	// mvdCtxX/Y: reserved for future CABAC MVD amvd context (deferred – see plan).
 	mvCtx := make([]slice.MotionVector, maxMBs) // representative L0 MV context per MB
 	refCtx := make([]int8, maxMBs)              // representative L0 ref_idx context per MB
 	for i := range refCtx {
@@ -360,8 +366,6 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 				cbpCtx[mbIdx] = mbInter.CBP
 				mbTypeCtx[mbIdx] = 0 // inter MB
 				// Store representative decoded MVD for amvd context of future MBs.
-				mvdCtxX[mbIdx] = mbInter.DecodedMVDX
-				mvdCtxY[mbIdx] = mbInter.DecodedMVDY
 				mvCtx[mbIdx], refCtx[mbIdx] = representativeRightEdgeMV(mbInter)
 				writeBackInter4x4(mv4Ctx, ref4Ctx, mv4Stride, mbX, mbY, mbInter)
 				// CABAC P-slice: end_of_slice_flag after each coded MB.
