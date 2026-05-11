@@ -235,7 +235,14 @@ func (d *Decoder) writeInterResidual(f *frame.Frame, mb *syntax.MBInter, predict
 	cbpLuma := mb.CBP & 0xF
 	if mb.Use8x8Transform {
 		for group := 0; group < 4; group++ {
+			groupX := (group % 2) * 8
+			groupY := (group / 2) * 8
+			dstX := mbX*16 + groupX
+			dstY := mbY*16 + groupY
 			if cbpLuma&(1<<uint(group)) == 0 {
+				for py := 0; py < 8; py++ {
+					copy(f.Y[(dstY+py)*f.StrideY+dstX:(dstY+py)*f.StrideY+dstX+8], predicted[(groupY+py)*16+groupX:(groupY+py)*16+groupX+8])
+				}
 				continue
 			}
 			var block [64]int16
@@ -246,10 +253,6 @@ func (d *Decoder) writeInterResidual(f *frame.Frame, mb *syntax.MBInter, predict
 			}
 			transform.Dequant8x8(block[:], qp)
 			transform.IDCT8x8(block[:])
-			groupX := (group % 2) * 8
-			groupY := (group / 2) * 8
-			dstX := mbX*16 + groupX
-			dstY := mbY*16 + groupY
 			for py := 0; py < 8; py++ {
 				dstRow := f.Y[(dstY+py)*f.StrideY+dstX:]
 				predRow := predicted[(groupY+py)*16+groupX:]
@@ -283,6 +286,12 @@ func (d *Decoder) writeInterResidual(f *frame.Frame, mb *syntax.MBInter, predict
 		for blkIdx := 0; blkIdx < 16; blkIdx++ {
 			bx := blk4x4X[blkIdx]
 			by := blk4x4Y[blkIdx]
+			if idctMask&(uint64(1)<<uint(blkIdx)) == 0 {
+				for py := 0; py < 4; py++ {
+					copy(f.Y[(dstBaseY+by+py)*f.StrideY+dstBaseX+bx:(dstBaseY+by+py)*f.StrideY+dstBaseX+bx+4], predicted[(by+py)*16+bx:(by+py)*16+bx+4])
+				}
+				continue
+			}
 			for py := 0; py < 4; py++ {
 				dstRow := f.Y[(dstBaseY+by+py)*f.StrideY+dstBaseX+bx:]
 				predRow := predicted[(by+py)*16+bx:]
