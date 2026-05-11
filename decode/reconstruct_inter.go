@@ -274,7 +274,7 @@ func (d *Decoder) writeInterResidual(f *frame.Frame, mb *syntax.MBInter, predict
 		var idctMask uint64
 		for blkIdx := 0; blkIdx < 16; blkIdx++ {
 			group := blkIdx / 4
-			if cbpLuma&(1<<uint(group)) != 0 {
+			if cbpLuma&(1<<uint(group)) != 0 && coeff4x4NonZero(mb.Coeffs[blkIdx]) {
 				residual[blkIdx] = mb.Coeffs[blkIdx]
 				transform.Dequant4x4(residual[blkIdx][:], qp)
 				idctMask |= uint64(1) << uint(blkIdx)
@@ -309,6 +309,13 @@ func (d *Decoder) writeInterResidual(f *frame.Frame, mb *syntax.MBInter, predict
 			}
 		}
 	}
+}
+
+func coeff4x4NonZero(block [16]int16) bool {
+	return block[0]|block[1]|block[2]|block[3]|
+		block[4]|block[5]|block[6]|block[7]|
+		block[8]|block[9]|block[10]|block[11]|
+		block[12]|block[13]|block[14]|block[15] != 0
 }
 
 func (d *Decoder) reconstructMBBidi(f *frame.Frame, mb *syntax.MBBidi, mbX, mbY, qp int) {
