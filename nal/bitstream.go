@@ -142,10 +142,44 @@ func (r *Reader) BitsLeft() int {
 
 // PeekBits reads n bits without advancing the position.
 func (r *Reader) PeekBits(n int) uint32 {
+	if n <= 0 {
+		return 0
+	}
+	if n > 32 {
+		n = 32
+	}
+	if r.pos >= len(r.data) {
+		return 0
+	}
+	// Fast path: if the requested window contains no emulation-prevention byte,
+	// read directly from the backing bytes without mutating reader state. This is
+	// the common CAVLC VLC lookup path and avoids ReadBits save/restore overhead.
+	bytesNeeded := (7 - r.bit + n + 7) >> 3
+	if r.pos+bytesNeeded <= len(r.data) && !r.hasEmulationPreventionInWindow(bytesNeeded) {
+		var acc uint64
+		for i := 0; i < bytesNeeded; i++ {
+			acc = (acc << 8) | uint64(r.data[r.pos+i])
+		}
+		shift := uint(bytesNeeded*8 - (7 - r.bit) - n)
+		return uint32((acc >> shift) & ((uint64(1) << uint(n)) - 1))
+	}
 	savePos, saveBit := r.pos, r.bit
 	v := r.ReadBits(n)
 	r.pos, r.bit = savePos, saveBit
 	return v
+}
+
+func (r *Reader) hasEmulationPreventionInWindow(bytesNeeded int) bool {
+	end := r.pos + bytesNeeded
+	if end > len(r.data) {
+		end = len(r.data)
+	}
+	for i := r.pos; i < end; i++ {
+		if i >= 2 && r.data[i-2] == 0 && r.data[i-1] == 0 && r.data[i] == 3 {
+			return true
+		}
+	}
+	return false
 }
 
 // Seek moves to an absolute raw bit position. It is primarily intended for

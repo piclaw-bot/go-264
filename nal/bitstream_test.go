@@ -110,6 +110,53 @@ func TestReadBitsDefensiveBounds(t *testing.T) {
 	}
 }
 
+func TestPeekBitsFastPathMatchesReadBits(t *testing.T) {
+	data := []byte{0b10110110, 0b01011100, 0b11110000, 0x12, 0x34}
+	for start := 0; start < 24; start++ {
+		for n := 0; n <= 32; n++ {
+			rPeek := NewReader(data)
+			rRead := NewReader(data)
+			rPeek.Seek(start)
+			rRead.Seek(start)
+			got := rPeek.PeekBits(n)
+			want := rRead.ReadBits(n)
+			if got != want || rPeek.Position() != start {
+				t.Fatalf("start=%d n=%d got=0x%x want=0x%x pos=%d", start, n, got, want, rPeek.Position())
+			}
+		}
+	}
+}
+
+func TestPeekBitsEmulationPreventionFallback(t *testing.T) {
+	data := []byte{0x12, 0x00, 0x00, 0x03, 0x45, 0x67}
+	rPeek := NewReader(data)
+	rRead := NewReader(data)
+	got := rPeek.PeekBits(32)
+	want := rRead.ReadBits(32)
+	if got != want || rPeek.Position() != 0 {
+		t.Fatalf("PeekBits EPB got=0x%x want=0x%x pos=%d", got, want, rPeek.Position())
+	}
+}
+
+func BenchmarkPeekBits16(b *testing.B) {
+	data := make([]byte, 4096)
+	for i := range data {
+		data[i] = uint8(i*37 + 11)
+	}
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		r := NewReader(data)
+		var sum uint32
+		for r.BitsLeft() >= 16 {
+			sum ^= r.PeekBits(16)
+			r.ReadBits(5)
+		}
+		if sum == 0xdeadbeef {
+			b.Fatal(sum)
+		}
+	}
+}
+
 func TestSeekDefensiveBounds(t *testing.T) {
 	r := NewReader([]byte{0xaa, 0x55})
 	r.Seek(-10)
