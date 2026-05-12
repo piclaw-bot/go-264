@@ -126,9 +126,9 @@ func DecodeCABACMVD(dec *cabac.CABACDecoder, models []cabac.CABACCtx, ctxBase in
 		}
 	}
 	if dec.DecodeBypass() == 1 {
-		return int16(mvd)
+		return int16(-mvd)
 	}
-	return int16(-mvd)
+	return int16(mvd)
 }
 
 func boolInt(v bool) int {
