@@ -129,8 +129,9 @@ func decodeCABACPInterMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, numRe
 						for j := 0; j < 16; j++ {
 							mb.Coeffs[blkIdx][j] = buf[sub*16+j]
 						}
-						nzMB[blkIdx] = 1
-						mb.TotalCoeff[blkIdx] = 1
+						tc4 := countNonZero16(mb.Coeffs[blkIdx])
+						nzMB[blkIdx] = tc4
+						mb.TotalCoeff[blkIdx] = tc4
 					}
 				}
 			}
@@ -198,6 +199,16 @@ func decodeCABACPSubMBType(dec *cabac.CABACDecoder, models []cabac.CABACCtx) uin
 		return 2 // P_L0_4x8
 	}
 	return 3 // P_L0_4x4
+}
+
+func countNonZero16(coeffs [16]int16) int {
+	count := 0
+	for _, c := range coeffs {
+		if c != 0 {
+			count++
+		}
+	}
+	return count
 }
 
 func decodeCABACTransform8x8Flag(dec *cabac.CABACDecoder, models []cabac.CABACCtx, ctx int) bool {
@@ -420,14 +431,15 @@ func decodeCABACIntraMBWithParams(dec *cabac.CABACDecoder, models []cabac.CABACC
 			for group := 0; group < 4; group++ {
 				if cbpLuma&(1<<uint(group)) != 0 {
 					var buf [64]int16
-					tc := dec.DecodeCABACResidual(models, 5, 64, buf[:], 0, 0)
+					dec.DecodeCABACResidual(models, 5, 64, buf[:], 0, 0)
 					for sub := 0; sub < 4; sub++ {
 						blkIdx := group*4 + sub
 						for j := 0; j < 16; j++ {
 							mb.Coeffs[blkIdx][j] = buf[sub*16+j]
 						}
-						mb.TotalCoeff[blkIdx] = tc / 4
-						nzMB[blkIdx] = tc / 4
+						tc4 := countNonZero16(mb.Coeffs[blkIdx])
+						mb.TotalCoeff[blkIdx] = tc4
+						nzMB[blkIdx] = tc4
 					}
 				}
 			}
