@@ -61,7 +61,7 @@ Implemented:
 - CABAC context initialization from FFmpeg/spec tables.
 - P-slice `mb_type` decision tree.
 - CABAC intra-in-P decode path wired through intra reconstruction.
-- CABAC skip, ref_idx, MVD, CBP, DQP syntax helpers, including neighbour-dependent skip/ref/MVD/transform-size contexts.
+- CABAC skip, ref_idx, MVD, CBP, DQP syntax helpers, including neighbour-dependent skip/ref/MVD/transform-size contexts and guarded helper boundaries for malformed direct use.
 - CABAC P8x8 sub-MB type decoding and variable sub-partition MVD consumption.
 - CABAC chroma DC/AC coefficient placement across the four chroma 4×4 blocks.
 - CABAC coded-block-flag and residual decoding.
@@ -120,8 +120,8 @@ Recent completed guardrails and low-level improvements:
 - CAVLC residual decode uses fixed stack arrays for trailing-one signs and levels.
 - `pred.InterPred16x16At` has fast paths for interior fractional-MV bilinear interpolation plus horizontal-only/vertical-only fractional interpolation while preserving the clipped edge path.
 - `decode.copyInterSubRect` copies integer-MV P8x8 sub-rectangles directly, preserving fractional fallback semantics.
-- `decode.fillChromaInterPred` has an interior 8×8 row-copy fast path plus malformed-input guards; inter chroma prediction now respects P16x8/P8x16/P8x8 partition boundaries.
-- Inter luma/chroma residual write-back now writes directly to frame rows after the same add + clip operation, avoiding per-pixel setter calls in the hot path.
+- `decode.fillChromaInterPred` has an interior 8×8 row-copy fast path plus malformed-input guards; inter chroma prediction now respects P16x8/P8x16/P8x8 partition boundaries and P8x8 8×4/4×8/4×4 sub-partition MVs at 4:2:0 scale.
+- Inter luma/chroma residual write-back now writes directly to frame rows after the same add + clip operation, avoiding per-pixel setter calls in the hot path; direct helper inputs are guarded to avoid panics on malformed internal tests/tools.
 - Inter zero-residual paths copy prediction directly for uncoded luma CBP groups, zero-`TotalCoeff` 4×4 blocks, all-zero 8×8 transform groups, chroma CBP=0, and zero chroma 4×4 residual blocks.
 - Intra/inter/B reconstruction use fixed stack prediction buffers for 16×16 temporaries.
 - `transform.IDCT4x4BatchMask` skips transform work for known-zero dense residual slots.
