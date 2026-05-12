@@ -4,22 +4,22 @@ package nal
 // ITU-T H.264 §7.3.2.1
 
 type SPS struct {
-	ProfileIDC         uint8
-	ConstraintFlags    uint8 // constraint_set0..5_flag packed
-	LevelIDC           uint8
-	SPSID              uint32
-	ChromaFormatIDC    uint32 // 0=mono, 1=4:2:0, 2=4:2:2, 3=4:4:4
-	BitDepthLuma       uint32
-	BitDepthChroma     uint32
-	Log2MaxFrameNum    uint32
-	PicOrderCntType    uint32
-	Log2MaxPocLsb      uint32
-	MaxNumRefFrames    uint32
-	PicWidthInMbs      uint32 // width = PicWidthInMbs * 16
-	PicHeightInMapUnits uint32
-	FrameMbsOnlyFlag   bool
-	Direct8x8Inference bool
-	FrameCropping      bool
+	ProfileIDC                               uint8
+	ConstraintFlags                          uint8 // constraint_set0..5_flag packed
+	LevelIDC                                 uint8
+	SPSID                                    uint32
+	ChromaFormatIDC                          uint32 // 0=mono, 1=4:2:0, 2=4:2:2, 3=4:4:4
+	BitDepthLuma                             uint32
+	BitDepthChroma                           uint32
+	Log2MaxFrameNum                          uint32
+	PicOrderCntType                          uint32
+	Log2MaxPocLsb                            uint32
+	MaxNumRefFrames                          uint32
+	PicWidthInMbs                            uint32 // width = PicWidthInMbs * 16
+	PicHeightInMapUnits                      uint32
+	FrameMbsOnlyFlag                         bool
+	Direct8x8Inference                       bool
+	FrameCropping                            bool
 	CropLeft, CropRight, CropTop, CropBottom uint32
 
 	// Derived
@@ -47,7 +47,7 @@ func ParseSPS(payload []byte) (*SPS, error) {
 		}
 		s.BitDepthLuma = r.ReadUE() + 8
 		s.BitDepthChroma = r.ReadUE() + 8
-		r.ReadBit() // qpprime_y_zero_transform_bypass_flag
+		r.ReadBit()       // qpprime_y_zero_transform_bypass_flag
 		if r.ReadBool() { // seq_scaling_matrix_present_flag
 			n := 8
 			if s.ChromaFormatIDC == 3 {
@@ -71,9 +71,9 @@ func ParseSPS(payload []byte) (*SPS, error) {
 	if s.PicOrderCntType == 0 {
 		s.Log2MaxPocLsb = r.ReadUE() + 4
 	} else if s.PicOrderCntType == 1 {
-		r.ReadBit()  // delta_pic_order_always_zero_flag
-		r.ReadSE()   // offset_for_non_ref_pic
-		r.ReadSE()   // offset_for_top_to_bottom_field
+		r.ReadBit() // delta_pic_order_always_zero_flag
+		r.ReadSE()  // offset_for_non_ref_pic
+		r.ReadSE()  // offset_for_top_to_bottom_field
 		n := r.ReadUE()
 		for i := uint32(0); i < n; i++ {
 			r.ReadSE() // offset_for_ref_frame
@@ -124,6 +124,36 @@ func ParseSPS(payload []byte) (*SPS, error) {
 	return s, nil
 }
 
+func skipSliceGroupMap(r *Reader, numSliceGroups uint32) {
+	if r == nil || numSliceGroups <= 1 {
+		return
+	}
+	sliceGroupMapType := r.ReadUE()
+	switch sliceGroupMapType {
+	case 0:
+		for i := uint32(0); i < numSliceGroups; i++ {
+			r.ReadUE() // run_length_minus1[i]
+		}
+	case 2:
+		for i := uint32(0); i+1 < numSliceGroups; i++ {
+			r.ReadUE() // top_left[i]
+			r.ReadUE() // bottom_right[i]
+		}
+	case 3, 4, 5:
+		r.ReadBit() // slice_group_change_direction_flag
+		r.ReadUE()  // slice_group_change_rate_minus1
+	case 6:
+		picSizeInMapUnits := r.ReadUE() + 1
+		bitsPerID := 0
+		for maxID := numSliceGroups - 1; maxID > 0; maxID >>= 1 {
+			bitsPerID++
+		}
+		for i := uint32(0); i < picSizeInMapUnits; i++ {
+			r.ReadBits(bitsPerID) // slice_group_id[i]
+		}
+	}
+}
+
 func skipScalingList(r *Reader, is4x4 bool) {
 	size := 16
 	if !is4x4 {
@@ -146,24 +176,24 @@ func skipScalingList(r *Reader, is4x4 bool) {
 // ITU-T H.264 §7.3.2.2
 
 type PPS struct {
-	PPSID                    uint32
-	SPSID                    uint32
-	EntropyCodingMode        uint32 // 0=CAVLC, 1=CABAC
+	PPSID                      uint32
+	SPSID                      uint32
+	EntropyCodingMode          uint32 // 0=CAVLC, 1=CABAC
 	BottomFieldPicOrderInFrame bool
-	NumSliceGroups           uint32
-	NumRefIdxL0Active        uint32
-	NumRefIdxL1Active        uint32
-	WeightedPred             bool
-	WeightedBipredIDC        uint32
-	PicInitQP                int32
-	PicInitQS                int32
-	ChromaQPIndexOffset      int32
-	DeblockingFilterControl  bool
-	ConstrainedIntraPred     bool
-	RedundantPicCntPresent   bool
+	NumSliceGroups             uint32
+	NumRefIdxL0Active          uint32
+	NumRefIdxL1Active          uint32
+	WeightedPred               bool
+	WeightedBipredIDC          uint32
+	PicInitQP                  int32
+	PicInitQS                  int32
+	ChromaQPIndexOffset        int32
+	DeblockingFilterControl    bool
+	ConstrainedIntraPred       bool
+	RedundantPicCntPresent     bool
 
 	// High profile
-	Transform8x8Mode         bool
+	Transform8x8Mode          bool
 	SecondChromaQPIndexOffset int32
 }
 
@@ -179,8 +209,7 @@ func ParsePPS(payload []byte) (*PPS, error) {
 	p.NumSliceGroups = r.ReadUE() + 1
 
 	if p.NumSliceGroups > 1 {
-		// slice_group_map_type parsing — skip for now (rare)
-		return p, nil
+		skipSliceGroupMap(r, p.NumSliceGroups)
 	}
 
 	p.NumRefIdxL0Active = r.ReadUE() + 1
