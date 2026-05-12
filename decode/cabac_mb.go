@@ -11,13 +11,21 @@ import (
 
 // decodeCABACPInterMB decodes one CABAC-coded P-slice macroblock.
 // Returns (inter, nil, true) for P-skip, (nil, intra, false) for intra-in-P.
-func decodeCABACPInterMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, numRefFrames uint32, leftNZ, topNZ *[16]int, leftChromaNZ, topChromaNZ *[2][4]int, leftCBP, topCBP uint32, transform8x8Mode bool, leftMBType, topMBType uint32, leftChromaPred, topChromaPred int8, leftEdge8x8, topEdge8x8 [2]int8) (*syntax.MBInter, *syntax.MBIntra, bool) {
+func decodeCABACPInterMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, numRefFrames uint32, leftNZ, topNZ *[16]int, leftChromaNZ, topChromaNZ *[2][4]int, leftCBP, topCBP uint32, leftNonSkip, topNonSkip bool, transform8x8Mode bool, leftMBType, topMBType uint32, leftChromaPred, topChromaPred int8, leftEdge8x8, topEdge8x8 [2]int8) (*syntax.MBInter, *syntax.MBIntra, bool) {
 	mb := &syntax.MBInter{MBType: syntax.PMBTypeP16x16}
 	if dec == nil || len(models) < 20 {
 		return mb, nil, true
 	}
-	// mb_skip_flag (ctxIdx 11 for P-slices)
-	if dec.DecodeBin(&models[11]) == 1 {
+	// P-slice mb_skip_flag uses ctxIdx 11 plus availability of non-skipped left/top neighbours.
+	// Using ctx 11 unconditionally desynchronizes CABAC state after the first neighbour-dependent MB.
+	skipCtx := 11
+	if leftNonSkip {
+		skipCtx++
+	}
+	if topNonSkip {
+		skipCtx++
+	}
+	if dec.DecodeBin(&models[skipCtx]) == 1 {
 		return mb, nil, true
 	}
 	// mb_type binarization (FFmpeg h264_cabac.c decode_cabac_mb_type P-slice path)
