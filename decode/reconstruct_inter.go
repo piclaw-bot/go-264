@@ -380,8 +380,8 @@ func (d *Decoder) reconstructMBBidi(f *frame.Frame, mb *syntax.MBBidi, mbX, mbY,
 		refL1 = refL0
 	}
 
-	predL0 := make([]uint8, 256)
-	predL1 := make([]uint8, 256)
+	var predL0 [256]uint8
+	var predL1 [256]uint8
 	mvL0 := mb.MVL0[0]
 	mvL1 := mb.MVL1[0]
 
@@ -396,14 +396,14 @@ func (d *Decoder) reconstructMBBidi(f *frame.Frame, mb *syntax.MBBidi, mbX, mbY,
 		}
 	}
 
-	blended := make([]uint8, 256)
+	var blended [256]uint8
 	useBi := mb.MBType == syntax.BMBTypeBi16x16 || mb.MBType == syntax.BMBTypeDirect16x16
 	if useBi {
-		syntax.BiPredBlend(blended, predL0, predL1, 256)
+		syntax.BiPredBlend(blended[:], predL0[:], predL1[:], 256)
 	} else if syntax.BMBTypeL116x16 == mb.MBType {
-		copy(blended, predL1)
+		copy(blended[:], predL1[:])
 	} else {
-		copy(blended, predL0)
+		copy(blended[:], predL0[:])
 	}
 	for y := 0; y < 16; y++ {
 		for x := 0; x < 16; x++ {
