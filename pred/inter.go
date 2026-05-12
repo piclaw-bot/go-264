@@ -50,6 +50,33 @@ func InterPred16x16At(out []uint8, ref []uint8, stride int, baseX, baseY int, mv
 		return
 	}
 	if sx >= 0 && sy >= 0 && sx+17 <= stride && sy+17 <= refH {
+		if fy == 0 {
+			w0, w1 := 4-fx, fx
+			for y := 0; y < 16; y++ {
+				row := (sy+y)*stride + sx
+				outRow := y * 16
+				for x := 0; x < 16; x++ {
+					a := int(ref[row+x])
+					b := int(ref[row+x+1])
+					out[outRow+x] = uint8((a*w0 + b*w1 + 2) >> 2)
+				}
+			}
+			return
+		}
+		if fx == 0 {
+			w0, w1 := 4-fy, fy
+			for y := 0; y < 16; y++ {
+				row0 := (sy+y)*stride + sx
+				row1 := row0 + stride
+				outRow := y * 16
+				for x := 0; x < 16; x++ {
+					a := int(ref[row0+x])
+					c := int(ref[row1+x])
+					out[outRow+x] = uint8((a*w0 + c*w1 + 2) >> 2)
+				}
+			}
+			return
+		}
 		w00 := (4 - fx) * (4 - fy)
 		w10 := fx * (4 - fy)
 		w01 := (4 - fx) * fy
