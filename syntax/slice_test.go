@@ -64,6 +64,42 @@ func TestSkipRefPicListModificationConsumesOperands(t *testing.T) {
 	}
 }
 
+func TestParseHeaderConsumesPOCType0BottomDelta(t *testing.T) {
+	var w testBitWriter
+	w.ue(0)                             // first_mb_in_slice
+	w.ue(SliceTypeP)                    // slice_type
+	w.ue(0)                             // pic_parameter_set_id
+	w.bits = append(w.bits, 0, 0, 0, 0) // frame_num
+	w.bits = append(w.bits, 1, 0, 1, 0) // pic_order_cnt_lsb
+	w.se(-3)                            // delta_pic_order_cnt_bottom
+	w.bit(0)                            // num_ref_idx_active_override_flag
+	w.bit(0)                            // ref_pic_list_modification_flag_l0
+	w.bit(0)                            // adaptive_ref_pic_marking_mode_flag
+	w.se(0)                             // slice_qp_delta
+	h, _ := ParseHeaderWithRefIDC(w.bytes(), nal.TypeSliceNonIDR, 1, &nal.SPS{Log2MaxFrameNum: 4, PicOrderCntType: 0, Log2MaxPocLsb: 4, FrameMbsOnlyFlag: true, ChromaFormatIDC: 1}, &nal.PPS{BottomFieldPicOrderInFrame: true, NumRefIdxL0Active: 1})
+	if h.PicOrderCntLsb != 10 || h.DeltaPicOrderCntBottom != -3 {
+		t.Fatalf("POC type 0 fields got lsb=%d bottom=%d", h.PicOrderCntLsb, h.DeltaPicOrderCntBottom)
+	}
+}
+
+func TestParseHeaderConsumesPOCType1Deltas(t *testing.T) {
+	var w testBitWriter
+	w.ue(0)                             // first_mb_in_slice
+	w.ue(SliceTypeP)                    // slice_type
+	w.ue(0)                             // pic_parameter_set_id
+	w.bits = append(w.bits, 0, 0, 0, 0) // frame_num
+	w.se(2)                             // delta_pic_order_cnt[0]
+	w.se(-1)                            // delta_pic_order_cnt[1]
+	w.bit(0)                            // num_ref_idx_active_override_flag
+	w.bit(0)                            // ref_pic_list_modification_flag_l0
+	w.bit(0)                            // adaptive_ref_pic_marking_mode_flag
+	w.se(0)                             // slice_qp_delta
+	h, _ := ParseHeaderWithRefIDC(w.bytes(), nal.TypeSliceNonIDR, 1, &nal.SPS{Log2MaxFrameNum: 4, PicOrderCntType: 1, DeltaPicOrderAlwaysZero: false, FrameMbsOnlyFlag: true, ChromaFormatIDC: 1}, &nal.PPS{BottomFieldPicOrderInFrame: true, NumRefIdxL0Active: 1})
+	if h.DeltaPicOrderCnt != [2]int32{2, -1} {
+		t.Fatalf("POC type 1 deltas got %v", h.DeltaPicOrderCnt)
+	}
+}
+
 func TestParseHeaderConsumesSPSIFieldsBeforeDeblocking(t *testing.T) {
 	var w testBitWriter
 	w.ue(0)                             // first_mb_in_slice

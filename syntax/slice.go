@@ -11,25 +11,27 @@ const (
 )
 
 type Header struct {
-	FirstMbInSlice      uint32
-	SliceType           uint32
-	PPSID               uint32
-	FrameNum            uint32
-	FieldPicFlag        bool
-	BottomFieldFlag     bool
-	IdrPicID            uint32
-	PicOrderCntLsb      uint32
-	RedundantPicCnt     uint32
-	DirectSpatialMvPred bool
-	NumRefIdxL0Active   uint32
-	NumRefIdxL1Active   uint32
-	CabacInitIDC        uint32
-	SliceQPDelta        int32
-	SPForSwitchFlag     bool
-	SliceQSDelta        int32
-	DisableDeblocking   int32
-	SliceAlphaC0Offset  int32
-	SliceBetaOffset     int32
+	FirstMbInSlice         uint32
+	SliceType              uint32
+	PPSID                  uint32
+	FrameNum               uint32
+	FieldPicFlag           bool
+	BottomFieldFlag        bool
+	IdrPicID               uint32
+	PicOrderCntLsb         uint32
+	DeltaPicOrderCntBottom int32
+	DeltaPicOrderCnt       [2]int32
+	RedundantPicCnt        uint32
+	DirectSpatialMvPred    bool
+	NumRefIdxL0Active      uint32
+	NumRefIdxL1Active      uint32
+	CabacInitIDC           uint32
+	SliceQPDelta           int32
+	SPForSwitchFlag        bool
+	SliceQSDelta           int32
+	DisableDeblocking      int32
+	SliceAlphaC0Offset     int32
+	SliceBetaOffset        int32
 }
 
 func skipPredWeightTable(r *nal.Reader, h *Header, sps *nal.SPS) {
@@ -143,6 +145,14 @@ func ParseHeaderWithRefIDC(payload []byte, nalType uint8, nalRefIDC uint8, sps *
 	}
 	if sps.PicOrderCntType == 0 {
 		h.PicOrderCntLsb = r.ReadBits(int(sps.Log2MaxPocLsb))
+		if pps.BottomFieldPicOrderInFrame && !h.FieldPicFlag {
+			h.DeltaPicOrderCntBottom = r.ReadSE()
+		}
+	} else if sps.PicOrderCntType == 1 && !sps.DeltaPicOrderAlwaysZero {
+		h.DeltaPicOrderCnt[0] = r.ReadSE()
+		if pps.BottomFieldPicOrderInFrame && !h.FieldPicFlag {
+			h.DeltaPicOrderCnt[1] = r.ReadSE()
+		}
 	}
 	if pps.RedundantPicCntPresent {
 		h.RedundantPicCnt = r.ReadUE()
