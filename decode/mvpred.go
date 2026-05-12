@@ -78,13 +78,6 @@ func representativeRightEdgeMV(mb *syntax.MBInter) (syntax.MotionVector, int8) {
 	}
 }
 
-// predictSkipMV returns the MV predictor for a P-skip macroblock.
-// It uses the 4x4 cache via predictSkipMV4x4; the predMV argument (from the
-// skip path) is returned unchanged as a pass-through.
-func predictSkipMV(ctx []syntax.MotionVector, refCtx []int8, pred syntax.MotionVector, mbIdx, mbX, mbY, mbWidth int) syntax.MotionVector {
-	return pred
-}
-
 // predictSkipMV4x4 computes the P-skip MV predictor directly from the 4x4
 // cache, matching FFmpeg's pred_pskip_motion / h264_mv_pred_skip path.
 func predictSkipMV4x4(mv4 []syntax.MotionVector, ref4 []int8, stride4, x4, y4 int) syntax.MotionVector {
