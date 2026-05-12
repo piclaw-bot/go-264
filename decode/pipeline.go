@@ -262,7 +262,22 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 
 		} else if hdr.SliceType == syntax.SliceTypeP {
 			if pps.EntropyCodingMode == 1 {
-				mbInter, skipped := decodeCABACPInterMB(cabacDec, cabacModels, hdr.NumRefIdxL0Active, leftNZ, topNZ, leftChromaNZ, topChromaNZ, leftCBP, topCBP, pps.Transform8x8Mode)
+				var leftEdge8x8, topEdge8x8 [2]int8
+				for br := 0; br < 2; br++ {
+					if mbX > 0 {
+						leftEdge8x8[br] = intra8x8ModeCtx[(mbY*2+br)*intra8x8Stride+(mbX*2-1)]
+					} else {
+						leftEdge8x8[br] = -1
+					}
+				}
+				for bc := 0; bc < 2; bc++ {
+					if mbY > 0 {
+						topEdge8x8[bc] = intra8x8ModeCtx[(mbY*2-1)*intra8x8Stride+(mbX*2+bc)]
+					} else {
+						topEdge8x8[bc] = -1
+					}
+				}
+				mbInter, mbIntra, skipped := decodeCABACPInterMB(cabacDec, cabacModels, hdr.NumRefIdxL0Active, leftNZ, topNZ, leftChromaNZ, topChromaNZ, leftCBP, topCBP, pps.Transform8x8Mode, leftMBType, topMBType, leftChromaPred, topChromaPred, leftEdge8x8, topEdge8x8)
 				if skipped {
 					skipMV := predictSkipMV(mvCtx, refCtx, predMV, mbIdx, mbX, mbY, mbWidth)
 					mbInter.MV[0] = skipMV
@@ -270,6 +285,21 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					mvCtx[mbIdx] = skipMV
 					refCtx[mbIdx] = 0
 					writeBackInter4x4(mv4Ctx, ref4Ctx, mv4Stride, mbX, mbY, mbInter)
+					if cabacDec.DecodeTerminate() == 1 {
+						break
+					}
+					continue
+				}
+				if mbIntra != nil {
+					currentQP = (currentQP + int(mbIntra.QPDelta) + 52) % 52
+					d.reconstructMB(f, mbIntra, mbX, mbY, currentQP, sps)
+					nzCtx[mbIdx] = mbIntra.TotalCoeff
+					chromaNZCtx[mbIdx] = mbIntra.ChromaTotalCoeff
+					cbpCtx[mbIdx] = mbIntra.CodedBlockPattern
+					mbTypeCtx[mbIdx] = cabacMBTypeFlag(mbIntra.MBType)
+					chromaPredModeCtx[mbIdx] = mbIntra.ChromaPredMode
+					refCtx[mbIdx] = -1
+					writeBackIntra4x4(ref4Ctx, mv4Stride, mbX, mbY)
 					if cabacDec.DecodeTerminate() == 1 {
 						break
 					}

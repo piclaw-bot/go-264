@@ -9,16 +9,16 @@ import (
 	"github.com/rcarmo/go-264/syntax"
 )
 
-// decodeCABACPInterMB decodes one CABAC-coded P-slice inter macroblock.
-// Returns (mb, skipped=true) for P-skip macroblocks.
-func decodeCABACPInterMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, numRefFrames uint32, leftNZ, topNZ *[16]int, leftChromaNZ, topChromaNZ *[2][4]int, leftCBP, topCBP uint32, transform8x8Mode bool) (*syntax.MBInter, bool) {
+// decodeCABACPInterMB decodes one CABAC-coded P-slice macroblock.
+// Returns (inter, nil, true) for P-skip, (nil, intra, false) for intra-in-P.
+func decodeCABACPInterMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, numRefFrames uint32, leftNZ, topNZ *[16]int, leftChromaNZ, topChromaNZ *[2][4]int, leftCBP, topCBP uint32, transform8x8Mode bool, leftMBType, topMBType uint32, leftChromaPred, topChromaPred int8, leftEdge8x8, topEdge8x8 [2]int8) (*syntax.MBInter, *syntax.MBIntra, bool) {
 	mb := &syntax.MBInter{MBType: syntax.PMBTypeP16x16}
 	if dec == nil || len(models) < 20 {
-		return mb, true
+		return mb, nil, true
 	}
 	// mb_skip_flag (ctxIdx 11 for P-slices)
 	if dec.DecodeBin(&models[11]) == 1 {
-		return mb, true
+		return mb, nil, true
 	}
 	// mb_type binarization (FFmpeg h264_cabac.c decode_cabac_mb_type P-slice path)
 	if dec.DecodeBin(&models[14]) == 0 {
@@ -28,7 +28,9 @@ func decodeCABACPInterMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, numRe
 			mb.MBType = 2 - dec.DecodeBin(&models[17]) // P8x16 or P16x8
 		}
 	} else {
-		mb.MBType = syntax.PMBTypeP16x16 // TODO: full intra-in-P CABAC path
+		// FFmpeg h264_cabac.c decodes intra-in-P via decode_cabac_intra_mb_type(ctx_base=17, intra_slice=0).
+		intra := decodeCABACIntraMBWithParams(dec, models, leftNZ, topNZ, leftChromaNZ, topChromaNZ, leftCBP, topCBP, leftMBType, topMBType, leftChromaPred, topChromaPred, transform8x8Mode, leftEdge8x8, topEdge8x8, 17, false)
+		return nil, intra, false
 	}
 	parts := 1
 	switch mb.MBType {
@@ -125,7 +127,7 @@ func decodeCABACPInterMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, numRe
 			}
 		}
 	}
-	return mb, false
+	return mb, nil, false
 }
 
 func storeCABACChromaDC(mb *syntax.MBInter, comp int, dc [4]int16) {
@@ -152,30 +154,57 @@ func storeCABACChromaAC(mb *syntax.MBInter, comp, blk int, ac [16]int16) {
 // Models the FFmpeg decode_cabac_intra_mb_type / decode_cabac_mb_intra4x4_pred_mode
 // / decode_cabac_mb_chroma_pre_mode flow from h264_cabac.c.
 func decodeCABACIntraMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, leftNZ, topNZ *[16]int, leftChromaNZ, topChromaNZ *[2][4]int, leftCBP, topCBP uint32, leftMBType, topMBType uint32, leftChromaPred, topChromaPred int8, transform8x8Mode bool, leftEdge8x8, topEdge8x8 [2]int8) *syntax.MBIntra {
+	return decodeCABACIntraMBWithParams(dec, models, leftNZ, topNZ, leftChromaNZ, topChromaNZ, leftCBP, topCBP, leftMBType, topMBType, leftChromaPred, topChromaPred, transform8x8Mode, leftEdge8x8, topEdge8x8, 3, true)
+}
+
+func decodeCABACIntraMBWithParams(dec *cabac.CABACDecoder, models []cabac.CABACCtx, leftNZ, topNZ *[16]int, leftChromaNZ, topChromaNZ *[2][4]int, leftCBP, topCBP uint32, leftMBType, topMBType uint32, leftChromaPred, topChromaPred int8, transform8x8Mode bool, leftEdge8x8, topEdge8x8 [2]int8, ctxBase int, intraSlice bool) *syntax.MBIntra {
 	mb := &syntax.MBIntra{}
-	if dec == nil || len(models) < 128 {
+	if dec == nil || len(models) < 128 || ctxBase < 0 || ctxBase+5 >= len(models) {
 		return mb
 	}
 
-	// mb_type: decode_cabac_intra_mb_type(ctx_base=3, intra_slice=1)
-	const ctxBase = 3
-	intraCtx := isCABACIntra16orPCM(leftMBType) + 2*isCABACIntra16orPCM(topMBType)
-	if dec.DecodeBin(&models[ctxBase+intraCtx]) == 0 {
+	// mb_type: FFmpeg decode_cabac_intra_mb_type(ctx_base, intra_slice).
+	stateOffset := ctxBase
+	isI16 := false
+	if intraSlice {
+		intraCtx := int(isCABACIntra16orPCM(leftMBType) + 2*isCABACIntra16orPCM(topMBType))
+		if dec.DecodeBin(&models[ctxBase+intraCtx]) == 0 {
+			mb.MBType = 0 // I_NxN
+		} else {
+			stateOffset += 2
+			isI16 = true
+		}
+	} else if dec.DecodeBin(&models[ctxBase]) == 0 {
 		mb.MBType = 0 // I_NxN
-	} else if dec.DecodeTerminate() == 1 {
-		mb.MBType = 25 // I_PCM
-		return mb
 	} else {
-		// I_16x16: binarize cbp_luma / cbp_chroma / pred_mode
+		stateOffset = ctxBase
+		isI16 = true
+	}
+	if isI16 {
+		if dec.DecodeTerminate() == 1 {
+			mb.MBType = 25 // I_PCM
+			return mb
+		}
+		// I_16x16: binarize cbp_luma / cbp_chroma / pred_mode.
 		mbType := uint32(1)
-		if dec.DecodeBin(&models[6]) == 1 {
+		if dec.DecodeBin(&models[stateOffset+1]) == 1 {
 			mbType += 12
 		}
-		if dec.DecodeBin(&models[7]) == 1 {
-			mbType += 4 + 4*dec.DecodeBin(&models[8])
+		if dec.DecodeBin(&models[stateOffset+2]) == 1 {
+			chromaExtraCtx := stateOffset + 2
+			if intraSlice {
+				chromaExtraCtx++
+			}
+			mbType += 4 + 4*dec.DecodeBin(&models[chromaExtraCtx])
 		}
-		mbType += 2 * dec.DecodeBin(&models[9])
-		mbType += 1 * dec.DecodeBin(&models[10])
+		predCtx0 := stateOffset + 3
+		predCtx1 := stateOffset + 3
+		if intraSlice {
+			predCtx0++
+			predCtx1 += 2
+		}
+		mbType += 2 * dec.DecodeBin(&models[predCtx0])
+		mbType += 1 * dec.DecodeBin(&models[predCtx1])
 		mb.MBType = mbType
 	}
 
