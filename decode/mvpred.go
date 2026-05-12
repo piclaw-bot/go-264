@@ -167,6 +167,35 @@ func cabacRefIdxCtxsForMB(ref4 []int8, stride4, mbX, mbY int) [4]int {
 	}
 }
 
+func cabacMVDAMVD(mvd4 []syntax.MotionVector, stride4, x4, y4 int, component int) int {
+	absComponent := func(cx, cy int) int {
+		if cx < 0 || cy < 0 || cx >= stride4 || cy*stride4+cx >= len(mvd4) {
+			return 0
+		}
+		mv := mvd4[cy*stride4+cx]
+		v := int(mv.X)
+		if component == 1 {
+			v = int(mv.Y)
+		}
+		if v < 0 {
+			return -v
+		}
+		return v
+	}
+	return absComponent(x4-1, y4) + absComponent(x4, y4-1)
+}
+
+func fillMVD4(mvd4 []syntax.MotionVector, stride4, x4, y4, w4, h4 int, mvd syntax.MotionVector) {
+	for y := 0; y < h4; y++ {
+		row := (y4+y)*stride4 + x4
+		for x := 0; x < w4; x++ {
+			if row+x >= 0 && row+x < len(mvd4) {
+				mvd4[row+x] = mvd
+			}
+		}
+	}
+}
+
 func predictMotion4x4(mv4 []syntax.MotionVector, ref4 []int8, stride4, x4, y4, partWidth4 int, targetRef int8) syntax.MotionVector {
 	const partNotAvailable int8 = -2
 	a, refA := getMV4(mv4, ref4, stride4, x4-1, y4)
