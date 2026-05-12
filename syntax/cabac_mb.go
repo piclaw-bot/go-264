@@ -121,9 +121,8 @@ func DecodeCABACMVD(dec *cabac.CABACDecoder, models []cabac.CABACCtx, ctxBase in
 				return 0
 			}
 		}
-		for k >= 0 {
+		for k--; k >= 0; k-- {
 			mvd += int(dec.DecodeBypass()) << uint(k)
-			k--
 		}
 	}
 	if dec.DecodeBypass() == 1 {
