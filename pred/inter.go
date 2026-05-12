@@ -95,32 +95,39 @@ func InterPred16x16At(out []uint8, ref []uint8, stride int, baseX, baseY int, mv
 		}
 		return
 	}
-	clip := func(x, y int) int {
-		if x < 0 {
-			x = 0
-		}
-		if y < 0 {
-			y = 0
-		}
-		if x >= stride {
-			x = stride - 1
-		}
-		if y >= refH {
-			y = refH - 1
-		}
-		return int(ref[y*stride+x])
-	}
 	for y := 0; y < 16; y++ {
 		for x := 0; x < 16; x++ {
 			x0, y0 := sx+x, sy+y
+			cx0, cy0 := x0, y0
+			if cx0 < 0 {
+				cx0 = 0
+			} else if cx0 >= stride {
+				cx0 = stride - 1
+			}
+			if cy0 < 0 {
+				cy0 = 0
+			} else if cy0 >= refH {
+				cy0 = refH - 1
+			}
 			if fx == 0 && fy == 0 {
-				out[y*16+x] = uint8(clip(x0, y0))
+				out[y*16+x] = ref[cy0*stride+cx0]
 				continue
 			}
-			a := clip(x0, y0)
-			b := clip(x0+1, y0)
-			c := clip(x0, y0+1)
-			d := clip(x0+1, y0+1)
+			cx1, cy1 := x0+1, y0+1
+			if cx1 < 0 {
+				cx1 = 0
+			} else if cx1 >= stride {
+				cx1 = stride - 1
+			}
+			if cy1 < 0 {
+				cy1 = 0
+			} else if cy1 >= refH {
+				cy1 = refH - 1
+			}
+			a := int(ref[cy0*stride+cx0])
+			b := int(ref[cy0*stride+cx1])
+			c := int(ref[cy1*stride+cx0])
+			d := int(ref[cy1*stride+cx1])
 			v := a*(4-fx)*(4-fy) + b*fx*(4-fy) + c*(4-fx)*fy + d*fx*fy
 			out[y*16+x] = uint8((v + 8) >> 4)
 		}
