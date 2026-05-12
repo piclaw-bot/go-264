@@ -442,11 +442,19 @@ func coeff8x8NonZero(block [64]int16) bool {
 }
 
 func (d *Decoder) reconstructMBBidi(f *frame.Frame, mb *syntax.MBBidi, mbX, mbY, qp int) {
+	if d == nil || f == nil || mb == nil {
+		return
+	}
+	dstBaseX := mbX * 16
+	dstBaseY := mbY * 16
+	if dstBaseX < 0 || dstBaseY < 0 || dstBaseX+16 > f.Width || dstBaseY+16 > f.Height {
+		return
+	}
 	var refL0, refL1 *frame.Frame
-	if len(d.DPB.Frames) > 0 {
+	if d.DPB != nil && len(d.DPB.Frames) > 0 {
 		refL0 = d.DPB.Frames[len(d.DPB.Frames)-1]
 	}
-	if len(d.DPB.Frames) > 1 {
+	if d.DPB != nil && len(d.DPB.Frames) > 1 {
 		refL1 = d.DPB.Frames[len(d.DPB.Frames)-2]
 	}
 	if refL0 == nil {
@@ -454,6 +462,9 @@ func (d *Decoder) reconstructMBBidi(f *frame.Frame, mb *syntax.MBBidi, mbX, mbY,
 	}
 	if refL1 == nil {
 		refL1 = refL0
+	}
+	if refL0 == nil || refL1 == nil || refL0.Width <= 0 || refL0.Height <= 0 || refL1.Width <= 0 || refL1.Height <= 0 {
+		return
 	}
 
 	var predL0 [256]uint8

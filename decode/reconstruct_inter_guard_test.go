@@ -13,6 +13,16 @@ func TestReconstructChromaInterHandlesNilInputs(t *testing.T) {
 	d.reconstructChromaInter(frame.NewFrame(16, 16), nil, nil, 0, 0, 26)
 }
 
+func TestReconstructMBBidiHandlesInvalidInputs(t *testing.T) {
+	var nilDecoder *Decoder
+	nilDecoder.reconstructMBBidi(frame.NewFrame(16, 16), &syntax.MBBidi{}, 0, 0, 26)
+	d := &Decoder{}
+	d.reconstructMBBidi(nil, &syntax.MBBidi{}, 0, 0, 26)
+	d.reconstructMBBidi(frame.NewFrame(16, 16), nil, 0, 0, 26)
+	d.reconstructMBBidi(frame.NewFrame(16, 16), &syntax.MBBidi{}, -1, 0, 26)
+	d.reconstructMBBidi(frame.NewFrame(16, 16), &syntax.MBBidi{}, 2, 0, 26)
+}
+
 func TestInterResidualWritersHandleOutOfFrameInputs(t *testing.T) {
 	d := &Decoder{}
 	f := frame.NewFrame(16, 16)
