@@ -138,6 +138,9 @@ func (d *Decoder) reconstructMBInter(f *frame.Frame, mb *syntax.MBInter, mbX, mb
 }
 
 func (d *Decoder) reconstructChromaInter(f, ref *frame.Frame, mb *syntax.MBInter, mbX, mbY, qp int) {
+	if f == nil || mb == nil {
+		return
+	}
 	var predU, predV [64]uint8
 	fillBoth := func(partRef *frame.Frame, baseX, baseY, dstX, dstY, w, h int, mv syntax.MotionVector) {
 		if partRef == nil {
