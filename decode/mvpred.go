@@ -128,10 +128,11 @@ func getMV4(mv4 []syntax.MotionVector, ref4 []int8, stride4, x4, y4 int) (syntax
 
 func cabacRefIdxCtx(ref4 []int8, stride4, x4, y4 int) int {
 	refAt := func(cx, cy int) int8 {
-		if cx < 0 || cy < 0 || cx >= stride4 || cy*stride4+cx >= len(ref4) {
+		idx := cy*stride4 + cx
+		if stride4 <= 0 || cx < 0 || cy < 0 || cx >= stride4 || idx < 0 || idx >= len(ref4) {
 			return -2
 		}
-		return ref4[cy*stride4+cx]
+		return ref4[idx]
 	}
 	ctx := 0
 	if refAt(x4-1, y4) > 0 {
@@ -155,10 +156,11 @@ func cabacRefIdxCtxsForMB(ref4 []int8, stride4, mbX, mbY int) [4]int {
 
 func cabacMVDAMVD(mvd4 []syntax.MotionVector, stride4, x4, y4 int, component int) int {
 	absComponent := func(cx, cy int) int {
-		if cx < 0 || cy < 0 || cx >= stride4 || cy*stride4+cx >= len(mvd4) {
+		idx := cy*stride4 + cx
+		if stride4 <= 0 || cx < 0 || cy < 0 || cx >= stride4 || idx < 0 || idx >= len(mvd4) {
 			return 0
 		}
-		mv := mvd4[cy*stride4+cx]
+		mv := mvd4[idx]
 		v := int(mv.X)
 		if component == 1 {
 			v = int(mv.Y)
@@ -172,11 +174,15 @@ func cabacMVDAMVD(mvd4 []syntax.MotionVector, stride4, x4, y4 int, component int
 }
 
 func fillMVD4(mvd4 []syntax.MotionVector, stride4, x4, y4, w4, h4 int, mvd syntax.MotionVector) {
+	if stride4 <= 0 {
+		return
+	}
 	for y := 0; y < h4; y++ {
 		row := (y4+y)*stride4 + x4
 		for x := 0; x < w4; x++ {
-			if row+x >= 0 && row+x < len(mvd4) {
-				mvd4[row+x] = mvd
+			idx := row + x
+			if idx >= 0 && idx < len(mvd4) {
+				mvd4[idx] = mvd
 			}
 		}
 	}
