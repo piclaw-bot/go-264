@@ -209,6 +209,54 @@ func BenchmarkDecodeCoeffTokenFromTable(b *testing.B) {
 	}
 }
 
+func decodeTotalZerosScan(r *nal.Reader, totalCoeff int) int {
+	if totalCoeff <= 0 || totalCoeff >= 16 {
+		return 0
+	}
+	tableIdx := totalCoeff - 1
+	maxVal := totalZerosMaxVal[tableIdx]
+	avail := r.BitsLeft()
+	peekLen := 9
+	if avail < peekLen {
+		peekLen = avail
+	}
+	if peekLen <= 0 {
+		return 0
+	}
+	bits := r.PeekBits(peekLen)
+	for val := 0; val <= maxVal; val++ {
+		cLen := int(totalZerosLen[tableIdx][val])
+		cBits := uint32(totalZerosBits[tableIdx][val])
+		if cLen == 0 || cLen > peekLen {
+			continue
+		}
+		shift := uint(peekLen - cLen)
+		if (bits >> shift) == cBits {
+			r.ReadBits(cLen)
+			return val
+		}
+	}
+	r.ReadBit()
+	return 0
+}
+
+func TestTotalZerosLookupAllPrefixesMatchScan(t *testing.T) {
+	for totalCoeff := 1; totalCoeff < 16; totalCoeff++ {
+		for prefix := 0; prefix < 512; prefix++ {
+			rLookup := bitsToReader(uint32(prefix), 9)
+			rScan := bitsToReader(uint32(prefix), 9)
+			got, ok := decodeTotalZerosLookup(rLookup, totalCoeff)
+			want := decodeTotalZerosScan(rScan, totalCoeff)
+			if !ok {
+				got = decodeTotalZerosScan(rLookup, totalCoeff)
+			}
+			if got != want || rLookup.Position() != rScan.Position() {
+				t.Fatalf("totalCoeff=%d prefix=0x%03x ok=%v got=%d/%d want=%d/%d", totalCoeff, prefix, ok, got, rLookup.Position(), want, rScan.Position())
+			}
+		}
+	}
+}
+
 func TestTotalZerosTablesRoundtrip(t *testing.T) {
 	for totalCoeff := 1; totalCoeff < 16; totalCoeff++ {
 		tableIdx := totalCoeff - 1

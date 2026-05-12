@@ -70,6 +70,9 @@ var runBeforeBits = [7][16]uint8{
 
 // DecodeTotalZeros decodes total_zeros (Table 9-7).
 func DecodeTotalZeros(r *nal.Reader, totalCoeff int) int {
+	if tz, ok := decodeTotalZerosLookup(r, totalCoeff); ok {
+		return tz
+	}
 	if totalCoeff <= 0 || totalCoeff >= 16 {
 		return 0
 	}
