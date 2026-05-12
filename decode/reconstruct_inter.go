@@ -136,15 +136,15 @@ func (d *Decoder) reconstructMBInter(f *frame.Frame, mb *syntax.MBInter, mbX, mb
 
 func (d *Decoder) reconstructChromaInter(f, ref *frame.Frame, mb *syntax.MBInter, mbX, mbY, qp int) {
 	var predU, predV [64]uint8
-	fill := func(dst []uint8, plane []uint8, partRef *frame.Frame, baseX, baseY, dstX, dstY, w, h int, mv syntax.MotionVector) {
+	fillBoth := func(partRef *frame.Frame, baseX, baseY, dstX, dstY, w, h int, mv syntax.MotionVector) {
 		if partRef == nil {
 			partRef = ref
 		}
-		d.fillChromaInterPredRect(dst, plane, partRef.StrideC, partRef.Width/2, partRef.Height/2, baseX, baseY, dstX, dstY, w, h, mv)
-	}
-	fillBoth := func(partRef *frame.Frame, baseX, baseY, dstX, dstY, w, h int, mv syntax.MotionVector) {
-		fill(predU[:], partRef.U, partRef, baseX, baseY, dstX, dstY, w, h, mv)
-		fill(predV[:], partRef.V, partRef, baseX, baseY, dstX, dstY, w, h, mv)
+		if partRef == nil {
+			return
+		}
+		d.fillChromaInterPredRect(predU[:], partRef.U, partRef.StrideC, partRef.Width/2, partRef.Height/2, baseX, baseY, dstX, dstY, w, h, mv)
+		d.fillChromaInterPredRect(predV[:], partRef.V, partRef.StrideC, partRef.Width/2, partRef.Height/2, baseX, baseY, dstX, dstY, w, h, mv)
 	}
 	baseX, baseY := mbX*8, mbY*8
 	switch mb.MBType {
