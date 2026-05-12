@@ -91,6 +91,23 @@ func Dequant4x4(block []int16, qp int) {
 	dequant4x4Range(block, qp, 0)
 }
 
+// Dequant4x4Block dequantizes a full fixed-size 4×4 block. It is intended for
+// hot decode paths that already work with [16]int16 residual arrays and avoids
+// the public slice helper's length checks.
+func Dequant4x4Block(block *[16]int16, qp int) {
+	if qp < 0 {
+		qp = 0
+	} else if qp > 51 {
+		qp = 51
+	}
+	scale := dequant4x4Scale[qp]
+	for i := 0; i < 16; i++ {
+		if block[i] != 0 {
+			block[i] = int16(int32(block[i]) * scale[i])
+		}
+	}
+}
+
 // Dequant4x4AC dequantizes only AC coefficients (positions 1..15), preserving
 // an already-transformed/dequantized DC coefficient. Used by Intra16x16 and
 // chroma DC paths where DC has a separate Hadamard/dequant step.

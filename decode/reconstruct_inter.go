@@ -321,7 +321,7 @@ func (d *Decoder) writeInterResidual(f *frame.Frame, mb *syntax.MBInter, predict
 			group := blkIdx / 4
 			if cbpLuma&(1<<uint(group)) != 0 && mb.TotalCoeff[blkIdx] != 0 {
 				residual[blkIdx] = mb.Coeffs[blkIdx]
-				transform.Dequant4x4(residual[blkIdx][:], qp)
+				transform.Dequant4x4Block(&residual[blkIdx], qp)
 				idctMask |= uint64(1) << uint(blkIdx)
 			}
 		}

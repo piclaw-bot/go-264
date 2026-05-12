@@ -47,6 +47,18 @@ func TestDequant4x4ScaleTableMatchesFormula(t *testing.T) {
 	}
 }
 
+func TestDequant4x4BlockMatchesSliceHelper(t *testing.T) {
+	for qp := -2; qp <= 53; qp++ {
+		block := [16]int16{3, -2, 0, 4, 5, 0, -7, 8, 9, -10, 11, 0, -12, 13, 14, -15}
+		want := block
+		Dequant4x4Block(&block, qp)
+		Dequant4x4(want[:], qp)
+		if block != want {
+			t.Fatalf("qp=%d got %v want %v", qp, block, want)
+		}
+	}
+}
+
 func TestQuantDequant4x4DefensiveBounds(t *testing.T) {
 	short := []int16{1, 2, 3}
 	Quant4x4(short, 26)
