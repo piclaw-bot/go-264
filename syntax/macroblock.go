@@ -9,7 +9,7 @@ import (
 const (
 	MBTypeINxN      = 0  // Intra_4x4 or Intra_8x8
 	MBTypeI16x16_0  = 1  // Intra_16x16 (pred=0, CBP luma=0, CBP chroma=0)
-	MBTypeI16x16_25 = 25 // last I_16x16 variant
+	MBTypeI16x16_24 = 24 // last I_16x16 variant
 	MBTypeIPCM      = 25 // I_PCM (raw samples)
 )
 
@@ -41,6 +41,9 @@ type MBIntra struct {
 	TotalCoeff         [16]int         // CAVLC totalCoeff per luma 4x4 block (for nC context)
 	ChromaTotalCoeff   [2][4]int       // CAVLC totalCoeff per chroma 4x4 block [U/V][block]
 	LumaDCTotalCoeff   int             // totalCoeff of luma DC block (for I16x16 dcNC context)
+	PCMY               [256]uint8      // I_PCM luma samples, raster order
+	PCMCb              [64]uint8       // I_PCM Cb samples for 4:2:0 streams
+	PCMCr              [64]uint8       // I_PCM Cr samples for 4:2:0 streams
 }
 
 // IntraDecodeOpts carries context for CAVLC intra macroblock decoding.
@@ -69,6 +72,11 @@ func DecodeMBIntraWithType(r *nal.Reader, mbType uint32, opts IntraDecodeOpts) *
 	mb := &MBIntra{MBType: mbType}
 	leftNZ, topNZ := opts.LeftNZ, opts.TopNZ
 	leftChromaNZ, topChromaNZ := opts.LeftChromaNZ, opts.TopChromaNZ
+
+	if mb.MBType == MBTypeIPCM {
+		decodeIPCMSamples(r, mb)
+		return mb
+	}
 
 	if mb.MBType == 0 {
 		// I_NxN: 16 prediction modes (4x4 block-level modes)
@@ -192,6 +200,22 @@ func DecodeMBIntraWithType(r *nal.Reader, mbType uint32, opts IntraDecodeOpts) *
 }
 
 // decodeCBPIntra decodes coded_block_pattern for intra macroblocks (Table 9-4).
+func decodeIPCMSamples(r *nal.Reader, mb *MBIntra) {
+	if r == nil || mb == nil {
+		return
+	}
+	r.ByteAlign()
+	for i := range mb.PCMY {
+		mb.PCMY[i] = uint8(r.ReadBits(8))
+	}
+	for i := range mb.PCMCb {
+		mb.PCMCb[i] = uint8(r.ReadBits(8))
+	}
+	for i := range mb.PCMCr {
+		mb.PCMCr[i] = uint8(r.ReadBits(8))
+	}
+}
+
 func decodeCBPIntra(r *nal.Reader) uint32 {
 	codeNum := r.ReadUE()
 	cbpIntraTable := [48]uint32{

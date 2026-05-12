@@ -12,6 +12,13 @@ import (
 )
 
 func (d *Decoder) reconstructMB(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY int, qp int, sps *nal.SPS) {
+	if mb == nil {
+		return
+	}
+	if mb.MBType == syntax.MBTypeIPCM {
+		d.reconstructIPCM(f, mb, mbX, mbY)
+		return
+	}
 	if mb.MBType >= 1 && mb.MBType <= 24 {
 		d.reconstruct16x16(f, mb, mbX, mbY, qp)
 	} else if mb.MBType == 0 {
@@ -22,7 +29,26 @@ func (d *Decoder) reconstructMB(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY int
 		}
 	}
 	d.reconstructChromaIntra(f, mb, mbX, mbY, qp)
-	// I_PCM: raw samples (rare, skip)
+}
+
+func (d *Decoder) reconstructIPCM(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY int) {
+	if f == nil || mb == nil {
+		return
+	}
+	baseX, baseY := mbX*16, mbY*16
+	for y := 0; y < 16; y++ {
+		for x := 0; x < 16; x++ {
+			f.SetPixelY(baseX+x, baseY+y, mb.PCMY[y*16+x])
+		}
+	}
+	baseCX, baseCY := mbX*8, mbY*8
+	for y := 0; y < 8; y++ {
+		for x := 0; x < 8; x++ {
+			idx := y*8 + x
+			f.SetPixelU(baseCX+x, baseCY+y, mb.PCMCb[idx])
+			f.SetPixelV(baseCX+x, baseCY+y, mb.PCMCr[idx])
+		}
+	}
 }
 
 func (d *Decoder) reconstruct16x16(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY, qp int) {
