@@ -36,20 +36,20 @@ func (d *Decoder) reconstructMBInter(f *frame.Frame, mb *syntax.MBInter, mbX, mb
 	switch mb.MBType {
 	case syntax.PMBTypeP16x16:
 		mv := mb.MV[0]
-		predicted := make([]uint8, 256)
-		pred.InterPred16x16At(predicted, ref.Y, ref.StrideY, mbX*16, mbY*16, pred.MotionVector{X: mv.X, Y: mv.Y})
-		d.writeInterResidual(f, mb, predicted, mbX, mbY, qp)
+		var predicted [256]uint8
+		pred.InterPred16x16At(predicted[:], ref.Y, ref.StrideY, mbX*16, mbY*16, pred.MotionVector{X: mv.X, Y: mv.Y})
+		d.writeInterResidual(f, mb, predicted[:], mbX, mbY, qp)
 		d.reconstructChromaInter(f, ref, mb, mbX, mbY, qp)
 
 	case syntax.PMBTypeP16x8:
-		predicted := make([]uint8, 256)
-		tmp := make([]uint8, 256)
+		var predicted [256]uint8
+		var tmp [256]uint8
 		ref0 := d.refL0(mb.RefIdx[0])
 		if ref0 == nil {
 			ref0 = ref
 		}
 		mv0 := mb.MV[0]
-		pred.InterPred16x16At(tmp, ref0.Y, ref0.StrideY, mbX*16, mbY*16, pred.MotionVector{X: mv0.X, Y: mv0.Y})
+		pred.InterPred16x16At(tmp[:], ref0.Y, ref0.StrideY, mbX*16, mbY*16, pred.MotionVector{X: mv0.X, Y: mv0.Y})
 		for y := 0; y < 8; y++ {
 			copy(predicted[y*16:y*16+16], tmp[y*16:y*16+16])
 		}
@@ -58,22 +58,22 @@ func (d *Decoder) reconstructMBInter(f *frame.Frame, mb *syntax.MBInter, mbX, mb
 			ref1 = ref
 		}
 		mv1 := mb.MV[1]
-		pred.InterPred16x16At(tmp, ref1.Y, ref1.StrideY, mbX*16, mbY*16+8, pred.MotionVector{X: mv1.X, Y: mv1.Y})
+		pred.InterPred16x16At(tmp[:], ref1.Y, ref1.StrideY, mbX*16, mbY*16+8, pred.MotionVector{X: mv1.X, Y: mv1.Y})
 		for y := 0; y < 8; y++ {
 			copy(predicted[(y+8)*16:(y+8)*16+16], tmp[y*16:y*16+16])
 		}
-		d.writeInterResidual(f, mb, predicted, mbX, mbY, qp)
+		d.writeInterResidual(f, mb, predicted[:], mbX, mbY, qp)
 		d.reconstructChromaInter(f, ref, mb, mbX, mbY, qp)
 
 	case syntax.PMBTypeP8x16:
-		predicted := make([]uint8, 256)
-		tmp := make([]uint8, 256)
+		var predicted [256]uint8
+		var tmp [256]uint8
 		ref0 := d.refL0(mb.RefIdx[0])
 		if ref0 == nil {
 			ref0 = ref
 		}
 		mv0 := mb.MV[0]
-		pred.InterPred16x16At(tmp, ref0.Y, ref0.StrideY, mbX*16, mbY*16, pred.MotionVector{X: mv0.X, Y: mv0.Y})
+		pred.InterPred16x16At(tmp[:], ref0.Y, ref0.StrideY, mbX*16, mbY*16, pred.MotionVector{X: mv0.X, Y: mv0.Y})
 		for y := 0; y < 16; y++ {
 			copy(predicted[y*16:y*16+8], tmp[y*16:y*16+8])
 		}
@@ -82,15 +82,15 @@ func (d *Decoder) reconstructMBInter(f *frame.Frame, mb *syntax.MBInter, mbX, mb
 			ref1 = ref
 		}
 		mv1 := mb.MV[1]
-		pred.InterPred16x16At(tmp, ref1.Y, ref1.StrideY, mbX*16+8, mbY*16, pred.MotionVector{X: mv1.X, Y: mv1.Y})
+		pred.InterPred16x16At(tmp[:], ref1.Y, ref1.StrideY, mbX*16+8, mbY*16, pred.MotionVector{X: mv1.X, Y: mv1.Y})
 		for y := 0; y < 16; y++ {
 			copy(predicted[y*16+8:y*16+16], tmp[y*16:y*16+8])
 		}
-		d.writeInterResidual(f, mb, predicted, mbX, mbY, qp)
+		d.writeInterResidual(f, mb, predicted[:], mbX, mbY, qp)
 		d.reconstructChromaInter(f, ref, mb, mbX, mbY, qp)
 
 	case syntax.PMBTypeP8x8, syntax.PMBTypeP8x8ref0:
-		predicted := make([]uint8, 256)
+		var predicted [256]uint8
 		for part := 0; part < 4; part++ {
 			partRef := ref
 			if mb.MBType != syntax.PMBTypeP8x8ref0 {
@@ -102,23 +102,23 @@ func (d *Decoder) reconstructMBInter(f *frame.Frame, mb *syntax.MBInter, mbX, mb
 			baseY := (part >> 1) * 8
 			switch mb.SubMBType[part] {
 			case 0: // P_L0_8x8
-				d.copyInterSubRect(predicted, partRef, mbX*16+baseX, mbY*16+baseY, baseX, baseY, 8, 8, mb.SubMV[part*4])
+				d.copyInterSubRect(predicted[:], partRef, mbX*16+baseX, mbY*16+baseY, baseX, baseY, 8, 8, mb.SubMV[part*4])
 			case 1: // P_L0_8x4
-				d.copyInterSubRect(predicted, partRef, mbX*16+baseX, mbY*16+baseY, baseX, baseY, 8, 4, mb.SubMV[part*4])
-				d.copyInterSubRect(predicted, partRef, mbX*16+baseX, mbY*16+baseY+4, baseX, baseY+4, 8, 4, mb.SubMV[part*4+1])
+				d.copyInterSubRect(predicted[:], partRef, mbX*16+baseX, mbY*16+baseY, baseX, baseY, 8, 4, mb.SubMV[part*4])
+				d.copyInterSubRect(predicted[:], partRef, mbX*16+baseX, mbY*16+baseY+4, baseX, baseY+4, 8, 4, mb.SubMV[part*4+1])
 			case 2: // P_L0_4x8
-				d.copyInterSubRect(predicted, partRef, mbX*16+baseX, mbY*16+baseY, baseX, baseY, 4, 8, mb.SubMV[part*4])
-				d.copyInterSubRect(predicted, partRef, mbX*16+baseX+4, mbY*16+baseY, baseX+4, baseY, 4, 8, mb.SubMV[part*4+1])
+				d.copyInterSubRect(predicted[:], partRef, mbX*16+baseX, mbY*16+baseY, baseX, baseY, 4, 8, mb.SubMV[part*4])
+				d.copyInterSubRect(predicted[:], partRef, mbX*16+baseX+4, mbY*16+baseY, baseX+4, baseY, 4, 8, mb.SubMV[part*4+1])
 			case 3: // P_L0_4x4
-				d.copyInterSubRect(predicted, partRef, mbX*16+baseX, mbY*16+baseY, baseX, baseY, 4, 4, mb.SubMV[part*4])
-				d.copyInterSubRect(predicted, partRef, mbX*16+baseX+4, mbY*16+baseY, baseX+4, baseY, 4, 4, mb.SubMV[part*4+1])
-				d.copyInterSubRect(predicted, partRef, mbX*16+baseX, mbY*16+baseY+4, baseX, baseY+4, 4, 4, mb.SubMV[part*4+2])
-				d.copyInterSubRect(predicted, partRef, mbX*16+baseX+4, mbY*16+baseY+4, baseX+4, baseY+4, 4, 4, mb.SubMV[part*4+3])
+				d.copyInterSubRect(predicted[:], partRef, mbX*16+baseX, mbY*16+baseY, baseX, baseY, 4, 4, mb.SubMV[part*4])
+				d.copyInterSubRect(predicted[:], partRef, mbX*16+baseX+4, mbY*16+baseY, baseX+4, baseY, 4, 4, mb.SubMV[part*4+1])
+				d.copyInterSubRect(predicted[:], partRef, mbX*16+baseX, mbY*16+baseY+4, baseX, baseY+4, 4, 4, mb.SubMV[part*4+2])
+				d.copyInterSubRect(predicted[:], partRef, mbX*16+baseX+4, mbY*16+baseY+4, baseX+4, baseY+4, 4, 4, mb.SubMV[part*4+3])
 			default:
-				d.copyInterSubRect(predicted, partRef, mbX*16+baseX, mbY*16+baseY, baseX, baseY, 8, 8, mb.SubMV[part*4])
+				d.copyInterSubRect(predicted[:], partRef, mbX*16+baseX, mbY*16+baseY, baseX, baseY, 8, 8, mb.SubMV[part*4])
 			}
 		}
-		d.writeInterResidual(f, mb, predicted, mbX, mbY, qp)
+		d.writeInterResidual(f, mb, predicted[:], mbX, mbY, qp)
 		d.reconstructChromaInter(f, ref, mb, mbX, mbY, qp)
 
 	default:
