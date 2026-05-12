@@ -355,6 +355,14 @@ func (d *Decoder) reconstruct8x8(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY, q
 }
 
 func (d *Decoder) reconstructChromaIntra(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY, qp int) {
+	if f == nil || mb == nil || f.StrideC <= 0 {
+		return
+	}
+	dstBaseX := mbX * 8
+	dstBaseY := mbY * 8
+	if dstBaseX < 0 || dstBaseY < 0 || dstBaseX+8 > f.Width/2 || dstBaseY+8 > f.Height/2 || (dstBaseY+7)*f.StrideC+dstBaseX+8 > len(f.U) || (dstBaseY+7)*f.StrideC+dstBaseX+8 > len(f.V) {
+		return
+	}
 	chromaQP := frame.ChromaQP(qp, d.chromaQPOffset)
 	for comp := 0; comp < 2; comp++ {
 		predicted := d.predictChroma8x8(f, comp, mbX, mbY, int(mb.ChromaPredMode))
@@ -406,6 +414,12 @@ func clip8(v int) uint8 {
 
 func (d *Decoder) predictChroma8x8(f *frame.Frame, comp int, mbX, mbY, mode int) [64]uint8 {
 	var out [64]uint8
+	if f == nil {
+		for i := range out {
+			out[i] = 128
+		}
+		return out
+	}
 	get := func(x, y int) uint8 {
 		if comp == 0 {
 			return f.PixelU(x, y)
