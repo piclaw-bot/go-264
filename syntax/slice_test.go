@@ -48,6 +48,22 @@ func (w *testBitWriter) bytes() []byte {
 	return out
 }
 
+func TestSkipRefPicListModificationConsumesOperands(t *testing.T) {
+	var w testBitWriter
+	w.bit(1) // ref_pic_list_modification_flag_l0
+	w.ue(0)  // modification_of_pic_nums_idc: short-term subtract
+	w.ue(4)  // abs_diff_pic_num_minus1
+	w.ue(2)  // long-term pic num
+	w.ue(7)  // long_term_pic_num
+	w.ue(3)  // end
+	w.bit(1) // sentinel
+	r := nal.NewReader(w.bytes())
+	skipRefPicListModification(r)
+	if got := r.ReadBit(); got != 1 {
+		t.Fatalf("sentinel after ref_pic_list_modification got %d want 1", got)
+	}
+}
+
 func TestParseHeaderConsumesMMCO5WithoutOperand(t *testing.T) {
 	var w testBitWriter
 	w.ue(0)          // first_mb_in_slice

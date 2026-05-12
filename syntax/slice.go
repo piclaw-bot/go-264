@@ -59,6 +59,25 @@ func skipPredWeightTable(r *nal.Reader, h *Header, sps *nal.SPS) {
 	}
 }
 
+func skipRefPicListModification(r *nal.Reader) {
+	if r == nil || !r.ReadBool() {
+		return
+	}
+	for r.BitsLeft() > 0 {
+		op := r.ReadUE()
+		switch op {
+		case 0, 1:
+			r.ReadUE() // abs_diff_pic_num_minus1
+		case 2:
+			r.ReadUE() // long_term_pic_num
+		case 3:
+			return
+		default:
+			return
+		}
+	}
+}
+
 func skipDecRefPicMarking(r *nal.Reader, nalType uint8) {
 	if r == nil {
 		return
@@ -143,25 +162,9 @@ func ParseHeader(payload []byte, nalType uint8, sps *nal.SPS, pps *nal.PPS) (*He
 	// slice header. Reading it earlier shifts P-slice headers whenever the
 	// override flag is present.
 	if h.SliceType != SliceTypeI && h.SliceType != SliceTypeSI {
-		if r.ReadBool() { // ref_pic_list_modification_flag_l0
-			for {
-				op := r.ReadUE()
-				if op == 3 {
-					break
-				}
-				r.ReadUE()
-			}
-		}
+		skipRefPicListModification(r) // list 0
 		if h.SliceType == SliceTypeB {
-			if r.ReadBool() { // ref_pic_list_modification_flag_l1
-				for {
-					op := r.ReadUE()
-					if op == 3 {
-						break
-					}
-					r.ReadUE()
-				}
-			}
+			skipRefPicListModification(r) // list 1
 		}
 	}
 
