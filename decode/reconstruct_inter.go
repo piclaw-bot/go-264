@@ -136,14 +136,53 @@ func (d *Decoder) reconstructMBInter(f *frame.Frame, mb *syntax.MBInter, mbX, mb
 
 func (d *Decoder) reconstructChromaInter(f, ref *frame.Frame, mb *syntax.MBInter, mbX, mbY, qp int) {
 	var predU, predV [64]uint8
-	mv := mb.MV[0]
-	if mb.MBType == syntax.PMBTypeP8x8 || mb.MBType == syntax.PMBTypeP8x8ref0 {
-		mv = mb.SubMV[0]
+	fill := func(dst []uint8, plane []uint8, partRef *frame.Frame, baseX, baseY, dstX, dstY, w, h int, mv syntax.MotionVector) {
+		if partRef == nil {
+			partRef = ref
+		}
+		d.fillChromaInterPredRect(dst, plane, partRef.StrideC, partRef.Width/2, partRef.Height/2, baseX, baseY, dstX, dstY, w, h, mv)
 	}
-	d.fillChromaInterPred(predU[:], ref.U, ref.StrideC, ref.Width/2, ref.Height/2, mbX*8, mbY*8, mv)
-	d.fillChromaInterPred(predV[:], ref.V, ref.StrideC, ref.Width/2, ref.Height/2, mbX*8, mbY*8, mv)
+	fillBoth := func(partRef *frame.Frame, baseX, baseY, dstX, dstY, w, h int, mv syntax.MotionVector) {
+		fill(predU[:], partRef.U, partRef, baseX, baseY, dstX, dstY, w, h, mv)
+		fill(predV[:], partRef.V, partRef, baseX, baseY, dstX, dstY, w, h, mv)
+	}
+	baseX, baseY := mbX*8, mbY*8
+	switch mb.MBType {
+	case syntax.PMBTypeP16x8:
+		for part := 0; part < 2; part++ {
+			partRef := d.refL0(mb.RefIdx[part])
+			fillBoth(partRef, baseX, baseY+part*4, 0, part*4, 8, 4, mb.MV[part])
+		}
+	case syntax.PMBTypeP8x16:
+		for part := 0; part < 2; part++ {
+			partRef := d.refL0(mb.RefIdx[part])
+			fillBoth(partRef, baseX+part*4, baseY, part*4, 0, 4, 8, mb.MV[part])
+		}
+	case syntax.PMBTypeP8x8, syntax.PMBTypeP8x8ref0:
+		for part := 0; part < 4; part++ {
+			partRef := ref
+			if mb.MBType != syntax.PMBTypeP8x8ref0 {
+				partRef = d.refL0(mb.RefIdx[part])
+			}
+			dstX, dstY := (part&1)*4, (part>>1)*4
+			fillBoth(partRef, baseX+dstX, baseY+dstY, dstX, dstY, 4, 4, mb.SubMV[part*4])
+		}
+	default:
+		fillBoth(ref, baseX, baseY, 0, 0, 8, 8, mb.MV[0])
+	}
 	d.writeChromaInterResidual(f, mb, predU[:], 0, mbX, mbY, qp)
 	d.writeChromaInterResidual(f, mb, predV[:], 1, mbX, mbY, qp)
+}
+
+func (d *Decoder) fillChromaInterPredRect(dst []uint8, plane []uint8, stride, width, height, baseX, baseY, dstX, dstY, w, h int, mv syntax.MotionVector) {
+	if len(dst) < 64 || w <= 0 || h <= 0 || dstX < 0 || dstY < 0 || dstX+w > 8 || dstY+h > 8 {
+		return
+	}
+	var tmp [64]uint8
+	d.fillChromaInterPred(tmp[:], plane, stride, width, height, baseX, baseY, mv)
+	for y := 0; y < h; y++ {
+		copy(dst[(dstY+y)*8+dstX:(dstY+y)*8+dstX+w], tmp[y*8:y*8+w])
+	}
 }
 
 func (d *Decoder) fillChromaInterPred(dst []uint8, plane []uint8, stride, width, height, baseX, baseY int, mv syntax.MotionVector) {
