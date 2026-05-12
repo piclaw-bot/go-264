@@ -26,20 +26,23 @@ const (
 
 // MBBidi describes a decoded B-slice macroblock.
 type MBBidi struct {
-	MBType  uint32
-	RefIdxL0 [4]int8
-	RefIdxL1 [4]int8
-	MVL0     [4]MotionVector
-	MVL1     [4]MotionVector
+	MBType    uint32
+	RefIdxL0  [4]int8
+	RefIdxL1  [4]int8
+	MVL0      [4]MotionVector
+	MVL1      [4]MotionVector
 	SubMBType [4]uint32
-	CBP      uint32
-	QPDelta  int32
-	Coeffs   [16][16]int16
+	CBP       uint32
+	QPDelta   int32
+	Coeffs    [16][16]int16
 }
 
 // DecodeMBBidi decodes one macroblock from a B-slice.
 func DecodeMBBidi(r *nal.Reader, sliceQP int32, numRefL0, numRefL1 uint32) *MBBidi {
 	mb := &MBBidi{}
+	if r == nil {
+		return mb
+	}
 	mb.MBType = r.ReadUE()
 
 	if mb.MBType >= BMBTypeIntra {

@@ -59,6 +59,9 @@ type InterDecodeOpts struct {
 // remainder.
 func DecodeMBInter(r *nal.Reader, opts InterDecodeOpts) MBInter {
 	var mb MBInter
+	if r == nil {
+		return mb
+	}
 	mb.MBType = r.ReadUE()
 	if mb.MBType >= PMBTypeIntra {
 		return mb // caller handles intra payload
@@ -158,7 +161,7 @@ func DecodeMBInter(r *nal.Reader, opts InterDecodeOpts) MBInter {
 }
 
 func readTE(r *nal.Reader, maxVal int) uint32 {
-	if maxVal <= 0 {
+	if r == nil || maxVal <= 0 {
 		return 0
 	}
 	if maxVal == 1 {
@@ -168,6 +171,9 @@ func readTE(r *nal.Reader, maxVal int) uint32 {
 }
 
 func decodeMVD(r *nal.Reader) MotionVector {
+	if r == nil {
+		return MotionVector{}
+	}
 	return MotionVector{
 		X: int16(r.ReadSE()),
 		Y: int16(r.ReadSE()),

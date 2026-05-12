@@ -61,6 +61,9 @@ type IntraDecodeOpts struct {
 // macroblock. Use DecodeMBIntraWithType when mb_type was already consumed by
 // the caller (e.g. intra MBs embedded in a P-slice).
 func DecodeMBIntra(r *nal.Reader, opts IntraDecodeOpts) *MBIntra {
+	if r == nil {
+		return &MBIntra{}
+	}
 	mbType := r.ReadUE()
 	return DecodeMBIntraWithType(r, mbType, opts)
 }
@@ -70,6 +73,9 @@ func DecodeMBIntra(r *nal.Reader, opts IntraDecodeOpts) *MBIntra {
 // intra macroblock types as offsets from the inter type range.
 func DecodeMBIntraWithType(r *nal.Reader, mbType uint32, opts IntraDecodeOpts) *MBIntra {
 	mb := &MBIntra{MBType: mbType}
+	if r == nil {
+		return mb
+	}
 	leftNZ, topNZ := opts.LeftNZ, opts.TopNZ
 	leftChromaNZ, topChromaNZ := opts.LeftChromaNZ, opts.TopChromaNZ
 
