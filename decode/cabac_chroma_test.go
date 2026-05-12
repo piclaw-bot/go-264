@@ -34,6 +34,12 @@ func TestStoreCABACChromaACPreservesDC(t *testing.T) {
 	}
 }
 
+func TestDecodeCABACTransform8x8FlagHandlesInvalidInputs(t *testing.T) {
+	if decodeCABACTransform8x8Flag(nil, nil, 0) {
+		t.Fatal("nil decoder/models decoded a transform-size flag")
+	}
+}
+
 func TestCABACTransform8x8CtxClampsToSpecRange(t *testing.T) {
 	cases := map[int]int{-3: 0, -1: 0, 0: 0, 1: 1, 2: 2, 3: 2, 99: 2}
 	for in, want := range cases {

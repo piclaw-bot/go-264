@@ -108,7 +108,7 @@ func decodeCABACPInterMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, numRe
 		mb.QPDelta = int32(syntax.DecodeCABACDQP(dec, models, 0))
 		use8x8Residual := false
 		if transform8x8Mode && mb.CBP&0xF != 0 {
-			if dec.DecodeBin(&models[399+cabacTransform8x8Ctx(transform8x8Ctx)]) == 1 {
+			if decodeCABACTransform8x8Flag(dec, models, transform8x8Ctx) {
 				use8x8Residual = true
 				mb.Use8x8Transform = true
 			}
@@ -193,6 +193,11 @@ func decodeCABACPSubMBType(dec *cabac.CABACDecoder, models []cabac.CABACCtx) uin
 		return 2 // P_L0_4x8
 	}
 	return 3 // P_L0_4x4
+}
+
+func decodeCABACTransform8x8Flag(dec *cabac.CABACDecoder, models []cabac.CABACCtx, ctx int) bool {
+	idx := 399 + cabacTransform8x8Ctx(ctx)
+	return dec != nil && idx >= 0 && idx < len(models) && dec.DecodeBin(&models[idx]) == 1
 }
 
 func cabacTransform8x8Ctx(ctx int) int {
@@ -285,7 +290,7 @@ func decodeCABACIntraMBWithParams(dec *cabac.CABACDecoder, models []cabac.CABACC
 
 	// Intra 4x4 / 8x8 prediction modes (I_NxN only)
 	if mb.MBType == 0 {
-		if enableCABACI8x8Transform && transform8x8Mode && dec.DecodeBin(&models[399+cabacTransform8x8Ctx(transform8x8Ctx)]) == 1 {
+		if enableCABACI8x8Transform && transform8x8Mode && decodeCABACTransform8x8Flag(dec, models, transform8x8Ctx) {
 			mb.Use8x8Transform = true
 			var localModes [4]int8
 			for i := 0; i < 4; i++ {
