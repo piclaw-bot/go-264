@@ -25,7 +25,7 @@ func DecodeCAVLCBlock(r *nal.Reader, nC int) (Block4x4, int) {
 	if totalCoeff == 0 {
 		return block, 0
 	}
-	signs := make([]int16, trailingOnes)
+	var signs [3]int16
 	for i := trailingOnes - 1; i >= 0; i-- {
 		if r.ReadBit() == 1 {
 			signs[i] = -1
@@ -33,7 +33,7 @@ func DecodeCAVLCBlock(r *nal.Reader, nC int) (Block4x4, int) {
 			signs[i] = 1
 		}
 	}
-	levels := make([]int16, totalCoeff)
+	var levels [16]int16
 	idx := totalCoeff - 1
 	for i := trailingOnes - 1; i >= 0; i-- {
 		levels[idx] = signs[i]
@@ -111,7 +111,7 @@ func decodeCAVLCBlockWithScan(r *nal.Reader, nC int, maxCoeff int, scan []int) (
 	if totalCoeff > maxCoeff {
 		totalCoeff = maxCoeff
 	}
-	signs := make([]int16, trailingOnes)
+	var signs [3]int16
 	for i := trailingOnes - 1; i >= 0; i-- {
 		if r.ReadBit() == 1 {
 			signs[i] = -1
@@ -119,7 +119,7 @@ func decodeCAVLCBlockWithScan(r *nal.Reader, nC int, maxCoeff int, scan []int) (
 			signs[i] = 1
 		}
 	}
-	levels := make([]int16, totalCoeff)
+	var levels [16]int16
 	idx := totalCoeff - 1
 	for i := trailingOnes - 1; i >= 0 && idx >= 0; i-- {
 		levels[idx] = signs[i]
