@@ -47,7 +47,7 @@ func decodeCABACPInterMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, numRe
 	case syntax.PMBTypeP8x8, syntax.PMBTypeP8x8ref0:
 		parts = 4
 		for i := 0; i < 4; i++ {
-			mb.SubMBType[i] = 0
+			mb.SubMBType[i] = decodeCABACPSubMBType(dec, models)
 		}
 	}
 	if numRefFrames > 1 && mb.MBType != syntax.PMBTypeP8x8ref0 {
@@ -57,9 +57,11 @@ func decodeCABACPInterMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, numRe
 	}
 	if mb.MBType == syntax.PMBTypeP8x8 || mb.MBType == syntax.PMBTypeP8x8ref0 {
 		for i := 0; i < 4; i++ {
-			mdx := syntax.DecodeCABACMVD(dec, models, 40, 0)
-			mdy := syntax.DecodeCABACMVD(dec, models, 47, 0)
-			mb.SubMV[i*4] = syntax.MotionVector{X: mdx, Y: mdy}
+			for j := 0; j < cabacPSubMBPartCount(mb.SubMBType[i]); j++ {
+				mdx := syntax.DecodeCABACMVD(dec, models, 40, 0)
+				mdy := syntax.DecodeCABACMVD(dec, models, 47, 0)
+				mb.SubMV[i*4+j] = syntax.MotionVector{X: mdx, Y: mdy}
+			}
 		}
 		mb.DecodedMVDX = mb.SubMV[0].X
 		mb.DecodedMVDY = mb.SubMV[0].Y
@@ -136,6 +138,33 @@ func decodeCABACPInterMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, numRe
 		}
 	}
 	return mb, nil, false
+}
+
+func decodeCABACPSubMBType(dec *cabac.CABACDecoder, models []cabac.CABACCtx) uint32 {
+	if dec == nil || len(models) <= 23 {
+		return 0
+	}
+	if dec.DecodeBin(&models[21]) == 1 {
+		return 0 // P_L0_8x8
+	}
+	if dec.DecodeBin(&models[22]) == 0 {
+		return 1 // P_L0_8x4
+	}
+	if dec.DecodeBin(&models[23]) == 1 {
+		return 2 // P_L0_4x8
+	}
+	return 3 // P_L0_4x4
+}
+
+func cabacPSubMBPartCount(subType uint32) int {
+	switch subType {
+	case 1, 2:
+		return 2
+	case 3:
+		return 4
+	default:
+		return 1
+	}
 }
 
 func storeCABACChromaDC(mb *syntax.MBInter, comp int, dc [4]int16) {
