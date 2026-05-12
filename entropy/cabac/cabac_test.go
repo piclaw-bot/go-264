@@ -65,6 +65,21 @@ func TestCABACDecoder_DecodeTerminate(t *testing.T) {
 	t.Log("No termination in 5 steps (expected for non-terminal data)")
 }
 
+func TestDecodeCABACResidualRejectsInvalidBounds(t *testing.T) {
+	dec := NewCABACDecoder(nal.NewReader([]byte{0xff, 0xff, 0xff, 0xff}))
+	models := InitContextModels(26, 0, false)
+	var out [64]int16
+	if got := dec.DecodeCABACResidual(models, 2, 0, out[:], 0, 0); got != 0 {
+		t.Fatalf("maxCoeff=0 got %d want 0", got)
+	}
+	if got := dec.DecodeCABACResidual(models, 2, 65, make([]int16, 65), 0, 0); got != 0 {
+		t.Fatalf("maxCoeff=65 got %d want 0", got)
+	}
+	if got := dec.DecodeCABACResidual(models[:10], 2, 16, out[:], 99, -4); got != 0 {
+		t.Fatalf("short models got %d want 0", got)
+	}
+}
+
 func TestCABACContextInit(t *testing.T) {
 	models := InitContextModels(26, 0, true)
 	if len(models) != 1024 {
@@ -80,17 +95,31 @@ func TestCABACContextInit(t *testing.T) {
 
 func TestCABACTransitionTables(t *testing.T) {
 	// Verify table sizes
-	if len(transIdxLPS) != 64 { t.Fatal("transIdxLPS size") }
-	if len(transIdxMPS) != 64 { t.Fatal("transIdxMPS size") }
-	if len(rangeTabLPS) != 64 { t.Fatal("rangeTabLPS size") }
+	if len(transIdxLPS) != 64 {
+		t.Fatal("transIdxLPS size")
+	}
+	if len(transIdxMPS) != 64 {
+		t.Fatal("transIdxMPS size")
+	}
+	if len(rangeTabLPS) != 64 {
+		t.Fatal("rangeTabLPS size")
+	}
 
 	// LPS transition should decrease pState (toward equi-probable)
-	if transIdxLPS[63] != 63 { t.Error("LPS[63] should stay at 63") }
-	if transIdxLPS[0] != 0 { t.Error("LPS[0] should stay at 0") }
+	if transIdxLPS[63] != 63 {
+		t.Error("LPS[63] should stay at 63")
+	}
+	if transIdxLPS[0] != 0 {
+		t.Error("LPS[0] should stay at 0")
+	}
 
 	// MPS transition should increase pState
-	if transIdxMPS[0] != 1 { t.Error("MPS[0] should go to 1") }
-	if transIdxMPS[62] != 62 { t.Error("MPS[62] should stay at 62") }
+	if transIdxMPS[0] != 1 {
+		t.Error("MPS[0] should go to 1")
+	}
+	if transIdxMPS[62] != 62 {
+		t.Error("MPS[62] should stay at 62")
+	}
 }
 
 func FuzzCABACDecode(f *testing.F) {

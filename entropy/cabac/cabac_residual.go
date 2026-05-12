@@ -87,11 +87,17 @@ var cabacLastCoeff8x8 = [63]uint8{
 // Returns number of nonzero coefficients (totalCoeff).
 // Decodes coded_block_flag first; if 0, returns 0 without reading more bins.
 func (d *CABACDecoder) DecodeCABACResidual(models []CABACCtx, cat, maxCoeff int, out []int16, nza, nzb int) int {
-	if d == nil || len(models) < 1024 || len(out) < maxCoeff {
+	if d == nil || maxCoeff <= 0 || maxCoeff > 64 || len(models) < 1024 || len(out) < maxCoeff {
 		return 0
 	}
 	if cat < 0 || cat >= 14 {
 		return 0
+	}
+	if nza != 0 {
+		nza = 1
+	}
+	if nzb != 0 {
+		nzb = 1
 	}
 
 	sigBase := cabacSigCoeffFlagOffset[cat]
