@@ -9,13 +9,19 @@ import "github.com/rcarmo/go-264/syntax"
 // writeBackInter4x4 fills the 4x4 MV/ref cache for an inter macroblock after
 // decoding. Each luma4x4BlkIdx cell is written with the partition MV and ref.
 func writeBackInter4x4(mv4 []syntax.MotionVector, ref4 []int8, stride4, mbX, mbY int, mb *syntax.MBInter) {
+	if mb == nil || stride4 <= 0 {
+		return
+	}
 	fill := func(x4, y4, w4, h4 int, mv syntax.MotionVector, ref int8) {
 		baseX, baseY := mbX*4+x4, mbY*4+y4
 		for y := 0; y < h4; y++ {
 			row := (baseY+y)*stride4 + baseX
 			for x := 0; x < w4; x++ {
-				mv4[row+x] = mv
-				ref4[row+x] = ref
+				idx := row + x
+				if idx >= 0 && idx < len(mv4) && idx < len(ref4) {
+					mv4[idx] = mv
+					ref4[idx] = ref
+				}
 			}
 		}
 	}
@@ -55,11 +61,17 @@ func writeBackInter4x4(mv4 []syntax.MotionVector, ref4 []int8, stride4, mbX, mbY
 // writeBackIntra4x4 marks all 4x4 cells of an intra macroblock as ref=-1 in
 // the ref4 cache (no L0 reference).
 func writeBackIntra4x4(ref4 []int8, stride4, mbX, mbY int) {
+	if stride4 <= 0 {
+		return
+	}
 	baseX, baseY := mbX*4, mbY*4
 	for y := 0; y < 4; y++ {
 		row := (baseY+y)*stride4 + baseX
 		for x := 0; x < 4; x++ {
-			ref4[row+x] = -1
+			idx := row + x
+			if idx >= 0 && idx < len(ref4) {
+				ref4[idx] = -1
+			}
 		}
 	}
 }
