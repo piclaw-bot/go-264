@@ -5,14 +5,24 @@ package nal
 
 // Reader reads bits from a byte slice with H.264 emulation prevention.
 type Reader struct {
-	data []byte
-	pos  int // byte position
-	bit  int // bit position within current byte (7 = MSB, 0 = LSB)
+	data   []byte
+	pos    int  // byte position
+	bit    int  // bit position within current byte (7 = MSB, 0 = LSB)
+	hasEPB bool // payload contains at least one 0x00 0x00 0x03 sequence
 }
 
 // NewReader creates a bitstream reader over raw NAL unit payload (after start code + header).
 func NewReader(data []byte) *Reader {
-	return &Reader{data: data, pos: 0, bit: 7}
+	return &Reader{data: data, pos: 0, bit: 7, hasEPB: containsEmulationPreventionByte(data)}
+}
+
+func containsEmulationPreventionByte(data []byte) bool {
+	for i := 2; i < len(data); i++ {
+		if data[i-2] == 0 && data[i-1] == 0 && data[i] == 3 {
+			return true
+		}
+	}
+	return false
 }
 
 // ReadBit reads a single bit.
@@ -26,7 +36,7 @@ func (r *Reader) ReadBit() uint32 {
 		r.bit = 7
 		r.pos++
 		// Emulation prevention: skip 0x03 in 0x00 0x00 0x03
-		if r.pos >= 2 && r.pos < len(r.data) &&
+		if r.hasEPB && r.pos >= 2 && r.pos < len(r.data) &&
 			r.data[r.pos-2] == 0 && r.data[r.pos-1] == 0 && r.data[r.pos] == 3 {
 			r.pos++
 		}
@@ -43,7 +53,7 @@ func (r *Reader) readByte() uint32 {
 	}
 	v := uint32(r.data[r.pos])
 	r.pos++
-	if r.pos >= 2 && r.pos < len(r.data) &&
+	if r.hasEPB && r.pos >= 2 && r.pos < len(r.data) &&
 		r.data[r.pos-2] == 0 && r.data[r.pos-1] == 0 && r.data[r.pos] == 3 {
 		r.pos++
 	}
@@ -123,7 +133,7 @@ func (r *Reader) ByteAlign() {
 	if r.bit != 7 {
 		r.bit = 7
 		r.pos++
-		if r.pos >= 2 && r.pos < len(r.data) &&
+		if r.hasEPB && r.pos >= 2 && r.pos < len(r.data) &&
 			r.data[r.pos-2] == 0 && r.data[r.pos-1] == 0 && r.data[r.pos] == 3 {
 			r.pos++
 		}
@@ -174,6 +184,9 @@ func (r *Reader) PeekBits(n int) uint32 {
 }
 
 func (r *Reader) hasEmulationPreventionInWindow(bytesNeeded int) bool {
+	if !r.hasEPB {
+		return false
+	}
 	end := r.pos + bytesNeeded
 	if end > len(r.data) {
 		end = len(r.data)

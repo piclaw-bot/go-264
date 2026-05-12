@@ -2,6 +2,21 @@ package nal
 
 import "testing"
 
+func TestContainsEmulationPreventionByte(t *testing.T) {
+	if containsEmulationPreventionByte([]byte{0, 0, 2, 3}) {
+		t.Fatal("false positive EPB detection")
+	}
+	if !containsEmulationPreventionByte([]byte{0x12, 0, 0, 3, 0x80}) {
+		t.Fatal("missed EPB detection")
+	}
+	if NewReader([]byte{0x12, 0x34}).hasEPB {
+		t.Fatal("reader marked no-EPB payload as EPB-bearing")
+	}
+	if !NewReader([]byte{0, 0, 3, 0x80}).hasEPB {
+		t.Fatal("reader failed to mark EPB-bearing payload")
+	}
+}
+
 func TestReadBits(t *testing.T) {
 	// 0xAB = 10101011
 	r := NewReader([]byte{0xAB})
