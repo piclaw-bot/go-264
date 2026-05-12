@@ -74,8 +74,14 @@ func DecodeCABACRef(dec *cabac.CABACDecoder, models []cabac.CABACCtx, ctx int) u
 	if dec == nil || len(models) <= 58 {
 		return 0
 	}
+	if ctx < 0 {
+		ctx = 0
+	}
+	if ctx > 3 {
+		ctx = 3
+	}
 	ref := uint32(0)
-	for dec.DecodeBin(&models[54+ctx]) == 1 {
+	for 54+ctx < len(models) && dec.DecodeBin(&models[54+ctx]) == 1 {
 		ref++
 		ctx = (ctx >> 2) + 4
 		if ref >= 32 {
