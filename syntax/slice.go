@@ -25,6 +25,8 @@ type Header struct {
 	NumRefIdxL1Active   uint32
 	CabacInitIDC        uint32
 	SliceQPDelta        int32
+	SPForSwitchFlag     bool
+	SliceQSDelta        int32
 	DisableDeblocking   int32
 	SliceAlphaC0Offset  int32
 	SliceBetaOffset     int32
@@ -190,6 +192,12 @@ func ParseHeaderWithRefIDC(payload []byte, nalType uint8, nalRefIDC uint8, sps *
 		h.CabacInitIDC = r.ReadUE()
 	}
 	h.SliceQPDelta = r.ReadSE()
+	if h.SliceType == SliceTypeSP {
+		h.SPForSwitchFlag = r.ReadBool()
+	}
+	if h.SliceType == SliceTypeSP || h.SliceType == SliceTypeSI {
+		h.SliceQSDelta = r.ReadSE()
+	}
 
 	if pps.DeblockingFilterControl {
 		disableDeblocking := r.ReadUE()
