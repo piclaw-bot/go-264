@@ -95,6 +95,29 @@ func TestReadBitsFastPathEmulationPrevention(t *testing.T) {
 	}
 }
 
+func TestReadBitsNoEPBFastPathMatchesBitByBit(t *testing.T) {
+	data := []byte{0b10110110, 0b01011100, 0b11110000, 0x12, 0x34}
+	for start := 0; start < 24; start++ {
+		for n := 0; n <= 32; n++ {
+			rFast := NewReader(data)
+			rSlow := NewReader(data)
+			rFast.Seek(start)
+			rSlow.Seek(start)
+			got := rFast.ReadBits(n)
+			var want uint32
+			if n > 32 {
+				n = 32
+			}
+			for i := 0; i < n; i++ {
+				want = (want << 1) | rSlow.ReadBit()
+			}
+			if got != want || rFast.Position() != rSlow.Position() {
+				t.Fatalf("start=%d n=%d got=0x%x/%d want=0x%x/%d", start, n, got, rFast.Position(), want, rSlow.Position())
+			}
+		}
+	}
+}
+
 func TestReadBitsMixedAlignmentFastPath(t *testing.T) {
 	r := NewReader([]byte{0b10110110, 0b01011100, 0b11110000})
 	if v := r.ReadBits(3); v != 0b101 {

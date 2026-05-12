@@ -70,6 +70,11 @@ func (r *Reader) ReadBits(n int) uint32 {
 	if n > 32 {
 		n = 32
 	}
+	if !r.hasEPB && r.BitsLeft() >= n {
+		v := r.peekBitsRaw(n)
+		r.advanceRawBits(n)
+		return v
+	}
 	var v uint32
 	for n >= 8 && r.bit == 7 {
 		v = (v << 8) | r.readByte()
@@ -170,17 +175,28 @@ func (r *Reader) PeekBits(n int) uint32 {
 	// the common CAVLC VLC lookup path and avoids ReadBits save/restore overhead.
 	bytesNeeded := (7 - r.bit + n + 7) >> 3
 	if r.pos+bytesNeeded <= len(r.data) && !r.hasEmulationPreventionInWindow(bytesNeeded) {
-		var acc uint64
-		for i := 0; i < bytesNeeded; i++ {
-			acc = (acc << 8) | uint64(r.data[r.pos+i])
-		}
-		shift := uint(bytesNeeded*8 - (7 - r.bit) - n)
-		return uint32((acc >> shift) & ((uint64(1) << uint(n)) - 1))
+		return r.peekBitsRaw(n)
 	}
 	savePos, saveBit := r.pos, r.bit
 	v := r.ReadBits(n)
 	r.pos, r.bit = savePos, saveBit
 	return v
+}
+
+func (r *Reader) peekBitsRaw(n int) uint32 {
+	bytesNeeded := (7 - r.bit + n + 7) >> 3
+	var acc uint64
+	for i := 0; i < bytesNeeded; i++ {
+		acc = (acc << 8) | uint64(r.data[r.pos+i])
+	}
+	shift := uint(bytesNeeded*8 - (7 - r.bit) - n)
+	return uint32((acc >> shift) & ((uint64(1) << uint(n)) - 1))
+}
+
+func (r *Reader) advanceRawBits(n int) {
+	bitPos := r.pos*8 + (7 - r.bit) + n
+	r.pos = bitPos / 8
+	r.bit = 7 - (bitPos % 8)
 }
 
 func (r *Reader) hasEmulationPreventionInWindow(bytesNeeded int) bool {
