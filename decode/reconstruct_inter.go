@@ -203,14 +203,25 @@ func (d *Decoder) writeChromaInterResidual(f *frame.Frame, mb *syntax.MBInter, p
 	}
 	transform.Hadamard2x2DC(dc[:], chromaQP)
 	var residual [4][16]int16
+	var idctMask uint64
 	for blk := 0; blk < 4; blk++ {
+		if dc[blk] == 0 && mb.ChromaTotalCoeff[comp][blk] == 0 {
+			continue
+		}
 		residual[blk] = mb.CoeffsChroma[comp][blk]
 		residual[blk][0] = dc[blk]
 		transform.Dequant4x4AC(residual[blk][:], chromaQP)
+		idctMask |= uint64(1) << uint(blk)
 	}
-	transform.IDCT4x4Batch(residual[:])
+	transform.IDCT4x4BatchMask(residual[:], idctMask)
 	for blk := 0; blk < 4; blk++ {
 		bx, by := (blk&1)*4, (blk>>1)*4
+		if idctMask&(uint64(1)<<uint(blk)) == 0 {
+			for y := 0; y < 4; y++ {
+				copy(plane[(dstBaseY+by+y)*f.StrideC+dstBaseX+bx:(dstBaseY+by+y)*f.StrideC+dstBaseX+bx+4], predicted[(by+y)*8+bx:(by+y)*8+bx+4])
+			}
+			continue
+		}
 		for y := 0; y < 4; y++ {
 			dstRow := plane[(dstBaseY+by+y)*f.StrideC+dstBaseX+bx:]
 			predRow := predicted[(by+y)*8+bx:]

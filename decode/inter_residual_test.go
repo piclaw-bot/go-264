@@ -65,6 +65,39 @@ func TestWriteChromaInterResidualZeroCBPCopiesPrediction(t *testing.T) {
 	assertPredictedChroma8x8(t, f, 1, predicted[:], 0, 0)
 }
 
+func TestWriteChromaInterResidualZeroBlocksInsideCodedCBP(t *testing.T) {
+	var d Decoder
+	f := frame.NewFrame(16, 16)
+	predicted := patternedPrediction8()
+	mb := &syntax.MBInter{CBP: 0x20} // chroma AC coded, but all coeffs zero
+
+	d.writeChromaInterResidual(f, mb, predicted[:], 0, 0, 0, 26)
+	assertPredictedChroma8x8(t, f, 0, predicted[:], 0, 0)
+}
+
+func TestWriteChromaInterResidualCodedBlockPreservesUncodedNeighbours(t *testing.T) {
+	var d Decoder
+	f := frame.NewFrame(16, 16)
+	predicted := patternedPrediction8()
+	mb := &syntax.MBInter{CBP: 0x20}
+	mb.CoeffsChroma[0][0][1] = 8
+	mb.ChromaTotalCoeff[0][0] = 1
+
+	d.writeChromaInterResidual(f, mb, predicted[:], 0, 0, 0, 26)
+	for blk := 1; blk < 4; blk++ {
+		bx, by := (blk&1)*4, (blk>>1)*4
+		for y := 0; y < 4; y++ {
+			for x := 0; x < 4; x++ {
+				got := f.U[(by+y)*f.StrideC+bx+x]
+				want := predicted[(by+y)*8+bx+x]
+				if got != want {
+					t.Fatalf("uncoded chroma block %d pixel (%d,%d) got %d want %d", blk, bx+x, by+y, got, want)
+				}
+			}
+		}
+	}
+}
+
 func TestWriteInterResidualZeroCBPCopiesPrediction4x4(t *testing.T) {
 	var d Decoder
 	f := frame.NewFrame(16, 16)
