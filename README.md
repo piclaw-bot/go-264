@@ -86,7 +86,7 @@ go build -o /workspace/tmp/trace264 ./cmd/trace264
 /workspace/tmp/trace264 -i input_baseline.h264 -limit 64
 ```
 
-`trace264` is a CAVLC syntax tracer. CABAC streams are rejected explicitly until MB-level CABAC tracing is wired to the decode path; this avoids misleading CAVLC traces for Main/High streams.
+`trace264` is a CAVLC syntax tracer. CABAC streams are rejected explicitly until MB-level CABAC tracing is wired to the decode path; this avoids misleading CAVLC traces for Main/High streams. Its P-slice QP and MV-prediction bookkeeping is kept aligned with the decoder so CAVLC diagnostic output uses the same wraparound and 4×4 MV/ref cache semantics.
 
 ### Compare against FFmpeg-derived frame metadata
 
@@ -125,8 +125,10 @@ Recent performance/safety work:
 - `pred.InterPred16x16At` has an unclipped interior fractional-MV fast path plus horizontal-only/vertical-only fractional specializations; edge/negative coordinates still use the clipped scalar path.
 - `decode.copyInterSubRect` copies integer-MV P8x8 sub-rectangles directly instead of predicting a full 16×16 block.
 - `decode.fillChromaInterPred` has an interior 8×8 row-copy fast path with malformed-input guards.
-- Inter residual write-back now writes luma and chroma rows directly into frame planes after the same add + clip operation, avoiding per-pixel setter calls in the hot path.
+- Inter residual write-back now writes luma and chroma rows directly into frame planes after the same add + clip operation, avoiding per-pixel setter calls in the hot path; residual category and coefficient bounds are validated before writes.
 - Inter chroma prediction now follows luma partition boundaries for P16x8, P8x16, and P8x8 macroblocks, including P8x8 8×4/4×8/4×4 sub-partition MVs at 4:2:0 scale.
+- MV/ref caches are the single source of motion-prediction context in the decoder and trace tooling. Cache reads/fills and CABAC MV/ref context helpers reject malformed strides, short slices, and negative origins instead of panicking in direct helper/tool use.
+- QP updates are centralized through a wraparound helper so both decoder and `trace264` normalize arbitrary signed deltas consistently.
 - Inter zero-residual paths copy prediction directly: uncoded luma CBP groups, zero-`TotalCoeff` 4×4 blocks, all-zero 8×8 transform groups, chroma CBP=0, and zero chroma 4×4 residual blocks.
 - Intra/inter/B reconstruction use fixed stack prediction buffers for 16×16 temporaries.
 - `transform.IDCT4x4BatchMask` skips IDCT for known-zero dense residual slots.
@@ -155,7 +157,7 @@ Generators live in `internal/tables/` and are marked with `//go:build ignore` so
 
 ## Known gaps / tracked work
 
-- CABAC P-slice syntax now covers intra-in-P, skip/ref/MVD neighbour contexts, P8x8 sub-MB types, chroma DC/AC placement, and transform-size context selection, but Main/High frame quality remains below the correctness gate. CABAC ref_idx/MVD helper boundaries are guarded against malformed direct use.
+- CABAC P-slice syntax now covers intra-in-P, skip/ref/MVD neighbour contexts, P8x8 sub-MB types, chroma DC/AC placement, residual category bounds, and transform-size context selection, but Main/High frame quality remains below the correctness gate. CABAC residual/ref_idx/MVD helper boundaries are guarded against malformed direct use.
 - CABAC I8x8 `transform_size_8x8_flag` decode is intentionally guarded by `enableCABACI8x8Transform=false` because consuming the flag currently lowers BBB CABAC quality; it remains gated on better I8x8 neighbour-mode inference / reconstruction parity.
 - SIMD acceleration is in incremental integration: parity/fallback gates are present, an IDCT4x4 batch seam exists, and current work is focused on measured hot paths rather than speculative assembly.
 - Encoder API, rate control, and full x264-like encode pipeline are planned but not yet implemented.
