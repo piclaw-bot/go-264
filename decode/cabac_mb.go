@@ -11,7 +11,7 @@ import (
 
 // decodeCABACPInterMB decodes one CABAC-coded P-slice macroblock.
 // Returns (inter, nil, true) for P-skip, (nil, intra, false) for intra-in-P.
-func decodeCABACPInterMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, numRefFrames uint32, leftNZ, topNZ *[16]int, leftChromaNZ, topChromaNZ *[2][4]int, leftCBP, topCBP uint32, leftNonSkip, topNonSkip bool, transform8x8Mode bool, leftMBType, topMBType uint32, leftChromaPred, topChromaPred int8, leftEdge8x8, topEdge8x8 [2]int8) (*syntax.MBInter, *syntax.MBIntra, bool) {
+func decodeCABACPInterMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, numRefFrames uint32, leftNZ, topNZ *[16]int, leftChromaNZ, topChromaNZ *[2][4]int, leftCBP, topCBP uint32, leftNonSkip, topNonSkip bool, refCtxs [4]int, transform8x8Mode bool, leftMBType, topMBType uint32, leftChromaPred, topChromaPred int8, leftEdge8x8, topEdge8x8 [2]int8) (*syntax.MBInter, *syntax.MBIntra, bool) {
 	mb := &syntax.MBInter{MBType: syntax.PMBTypeP16x16}
 	if dec == nil || len(models) < 20 {
 		return mb, nil, true
@@ -52,7 +52,7 @@ func decodeCABACPInterMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, numRe
 	}
 	if numRefFrames > 1 && mb.MBType != syntax.PMBTypeP8x8ref0 {
 		for i := 0; i < parts; i++ {
-			mb.RefIdx[i] = int8(syntax.DecodeCABACRef(dec, models, 0))
+			mb.RefIdx[i] = int8(syntax.DecodeCABACRef(dec, models, refCtxs[i]))
 		}
 	}
 	if mb.MBType == syntax.PMBTypeP8x8 || mb.MBType == syntax.PMBTypeP8x8ref0 {

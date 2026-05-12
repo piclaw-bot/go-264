@@ -282,7 +282,8 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 						topEdge8x8[bc] = -1
 					}
 				}
-				mbInter, mbIntra, skipped := decodeCABACPInterMB(cabacDec, cabacModels, hdr.NumRefIdxL0Active, leftNZ, topNZ, leftChromaNZ, topChromaNZ, leftCBP, topCBP, leftNonSkip, topNonSkip, pps.Transform8x8Mode, leftMBType, topMBType, leftChromaPred, topChromaPred, leftEdge8x8, topEdge8x8)
+				refIdxCtxs := cabacRefIdxCtxsForMB(ref4Ctx, mv4Stride, mbX, mbY)
+				mbInter, mbIntra, skipped := decodeCABACPInterMB(cabacDec, cabacModels, hdr.NumRefIdxL0Active, leftNZ, topNZ, leftChromaNZ, topChromaNZ, leftCBP, topCBP, leftNonSkip, topNonSkip, refIdxCtxs, pps.Transform8x8Mode, leftMBType, topMBType, leftChromaPred, topChromaPred, leftEdge8x8, topEdge8x8)
 				if skipped {
 					skipMV := predictSkipMV(mvCtx, refCtx, predMV, mbIdx, mbX, mbY, mbWidth)
 					mbInter.MV[0] = skipMV

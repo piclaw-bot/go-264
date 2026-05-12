@@ -140,6 +140,33 @@ func getMV4(mv4 []syntax.MotionVector, ref4 []int8, stride4, x4, y4 int) (syntax
 	return mv4[idx], ref4[idx]
 }
 
+func cabacRefIdxCtx(ref4 []int8, stride4, x4, y4 int) int {
+	refAt := func(cx, cy int) int8 {
+		if cx < 0 || cy < 0 || cx >= stride4 || cy*stride4+cx >= len(ref4) {
+			return -2
+		}
+		return ref4[cy*stride4+cx]
+	}
+	ctx := 0
+	if refAt(x4-1, y4) > 0 {
+		ctx++
+	}
+	if refAt(x4, y4-1) > 0 {
+		ctx += 2
+	}
+	return ctx
+}
+
+func cabacRefIdxCtxsForMB(ref4 []int8, stride4, mbX, mbY int) [4]int {
+	x4, y4 := mbX*4, mbY*4
+	return [4]int{
+		cabacRefIdxCtx(ref4, stride4, x4, y4),
+		cabacRefIdxCtx(ref4, stride4, x4, y4+2),
+		cabacRefIdxCtx(ref4, stride4, x4+2, y4),
+		cabacRefIdxCtx(ref4, stride4, x4+2, y4+2),
+	}
+}
+
 func predictMotion4x4(mv4 []syntax.MotionVector, ref4 []int8, stride4, x4, y4, partWidth4 int, targetRef int8) syntax.MotionVector {
 	const partNotAvailable int8 = -2
 	a, refA := getMV4(mv4, ref4, stride4, x4-1, y4)
