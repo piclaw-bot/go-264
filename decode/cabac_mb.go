@@ -107,25 +107,45 @@ func decodeCABACPInterMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, numRe
 		var nzMBChroma [2][4]int
 		if chromaCBP > 0 {
 			for comp := 0; comp < 2; comp++ {
-				var buf [16]int16
-				dec.DecodeCABACResidual(models, 3, 4, buf[:], 0, 0)
-				mb.CoeffsChroma[comp][0] = [16]int16(buf)
+				var dc [4]int16
+				dec.DecodeCABACResidual(models, 3, 4, dc[:], 0, 0)
+				storeCABACChromaDC(mb, comp, dc)
 			}
 		}
 		if chromaCBP > 1 {
 			for comp := 0; comp < 2; comp++ {
 				for blk := 0; blk < 4; blk++ {
 					nza, nzb := nzCBFCtxChroma(comp, blk, &nzMBChroma, leftChromaNZ, topChromaNZ)
-					var buf [16]int16
-					tc := dec.DecodeCABACResidual(models, 4, 15, buf[:], nza, nzb)
+					var ac [16]int16
+					tc := dec.DecodeCABACResidual(models, 4, 15, ac[:], nza, nzb)
 					mb.ChromaTotalCoeff[comp][blk] = tc
 					nzMBChroma[comp][blk] = tc
-					mb.CoeffsChroma[comp][blk] = [16]int16(buf)
+					storeCABACChromaAC(mb, comp, blk, ac)
 				}
 			}
 		}
 	}
 	return mb, false
+}
+
+func storeCABACChromaDC(mb *syntax.MBInter, comp int, dc [4]int16) {
+	if mb == nil || comp < 0 || comp >= 2 {
+		return
+	}
+	for blk := 0; blk < 4; blk++ {
+		mb.CoeffsChroma[comp][blk][0] = dc[blk]
+	}
+}
+
+func storeCABACChromaAC(mb *syntax.MBInter, comp, blk int, ac [16]int16) {
+	if mb == nil || comp < 0 || comp >= 2 || blk < 0 || blk >= 4 {
+		return
+	}
+	// CABAC chroma AC residuals are decoded with the scan starting after DC.
+	// Preserve slot 0, which was populated from the separate chroma DC block.
+	for j := 1; j < 16; j++ {
+		mb.CoeffsChroma[comp][blk][j] = ac[j]
+	}
 }
 
 // decodeCABACIntraMB decodes one CABAC-coded I-slice intra macroblock.
