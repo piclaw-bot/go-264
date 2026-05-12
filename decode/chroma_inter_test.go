@@ -62,6 +62,35 @@ func TestFillChromaInterPredFastPathMatchesReference(t *testing.T) {
 	}
 }
 
+func TestFillChromaInterPredRectCopiesRequestedRegion(t *testing.T) {
+	const stride = 16
+	const width = 16
+	const height = 16
+	plane := make([]uint8, stride*height)
+	for i := range plane {
+		plane[i] = uint8(i)
+	}
+	var d Decoder
+	var got, full [64]uint8
+	d.fillChromaInterPred(full[:], plane, stride, width, height, 3, 4, syntax.MotionVector{})
+	d.fillChromaInterPredRect(got[:], plane, stride, width, height, 3, 4, 2, 1, 4, 3, syntax.MotionVector{})
+	for y := 0; y < 3; y++ {
+		for x := 0; x < 4; x++ {
+			if got[(1+y)*8+2+x] != full[y*8+x] {
+				t.Fatalf("rect pixel (%d,%d) got %d want %d", x, y, got[(1+y)*8+2+x], full[y*8+x])
+			}
+		}
+	}
+}
+
+func TestFillChromaInterPredRectMalformedInputsDoNotPanic(t *testing.T) {
+	var d Decoder
+	var dst [64]uint8
+	d.fillChromaInterPredRect(dst[:], nil, 0, 0, 0, 0, 0, -1, 0, 4, 4, syntax.MotionVector{})
+	d.fillChromaInterPredRect(dst[:], make([]uint8, 64), 8, 8, 8, 0, 0, 6, 0, 4, 4, syntax.MotionVector{})
+	d.fillChromaInterPredRect(dst[:4], make([]uint8, 64), 8, 8, 8, 0, 0, 0, 0, 4, 4, syntax.MotionVector{})
+}
+
 func TestFillChromaInterPredMalformedInputsDoNotPanic(t *testing.T) {
 	var d Decoder
 	defer func() {
