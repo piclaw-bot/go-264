@@ -64,20 +64,6 @@ func writeBackIntra4x4(ref4 []int8, stride4, mbX, mbY int) {
 	}
 }
 
-// representativeRightEdgeMV returns the MV/ref from the rightmost partition,
-// used as the representative L0 context for the current macroblock in future
-// MV predictor lookups.
-func representativeRightEdgeMV(mb *syntax.MBInter) (syntax.MotionVector, int8) {
-	switch mb.MBType {
-	case syntax.PMBTypeP8x16:
-		return mb.MV[1], mb.RefIdx[1]
-	case syntax.PMBTypeP8x8, syntax.PMBTypeP8x8ref0:
-		return mb.SubMV[4], mb.RefIdx[1]
-	default:
-		return mb.MV[0], mb.RefIdx[0]
-	}
-}
-
 // predictSkipMV4x4 computes the P-skip MV predictor directly from the 4x4
 // cache, matching FFmpeg's pred_pskip_motion / h264_mv_pred_skip path.
 func predictSkipMV4x4(mv4 []syntax.MotionVector, ref4 []int8, stride4, x4, y4 int) syntax.MotionVector {
@@ -117,11 +103,6 @@ func predictSkipMV4x4(mv4 []syntax.MotionVector, ref4 []int8, stride4, x4, y4 in
 		return c
 	}
 	return syntax.MotionVector{X: median3(left.X, top.X, c.X), Y: median3(left.Y, top.Y, c.Y)}
-}
-
-func predictMBMV(ctx []syntax.MotionVector, refCtx []int8, targetRef int8, mbIdx, mbX, mbY, mbWidth int) syntax.MotionVector {
-	a, b, c, availA, availB, availC := neighbourMVs(ctx, refCtx, targetRef, mbIdx, mbX, mbY, mbWidth)
-	return syntax.PredictMV(a, b, c, availA, availB, availC)
 }
 
 func getMV4(mv4 []syntax.MotionVector, ref4 []int8, stride4, x4, y4 int) (syntax.MotionVector, int8) {
@@ -283,31 +264,12 @@ func median3(a, b, c int16) int16 {
 	return b
 }
 
-func neighbourMVs(ctx []syntax.MotionVector, refCtx []int8, targetRef int8, mbIdx, mbX, mbY, mbWidth int) (a, b, c syntax.MotionVector, availA, availB, availC bool) {
-	availA = mbX > 0 && refCtx[mbIdx-1] == targetRef
-	availB = mbY > 0 && refCtx[mbIdx-mbWidth] == targetRef
-	availC = mbY > 0 && mbX+1 < mbWidth && refCtx[mbIdx-mbWidth+1] == targetRef
-	if availA {
-		a = ctx[mbIdx-1]
-	}
-	if availB {
-		b = ctx[mbIdx-mbWidth]
-	}
-	if availC {
-		c = ctx[mbIdx-mbWidth+1]
-	} else if mbY > 0 && mbX > 0 && refCtx[mbIdx-mbWidth-1] == targetRef {
-		c = ctx[mbIdx-mbWidth-1]
-		availC = true
-	}
-	return
-}
-
 func addMV(mv *syntax.MotionVector, pred syntax.MotionVector) {
 	mv.X += pred.X
 	mv.Y += pred.Y
 }
 
-func applyMVPredictors(mb *syntax.MBInter, ctx []syntax.MotionVector, refCtx []int8, mv4 []syntax.MotionVector, ref4 []int8, stride4 int, mbIdx, mbX, mbY, mbWidth int) {
+func applyMVPredictors(mb *syntax.MBInter, mv4 []syntax.MotionVector, ref4 []int8, stride4 int, mbX, mbY int) {
 	switch mb.MBType {
 	case syntax.PMBTypeP16x16:
 		addMV(&mb.MV[0], predictMotion4x4(mv4, ref4, stride4, mbX*4, mbY*4, 4, mb.RefIdx[0]))

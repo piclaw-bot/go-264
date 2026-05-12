@@ -141,11 +141,6 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 	for i := range intra8x8ModeCtx {
 		intra8x8ModeCtx[i] = -1
 	}
-	mvCtx := make([]syntax.MotionVector, maxMBs)
-	refCtx := make([]int8, maxMBs)
-	for i := range refCtx {
-		refCtx[i] = -1
-	}
 	mv4Stride := mbWidth * 4
 	mv4Ctx := make([]syntax.MotionVector, mv4Stride*mbHeight*4)
 	mvd4Ctx := make([]syntax.MotionVector, mv4Stride*mbHeight*4)
@@ -269,7 +264,6 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					intra8x8ModeCtx[(mbY*2+br)*intra8x8Stride+(mbX*2+bc)] = minMode
 				}
 			}
-			refCtx[mbIdx] = -1
 			writeBackIntra4x4(ref4Ctx, mv4Stride, mbX, mbY)
 			if pps.EntropyCodingMode == 1 && cabacDec.DecodeTerminate() == 1 {
 				break
@@ -298,8 +292,6 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					skipMV := predMV
 					mbInter.MV[0] = skipMV
 					d.reconstructMBInter(f, mbInter, mbX, mbY, currentQP)
-					mvCtx[mbIdx] = skipMV
-					refCtx[mbIdx] = 0
 					nonSkipCtx[mbIdx] = false
 					transform8x8Ctx[mbIdx] = false
 					writeBackInter4x4(mv4Ctx, ref4Ctx, mv4Stride, mbX, mbY, mbInter)
@@ -318,14 +310,13 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					nonSkipCtx[mbIdx] = true
 					transform8x8Ctx[mbIdx] = mbIntra.Use8x8Transform
 					chromaPredModeCtx[mbIdx] = mbIntra.ChromaPredMode
-					refCtx[mbIdx] = -1
 					writeBackIntra4x4(ref4Ctx, mv4Stride, mbX, mbY)
 					if cabacDec.DecodeTerminate() == 1 {
 						break
 					}
 					continue
 				}
-				applyMVPredictors(mbInter, mvCtx, refCtx, mv4Ctx, ref4Ctx, mv4Stride, mbIdx, mbX, mbY, mbWidth)
+				applyMVPredictors(mbInter, mv4Ctx, ref4Ctx, mv4Stride, mbX, mbY)
 				currentQP = (currentQP + int(mbInter.QPDelta) + 52) % 52
 				d.reconstructMBInter(f, mbInter, mbX, mbY, currentQP)
 				nzCtx[mbIdx] = mbInter.TotalCoeff
@@ -334,7 +325,6 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 				mbTypeCtx[mbIdx] = 0
 				nonSkipCtx[mbIdx] = true
 				transform8x8Ctx[mbIdx] = mbInter.Use8x8Transform
-				mvCtx[mbIdx], refCtx[mbIdx] = representativeRightEdgeMV(mbInter)
 				writeBackInter4x4(mv4Ctx, ref4Ctx, mv4Stride, mbX, mbY, mbInter)
 				if cabacDec.DecodeTerminate() == 1 {
 					break
@@ -351,8 +341,6 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					mbSkip := &syntax.MBInter{MBType: syntax.PMBTypeP16x16}
 					mbSkip.MV[0] = skipMV
 					d.reconstructMBInter(f, mbSkip, mbX, mbY, currentQP)
-					mvCtx[mbIdx] = skipMV
-					refCtx[mbIdx] = 0
 					writeBackInter4x4(mv4Ctx, ref4Ctx, mv4Stride, mbX, mbY, mbSkip)
 					skipRun--
 					decodeAfterSkipRun = skipRun == 0
@@ -373,15 +361,13 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 				d.reconstructMB(f, mb, mbX, mbY, currentQP, sps)
 				nzCtx[mbIdx] = mb.TotalCoeff
 				chromaNZCtx[mbIdx] = mb.ChromaTotalCoeff
-				refCtx[mbIdx] = -1
 				writeBackIntra4x4(ref4Ctx, mv4Stride, mbX, mbY)
 			} else {
-				applyMVPredictors(&mbInter, mvCtx, refCtx, mv4Ctx, ref4Ctx, mv4Stride, mbIdx, mbX, mbY, mbWidth)
+				applyMVPredictors(&mbInter, mv4Ctx, ref4Ctx, mv4Stride, mbX, mbY)
 				currentQP = (currentQP + int(mbInter.QPDelta) + 52) % 52
 				d.reconstructMBInter(f, &mbInter, mbX, mbY, currentQP)
 				nzCtx[mbIdx] = mbInter.TotalCoeff
 				chromaNZCtx[mbIdx] = mbInter.ChromaTotalCoeff
-				mvCtx[mbIdx], refCtx[mbIdx] = representativeRightEdgeMV(&mbInter)
 				writeBackInter4x4(mv4Ctx, ref4Ctx, mv4Stride, mbX, mbY, &mbInter)
 			}
 		} else {
