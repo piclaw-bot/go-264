@@ -134,6 +134,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 	cbpCtx := make([]uint32, maxMBs)
 	mbTypeCtx := make([]uint32, maxMBs)
 	nonSkipCtx := make([]bool, maxMBs)
+	transform8x8Ctx := make([]bool, maxMBs)
 	chromaPredModeCtx := make([]int8, maxMBs)
 	intra8x8Stride := mbWidth * 2
 	intra8x8ModeCtx := make([]int8, intra8x8Stride*mbHeight*2)
@@ -171,6 +172,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 		var leftCBP, topCBP uint32
 		var leftMBType, topMBType uint32
 		var leftNonSkip, topNonSkip bool
+		transform8x8CABACCtx := 0
 		var leftChromaPred, topChromaPred int8
 		if mbX > 0 {
 			leftNZ = &nzCtx[mbIdx-1]
@@ -178,6 +180,9 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 			leftCBP = cbpCtx[mbIdx-1]
 			leftMBType = mbTypeCtx[mbIdx-1]
 			leftNonSkip = nonSkipCtx[mbIdx-1]
+			if transform8x8Ctx[mbIdx-1] {
+				transform8x8CABACCtx++
+			}
 			leftChromaPred = chromaPredModeCtx[mbIdx-1]
 		}
 		if mbY > 0 {
@@ -186,6 +191,9 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 			topCBP = cbpCtx[mbIdx-mbWidth]
 			topMBType = mbTypeCtx[mbIdx-mbWidth]
 			topNonSkip = nonSkipCtx[mbIdx-mbWidth]
+			if transform8x8Ctx[mbIdx-mbWidth] {
+				transform8x8CABACCtx++
+			}
 			topChromaPred = chromaPredModeCtx[mbIdx-mbWidth]
 		}
 
@@ -207,7 +215,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 						topEdge8x8[bc] = -1
 					}
 				}
-				mb = decodeCABACIntraMB(cabacDec, cabacModels, leftNZ, topNZ, leftChromaNZ, topChromaNZ, leftCBP, topCBP, leftMBType, topMBType, leftChromaPred, topChromaPred, pps.Transform8x8Mode, leftEdge8x8, topEdge8x8)
+				mb = decodeCABACIntraMB(cabacDec, cabacModels, leftNZ, topNZ, leftChromaNZ, topChromaNZ, leftCBP, topCBP, leftMBType, topMBType, leftChromaPred, topChromaPred, pps.Transform8x8Mode, transform8x8CABACCtx, leftEdge8x8, topEdge8x8)
 				currentQP = (currentQP + int(mb.QPDelta) + 52) % 52
 			} else {
 				mb = syntax.DecodeMBIntra(r, syntax.IntraDecodeOpts{
@@ -222,6 +230,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 			cbpCtx[mbIdx] = mb.CodedBlockPattern
 			mbTypeCtx[mbIdx] = cabacMBTypeFlag(mb.MBType)
 			nonSkipCtx[mbIdx] = true
+			transform8x8Ctx[mbIdx] = mb.Use8x8Transform
 			chromaPredModeCtx[mbIdx] = mb.ChromaPredMode
 			if pps.EntropyCodingMode == 1 && mb.Use8x8Transform {
 				for b := 0; b < 4; b++ {
@@ -284,7 +293,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					}
 				}
 				refIdxCtxs := cabacRefIdxCtxsForMB(ref4Ctx, mv4Stride, mbX, mbY)
-				mbInter, mbIntra, skipped := decodeCABACPInterMB(cabacDec, cabacModels, hdr.NumRefIdxL0Active, leftNZ, topNZ, leftChromaNZ, topChromaNZ, leftCBP, topCBP, leftNonSkip, topNonSkip, refIdxCtxs, mvd4Ctx, mv4Stride, mbX, mbY, pps.Transform8x8Mode, leftMBType, topMBType, leftChromaPred, topChromaPred, leftEdge8x8, topEdge8x8)
+				mbInter, mbIntra, skipped := decodeCABACPInterMB(cabacDec, cabacModels, hdr.NumRefIdxL0Active, leftNZ, topNZ, leftChromaNZ, topChromaNZ, leftCBP, topCBP, leftNonSkip, topNonSkip, refIdxCtxs, mvd4Ctx, mv4Stride, mbX, mbY, pps.Transform8x8Mode, transform8x8CABACCtx, leftMBType, topMBType, leftChromaPred, topChromaPred, leftEdge8x8, topEdge8x8)
 				if skipped {
 					skipMV := predictSkipMV(mvCtx, refCtx, predMV, mbIdx, mbX, mbY, mbWidth)
 					mbInter.MV[0] = skipMV
@@ -292,6 +301,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					mvCtx[mbIdx] = skipMV
 					refCtx[mbIdx] = 0
 					nonSkipCtx[mbIdx] = false
+					transform8x8Ctx[mbIdx] = false
 					writeBackInter4x4(mv4Ctx, ref4Ctx, mv4Stride, mbX, mbY, mbInter)
 					if cabacDec.DecodeTerminate() == 1 {
 						break
@@ -306,6 +316,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					cbpCtx[mbIdx] = mbIntra.CodedBlockPattern
 					mbTypeCtx[mbIdx] = cabacMBTypeFlag(mbIntra.MBType)
 					nonSkipCtx[mbIdx] = true
+					transform8x8Ctx[mbIdx] = mbIntra.Use8x8Transform
 					chromaPredModeCtx[mbIdx] = mbIntra.ChromaPredMode
 					refCtx[mbIdx] = -1
 					writeBackIntra4x4(ref4Ctx, mv4Stride, mbX, mbY)
@@ -322,6 +333,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 				cbpCtx[mbIdx] = mbInter.CBP
 				mbTypeCtx[mbIdx] = 0
 				nonSkipCtx[mbIdx] = true
+				transform8x8Ctx[mbIdx] = mbInter.Use8x8Transform
 				mvCtx[mbIdx], refCtx[mbIdx] = representativeRightEdgeMV(mbInter)
 				writeBackInter4x4(mv4Ctx, ref4Ctx, mv4Stride, mbX, mbY, mbInter)
 				if cabacDec.DecodeTerminate() == 1 {
