@@ -96,8 +96,11 @@ func DecodeCABACRef(dec *cabac.CABACDecoder, models []cabac.CABACCtx, ctx int) u
 // amvd: |left_mvd| + |top_mvd| context sum (0 when unavailable).
 // H.264 §9.3.2.4 / FFmpeg h264_cabac.c decode_cabac_mb_mvd.
 func DecodeCABACMVD(dec *cabac.CABACDecoder, models []cabac.CABACCtx, ctxBase int, amvd int) int16 {
-	if dec == nil || len(models) <= ctxBase+6 {
+	if dec == nil || ctxBase < 0 || len(models) <= ctxBase+6 {
 		return 0
+	}
+	if amvd < 0 {
+		amvd = 0
 	}
 	ctx := 0
 	if amvd > 2 {
