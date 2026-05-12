@@ -65,6 +65,21 @@ func TestCABACDecoder_DecodeTerminate(t *testing.T) {
 	t.Log("No termination in 5 steps (expected for non-terminal data)")
 }
 
+func TestValidResidualCoeffCount(t *testing.T) {
+	cases := []struct {
+		cat, maxCoeff int
+		want          bool
+	}{
+		{0, 16, true}, {2, 16, true}, {3, 4, true}, {4, 15, true}, {5, 64, true},
+		{3, 16, false}, {4, 16, false}, {5, 16, false}, {2, 64, false},
+	}
+	for _, tc := range cases {
+		if got := validResidualCoeffCount(tc.cat, tc.maxCoeff); got != tc.want {
+			t.Fatalf("validResidualCoeffCount(%d,%d) got %v want %v", tc.cat, tc.maxCoeff, got, tc.want)
+		}
+	}
+}
+
 func TestDecodeCABACResidualRejectsInvalidBounds(t *testing.T) {
 	dec := NewCABACDecoder(nal.NewReader([]byte{0xff, 0xff, 0xff, 0xff}))
 	models := InitContextModels(26, 0, false)
@@ -77,6 +92,9 @@ func TestDecodeCABACResidualRejectsInvalidBounds(t *testing.T) {
 	}
 	if got := dec.DecodeCABACResidual(models[:10], 2, 16, out[:], 99, -4); got != 0 {
 		t.Fatalf("short models got %d want 0", got)
+	}
+	if got := dec.DecodeCABACResidual(models, 3, 16, out[:], 0, 0); got != 0 {
+		t.Fatalf("invalid cat/maxCoeff got %d want 0", got)
 	}
 }
 

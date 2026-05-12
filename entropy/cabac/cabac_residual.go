@@ -77,6 +77,19 @@ var cabacLastCoeff8x8 = [63]uint8{
 	5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7, 8, 8, 8,
 }
 
+func validResidualCoeffCount(cat, maxCoeff int) bool {
+	switch cat {
+	case 1, 4: // AC-only 4x4 blocks skip DC
+		return maxCoeff == 15
+	case 3: // chroma DC for 4:2:0
+		return maxCoeff == 4
+	case 5: // luma 8x8 transform
+		return maxCoeff == 64
+	default:
+		return maxCoeff == 16
+	}
+}
+
 // DecodeCABACResidual decodes one residual block using CABAC context models.
 //
 //   - cat: residual category (0=luma DC, 1=luma AC/I16, 2=luma 4x4, 3=chroma DC, 4=chroma AC, 5=luma 8x8)
@@ -90,7 +103,7 @@ func (d *CABACDecoder) DecodeCABACResidual(models []CABACCtx, cat, maxCoeff int,
 	if d == nil || maxCoeff <= 0 || maxCoeff > 64 || len(models) < 1024 || len(out) < maxCoeff {
 		return 0
 	}
-	if cat < 0 || cat >= 14 {
+	if cat < 0 || cat >= 14 || !validResidualCoeffCount(cat, maxCoeff) {
 		return 0
 	}
 	if nza != 0 {
