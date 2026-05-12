@@ -248,6 +248,9 @@ func (d *Decoder) writeChromaInterResidual(f *frame.Frame, mb *syntax.MBInter, p
 	}
 	dstBaseX := mbX * 8
 	dstBaseY := mbY * 8
+	if dstBaseX < 0 || dstBaseY < 0 || dstBaseX+8 > f.Width/2 || dstBaseY+8 > f.Height/2 || (dstBaseY+7)*f.StrideC+dstBaseX+8 > len(f.U) || (dstBaseY+7)*f.StrideC+dstBaseX+8 > len(f.V) {
+		return
+	}
 	plane := f.U
 	if comp != 0 {
 		plane = f.V
@@ -337,6 +340,11 @@ func (d *Decoder) copyInterSubRect(dst []uint8, ref *frame.Frame, srcBaseX, srcB
 
 func (d *Decoder) writeInterResidual(f *frame.Frame, mb *syntax.MBInter, predicted []uint8, mbX, mbY, qp int) {
 	if f == nil || mb == nil || len(predicted) < 256 || f.StrideY <= 0 {
+		return
+	}
+	dstBaseX := mbX * 16
+	dstBaseY := mbY * 16
+	if dstBaseX < 0 || dstBaseY < 0 || dstBaseX+16 > f.Width || dstBaseY+16 > f.Height || (dstBaseY+15)*f.StrideY+dstBaseX+16 > len(f.Y) {
 		return
 	}
 	cbpLuma := mb.CBP & 0xF
