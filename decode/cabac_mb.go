@@ -15,11 +15,16 @@ import (
 // legacy I4x4 reconstruction path rather than hiding a known correctness gap.
 const enableCABACI8x8Transform = false
 
+// cabacMinMacroblockContexts covers the highest macroblock-level context this
+// file may index directly (transform_size_8x8_flag at ctxIdx 399+n). Residual
+// decoders perform their own stricter table-size checks.
+const cabacMinMacroblockContexts = 402
+
 // decodeCABACPInterMB decodes one CABAC-coded P-slice macroblock.
 // Returns (inter, nil, true) for P-skip, (nil, intra, false) for intra-in-P.
 func decodeCABACPInterMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, numRefFrames uint32, leftNZ, topNZ *[16]int, leftChromaNZ, topChromaNZ *[2][4]int, leftCBP, topCBP uint32, leftNonSkip, topNonSkip bool, refCtxs [4]int, mvd4 []syntax.MotionVector, stride4, mbX, mbY int, transform8x8Mode bool, transform8x8Ctx int, leftMBType, topMBType uint32, leftChromaPred, topChromaPred int8, leftEdge8x8, topEdge8x8 [2]int8) (*syntax.MBInter, *syntax.MBIntra, bool) {
 	mb := &syntax.MBInter{MBType: syntax.PMBTypeP16x16}
-	if dec == nil || len(models) < 20 {
+	if dec == nil || len(models) < cabacMinMacroblockContexts {
 		return mb, nil, true
 	}
 	// P-slice mb_skip_flag uses ctxIdx 11 plus availability of non-skipped left/top neighbours.
