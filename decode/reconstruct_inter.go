@@ -230,6 +230,28 @@ func (d *Decoder) writeChromaInterResidual(f *frame.Frame, mb *syntax.MBInter, p
 }
 
 func (d *Decoder) copyInterSubRect(dst []uint8, ref *frame.Frame, srcBaseX, srcBaseY, dstX, dstY, w, h int, mv syntax.MotionVector) {
+	if len(dst) < 256 || ref == nil || ref.StrideY <= 0 || len(ref.Y) == 0 || w <= 0 || h <= 0 {
+		return
+	}
+	if int(mv.X)&3 == 0 && int(mv.Y)&3 == 0 {
+		sx0 := srcBaseX + (int(mv.X) >> 2)
+		sy0 := srcBaseY + (int(mv.Y) >> 2)
+		refH := len(ref.Y) / ref.StrideY
+		if sx0 >= 0 && sy0 >= 0 && sx0+w <= ref.Width && sy0+h <= refH {
+			for y := 0; y < h; y++ {
+				copy(dst[(dstY+y)*16+dstX:(dstY+y)*16+dstX+w], ref.Y[(sy0+y)*ref.StrideY+sx0:(sy0+y)*ref.StrideY+sx0+w])
+			}
+			return
+		}
+		for y := 0; y < h; y++ {
+			for x := 0; x < w; x++ {
+				sx := clampInt(sx0+x, 0, ref.Width-1)
+				sy := clampInt(sy0+y, 0, refH-1)
+				dst[(dstY+y)*16+dstX+x] = ref.Y[sy*ref.StrideY+sx]
+			}
+		}
+		return
+	}
 	var tmp [256]uint8
 	pred.InterPred16x16At(tmp[:], ref.Y, ref.StrideY, srcBaseX, srcBaseY, pred.MotionVector{X: mv.X, Y: mv.Y})
 	for y := 0; y < h; y++ {
