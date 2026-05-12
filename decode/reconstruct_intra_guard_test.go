@@ -49,12 +49,24 @@ func TestReconstructChromaIntraHandlesInvalidInputs(t *testing.T) {
 	d.reconstructChromaIntra(frame.NewFrame(16, 16), &syntax.MBIntra{}, 2, 0, 26)
 }
 
-func TestPredictChroma8x8HandlesNilFrame(t *testing.T) {
+func TestPredictChroma8x8HandlesInvalidFrames(t *testing.T) {
 	d := &Decoder{}
-	got := d.predictChroma8x8(nil, 0, 1, 1, 0)
-	for i, v := range got {
-		if v != 128 {
-			t.Fatalf("nil frame pred[%d] got %d want 128", i, v)
+	cases := []struct {
+		name string
+		f    *frame.Frame
+		mbX  int
+		mbY  int
+	}{
+		{"nil", nil, 1, 1},
+		{"negative", frame.NewFrame(16, 16), -1, 0},
+		{"outside", frame.NewFrame(16, 16), 2, 0},
+	}
+	for _, tc := range cases {
+		got := d.predictChroma8x8(tc.f, 0, tc.mbX, tc.mbY, 0)
+		for i, v := range got {
+			if v != 128 {
+				t.Fatalf("%s pred[%d] got %d want 128", tc.name, i, v)
+			}
 		}
 	}
 }

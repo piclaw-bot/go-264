@@ -434,7 +434,7 @@ func clip8(v int) uint8 {
 
 func (d *Decoder) predictChroma8x8(f *frame.Frame, comp int, mbX, mbY, mode int) [64]uint8 {
 	var out [64]uint8
-	if f == nil {
+	if f == nil || f.StrideC <= 0 || f.Width < 2 || f.Height < 2 || len(f.U) == 0 || len(f.V) == 0 || mbX < 0 || mbY < 0 || mbX*8+8 > f.Width/2 || mbY*8+8 > f.Height/2 {
 		for i := range out {
 			out[i] = 128
 		}
