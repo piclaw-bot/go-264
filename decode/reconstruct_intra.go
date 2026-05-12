@@ -12,7 +12,7 @@ import (
 )
 
 func (d *Decoder) reconstructMB(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY int, qp int, sps *nal.SPS) {
-	if mb == nil {
+	if f == nil || mb == nil {
 		return
 	}
 	if mb.MBType == syntax.MBTypeIPCM {
