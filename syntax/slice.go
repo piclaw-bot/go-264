@@ -186,7 +186,11 @@ func ParseHeader(payload []byte, nalType uint8, sps *nal.SPS, pps *nal.PPS) (*He
 	h.SliceQPDelta = r.ReadSE()
 
 	if pps.DeblockingFilterControl {
-		h.DisableDeblocking = r.ReadSE()
+		disableDeblocking := r.ReadUE()
+		if disableDeblocking > 2 {
+			disableDeblocking = 2
+		}
+		h.DisableDeblocking = int32(disableDeblocking)
 		if h.DisableDeblocking != 1 {
 			h.SliceAlphaC0Offset = r.ReadSE() * 2
 			h.SliceBetaOffset = r.ReadSE() * 2

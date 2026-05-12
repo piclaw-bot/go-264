@@ -64,6 +64,23 @@ func TestSkipRefPicListModificationConsumesOperands(t *testing.T) {
 	}
 }
 
+func TestParseHeaderReadsDeblockingIDCAsUE(t *testing.T) {
+	var w testBitWriter
+	w.ue(0)                             // first_mb_in_slice
+	w.ue(SliceTypeI)                    // slice_type
+	w.ue(0)                             // pic_parameter_set_id
+	w.bits = append(w.bits, 0, 0, 0, 0) // frame_num
+	w.bit(0)                            // adaptive_ref_pic_marking_mode_flag
+	w.se(0)                             // slice_qp_delta
+	w.ue(2)                             // disable_deblocking_filter_idc, ue(v) not se(v)
+	w.se(3)                             // slice_alpha_c0_offset_div2
+	w.se(-2)                            // slice_beta_offset_div2
+	h, _ := ParseHeader(w.bytes(), nal.TypeSliceNonIDR, &nal.SPS{Log2MaxFrameNum: 4, PicOrderCntType: 2, FrameMbsOnlyFlag: true, ChromaFormatIDC: 1}, &nal.PPS{DeblockingFilterControl: true})
+	if h.DisableDeblocking != 2 || h.SliceAlphaC0Offset != 6 || h.SliceBetaOffset != -4 {
+		t.Fatalf("deblock fields got idc=%d alpha=%d beta=%d", h.DisableDeblocking, h.SliceAlphaC0Offset, h.SliceBetaOffset)
+	}
+}
+
 func TestParseHeaderConsumesMMCO5WithoutOperand(t *testing.T) {
 	var w testBitWriter
 	w.ue(0)          // first_mb_in_slice
