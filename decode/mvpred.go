@@ -160,10 +160,10 @@ func cabacRefIdxCtx(ref4 []int8, stride4, x4, y4 int) int {
 func cabacRefIdxCtxsForMB(ref4 []int8, stride4, mbX, mbY int) [4]int {
 	x4, y4 := mbX*4, mbY*4
 	return [4]int{
-		cabacRefIdxCtx(ref4, stride4, x4, y4),
-		cabacRefIdxCtx(ref4, stride4, x4, y4+2),
-		cabacRefIdxCtx(ref4, stride4, x4+2, y4),
-		cabacRefIdxCtx(ref4, stride4, x4+2, y4+2),
+		cabacRefIdxCtx(ref4, stride4, x4, y4),     // top-left 8x8 origin
+		cabacRefIdxCtx(ref4, stride4, x4+2, y4),   // top-right 8x8 origin
+		cabacRefIdxCtx(ref4, stride4, x4, y4+2),   // bottom-left 8x8 origin
+		cabacRefIdxCtx(ref4, stride4, x4+2, y4+2), // bottom-right 8x8 origin
 	}
 }
 

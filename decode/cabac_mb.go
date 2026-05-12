@@ -52,7 +52,11 @@ func decodeCABACPInterMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, numRe
 	}
 	if numRefFrames > 1 && mb.MBType != syntax.PMBTypeP8x8ref0 {
 		for i := 0; i < parts; i++ {
-			mb.RefIdx[i] = int8(syntax.DecodeCABACRef(dec, models, refCtxs[i]))
+			ctxSlot := i
+			if mb.MBType == syntax.PMBTypeP16x8 && i == 1 {
+				ctxSlot = 2 // second 16x8 partition starts at the bottom-left 8x8 origin
+			}
+			mb.RefIdx[i] = int8(syntax.DecodeCABACRef(dec, models, refCtxs[ctxSlot]))
 		}
 	}
 	x4, y4 := mbX*4, mbY*4
