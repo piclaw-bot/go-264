@@ -394,6 +394,16 @@ func (d *Decoder) reconstructChromaIntra(f *frame.Frame, mb *syntax.MBIntra, mbX
 	}
 }
 
+func clip8(v int) uint8 {
+	if v < 0 {
+		return 0
+	}
+	if v > 255 {
+		return 255
+	}
+	return uint8(v)
+}
+
 func (d *Decoder) predictChroma8x8(f *frame.Frame, comp int, mbX, mbY, mode int) [64]uint8 {
 	var out [64]uint8
 	get := func(x, y int) uint8 {
@@ -404,6 +414,7 @@ func (d *Decoder) predictChroma8x8(f *frame.Frame, comp int, mbX, mbY, mode int)
 	}
 	var top [8]uint8
 	var left [8]uint8
+	topLeft := uint8(128)
 	if mbY > 0 {
 		for i := 0; i < 8; i++ {
 			top[i] = get(mbX*8+i, mbY*8-1)
@@ -422,6 +433,9 @@ func (d *Decoder) predictChroma8x8(f *frame.Frame, comp int, mbX, mbY, mode int)
 			left[i] = 128
 		}
 	}
+	if mbX > 0 && mbY > 0 {
+		topLeft = get(mbX*8-1, mbY*8-1)
+	}
 	switch mode {
 	case 1: // horizontal
 		for y := 0; y < 8; y++ {
@@ -435,7 +449,35 @@ func (d *Decoder) predictChroma8x8(f *frame.Frame, comp int, mbX, mbY, mode int)
 				out[y*8+x] = top[x]
 			}
 		}
-	default: // DC (and unsupported plane fallback)
+	case 3: // plane
+		if mbX == 0 || mbY == 0 {
+			for i := range out {
+				out[i] = 128
+			}
+			return out
+		}
+		h := 0
+		v := 0
+		for i := 0; i < 4; i++ {
+			w := i + 1
+			leftRef := int(topLeft)
+			topRef := int(topLeft)
+			if i < 3 {
+				leftRef = int(top[2-i])
+				topRef = int(left[2-i])
+			}
+			h += w * (int(top[4+i]) - leftRef)
+			v += w * (int(left[4+i]) - topRef)
+		}
+		a := 16 * (int(left[7]) + int(top[7]))
+		b := (17*h + 16) >> 5
+		c := (17*v + 16) >> 5
+		for y := 0; y < 8; y++ {
+			for x := 0; x < 8; x++ {
+				out[y*8+x] = clip8((a + b*(x-3) + c*(y-3) + 16) >> 5)
+			}
+		}
+	default: // DC
 		var dc uint8
 		if mbX > 0 && mbY > 0 {
 			sum := 0
