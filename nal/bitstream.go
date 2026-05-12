@@ -70,7 +70,8 @@ func (r *Reader) ReadBits(n int) uint32 {
 	if n > 32 {
 		n = 32
 	}
-	if !r.hasEPB && r.BitsLeft() >= n {
+	bytesNeeded := (7 - r.bit + n + 7) >> 3
+	if !r.hasEPB && r.pos+bytesNeeded <= len(r.data) {
 		v := r.peekBitsRaw(n)
 		r.advanceRawBits(n)
 		return v

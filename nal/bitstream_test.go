@@ -97,18 +97,19 @@ func TestReadBitsFastPathEmulationPrevention(t *testing.T) {
 
 func TestReadBitsNoEPBFastPathMatchesBitByBit(t *testing.T) {
 	data := []byte{0b10110110, 0b01011100, 0b11110000, 0x12, 0x34}
-	for start := 0; start < 24; start++ {
-		for n := 0; n <= 32; n++ {
+	for start := 0; start < len(data)*8; start++ {
+		for n := 0; n <= 40; n++ {
 			rFast := NewReader(data)
 			rSlow := NewReader(data)
 			rFast.Seek(start)
 			rSlow.Seek(start)
 			got := rFast.ReadBits(n)
-			var want uint32
-			if n > 32 {
-				n = 32
+			wantN := n
+			if wantN > 32 {
+				wantN = 32
 			}
-			for i := 0; i < n; i++ {
+			var want uint32
+			for i := 0; i < wantN; i++ {
 				want = (want << 1) | rSlow.ReadBit()
 			}
 			if got != want || rFast.Position() != rSlow.Position() {
