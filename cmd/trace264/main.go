@@ -71,7 +71,7 @@ func traceSlice(nalIdx int, unit nal.Unit, spsMap map[uint32]*nal.SPS, ppsMap ma
 	if sps == nil {
 		return fmt.Errorf("nal %d slice: SPS %d not available", nalIdx, pps.SPSID)
 	}
-	hdr, r := syntax.ParseHeader(unit.Payload, unit.Type, sps, pps)
+	hdr, r := syntax.ParseHeaderWithRefIDC(unit.Payload, unit.Type, unit.RefIDC, sps, pps)
 	if pps.EntropyCodingMode != 0 {
 		if cabacTrace {
 			return fmt.Errorf("nal %d slice: CABAC MB-level tracing is not implemented yet; use decode conformance/profiling tools for CABAC streams", nalIdx)

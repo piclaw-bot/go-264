@@ -109,6 +109,10 @@ func skipDecRefPicMarking(r *nal.Reader, nalType uint8) {
 }
 
 func ParseHeader(payload []byte, nalType uint8, sps *nal.SPS, pps *nal.PPS) (*Header, *nal.Reader) {
+	return ParseHeaderWithRefIDC(payload, nalType, 1, sps, pps)
+}
+
+func ParseHeaderWithRefIDC(payload []byte, nalType uint8, nalRefIDC uint8, sps *nal.SPS, pps *nal.PPS) (*Header, *nal.Reader) {
 	if sps == nil {
 		sps = &nal.SPS{Log2MaxFrameNum: 4, Log2MaxPocLsb: 4, FrameMbsOnlyFlag: true, ChromaFormatIDC: 1}
 	}
@@ -177,8 +181,10 @@ func ParseHeader(payload []byte, nalType uint8, sps *nal.SPS, pps *nal.PPS) (*He
 		skipPredWeightTable(r, h, sps)
 	}
 
-	// dec_ref_pic_marking
-	skipDecRefPicMarking(r, nalType)
+	// dec_ref_pic_marking is present only for reference slices (nal_ref_idc != 0).
+	if nalRefIDC != 0 {
+		skipDecRefPicMarking(r, nalType)
+	}
 
 	if pps.EntropyCodingMode == 1 && h.SliceType != SliceTypeI && h.SliceType != SliceTypeSI {
 		h.CabacInitIDC = r.ReadUE()

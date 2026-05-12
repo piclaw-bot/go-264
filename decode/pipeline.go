@@ -108,7 +108,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 		return nil, fmt.Errorf("SPS %d not available", pps.SPSID)
 	}
 
-	hdr, r := syntax.ParseHeader(unit.Payload, unit.Type, sps, pps)
+	hdr, r := syntax.ParseHeaderWithRefIDC(unit.Payload, unit.Type, unit.RefIDC, sps, pps)
 	isIntra := hdr.IsIntra()
 	qp := hdr.QP(pps.PicInitQP)
 	d.chromaQPOffset = int(pps.ChromaQPIndexOffset)

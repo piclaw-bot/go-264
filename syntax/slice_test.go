@@ -64,6 +64,23 @@ func TestSkipRefPicListModificationConsumesOperands(t *testing.T) {
 	}
 }
 
+func TestParseHeaderSkipsRefMarkingForNonReferenceSlices(t *testing.T) {
+	var w testBitWriter
+	w.ue(0)                             // first_mb_in_slice
+	w.ue(SliceTypeP)                    // slice_type
+	w.ue(0)                             // pic_parameter_set_id
+	w.bits = append(w.bits, 0, 0, 0, 0) // frame_num
+	w.bit(0)                            // num_ref_idx_active_override_flag
+	w.bit(0)                            // ref_pic_list_modification_flag_l0
+	// No dec_ref_pic_marking is present when nal_ref_idc == 0.
+	w.ue(2) // cabac_init_idc
+	w.se(0) // slice_qp_delta
+	h, _ := ParseHeaderWithRefIDC(w.bytes(), nal.TypeSliceNonIDR, 0, &nal.SPS{Log2MaxFrameNum: 4, PicOrderCntType: 2, FrameMbsOnlyFlag: true, ChromaFormatIDC: 1}, &nal.PPS{EntropyCodingMode: 1, NumRefIdxL0Active: 1})
+	if h.CabacInitIDC != 2 {
+		t.Fatalf("cabac_init_idc got %d want 2", h.CabacInitIDC)
+	}
+}
+
 func TestParseHeaderReadsDeblockingIDCAsUE(t *testing.T) {
 	var w testBitWriter
 	w.ue(0)                             // first_mb_in_slice
