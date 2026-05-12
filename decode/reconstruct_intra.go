@@ -52,7 +52,7 @@ func (d *Decoder) reconstruct16x16(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY,
 		topLeft = f.PixelY(mbX*16-1, mbY*16-1)
 	}
 
-	predicted := make([]uint8, 256)
+	var predicted [256]uint8
 	if mode == pred.Intra16x16DC {
 		var dc uint8
 		if mbX > 0 && mbY > 0 {
@@ -80,7 +80,7 @@ func (d *Decoder) reconstruct16x16(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY,
 			predicted[i] = dc
 		}
 	} else {
-		pred.PredIntra16x16(predicted, mode, top, left, topLeft)
+		pred.PredIntra16x16(predicted[:], mode, top, left, topLeft)
 	}
 
 	// Hadamard DC transform. Intra16x16 DC is a 4x4 matrix in raster position
