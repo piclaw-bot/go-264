@@ -165,7 +165,21 @@ func (d *Decoder) reconstructChromaInter(f, ref *frame.Frame, mb *syntax.MBInter
 				partRef = d.refL0(mb.RefIdx[part])
 			}
 			dstX, dstY := (part&1)*4, (part>>1)*4
-			fillBoth(partRef, baseX+dstX, baseY+dstY, dstX, dstY, 4, 4, mb.SubMV[part*4])
+			switch mb.SubMBType[part] {
+			case 1: // P_L0_8x4 -> two 4x2 chroma regions
+				fillBoth(partRef, baseX+dstX, baseY+dstY, dstX, dstY, 4, 2, mb.SubMV[part*4])
+				fillBoth(partRef, baseX+dstX, baseY+dstY+2, dstX, dstY+2, 4, 2, mb.SubMV[part*4+1])
+			case 2: // P_L0_4x8 -> two 2x4 chroma regions
+				fillBoth(partRef, baseX+dstX, baseY+dstY, dstX, dstY, 2, 4, mb.SubMV[part*4])
+				fillBoth(partRef, baseX+dstX+2, baseY+dstY, dstX+2, dstY, 2, 4, mb.SubMV[part*4+1])
+			case 3: // P_L0_4x4 -> four 2x2 chroma regions
+				fillBoth(partRef, baseX+dstX, baseY+dstY, dstX, dstY, 2, 2, mb.SubMV[part*4])
+				fillBoth(partRef, baseX+dstX+2, baseY+dstY, dstX+2, dstY, 2, 2, mb.SubMV[part*4+1])
+				fillBoth(partRef, baseX+dstX, baseY+dstY+2, dstX, dstY+2, 2, 2, mb.SubMV[part*4+2])
+				fillBoth(partRef, baseX+dstX+2, baseY+dstY+2, dstX+2, dstY+2, 2, 2, mb.SubMV[part*4+3])
+			default:
+				fillBoth(partRef, baseX+dstX, baseY+dstY, dstX, dstY, 4, 4, mb.SubMV[part*4])
+			}
 		}
 	default:
 		fillBoth(ref, baseX, baseY, 0, 0, 8, 8, mb.MV[0])
