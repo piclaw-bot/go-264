@@ -174,7 +174,11 @@ func traceSlice(nalIdx int, unit nal.Unit, spsMap map[uint32]*nal.SPS, ppsMap ma
 }
 
 func updateQP(current, delta int) int {
-	return (current + delta + 52) % 52
+	qp := (current + delta) % 52
+	if qp < 0 {
+		qp += 52
+	}
+	return qp
 }
 
 func writeBackInter4x4(mv4 []syntax.MotionVector, ref4 []int8, stride4, mbX, mbY int, mb *syntax.MBInter) {

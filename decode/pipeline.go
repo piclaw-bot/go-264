@@ -27,6 +27,14 @@ type Decoder struct {
 // DecodedFrame is an alias for frame.Frame for CLI convenience.
 type DecodedFrame = frame.Frame
 
+func updateQP(current, delta int) int {
+	qp := (current + delta) % 52
+	if qp < 0 {
+		qp += 52
+	}
+	return qp
+}
+
 // NewDecoder creates a new H.264 decoder.
 func NewDecoder() *Decoder {
 	return &Decoder{
@@ -211,13 +219,13 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					}
 				}
 				mb = decodeCABACIntraMB(cabacDec, cabacModels, leftNZ, topNZ, leftChromaNZ, topChromaNZ, leftCBP, topCBP, leftMBType, topMBType, leftChromaPred, topChromaPred, pps.Transform8x8Mode, transform8x8CABACCtx, leftEdge8x8, topEdge8x8)
-				currentQP = (currentQP + int(mb.QPDelta) + 52) % 52
+				currentQP = updateQP(currentQP, int(mb.QPDelta))
 			} else {
 				mb = syntax.DecodeMBIntra(r, syntax.IntraDecodeOpts{
 					SliceQP: int32(currentQP), Transform8x8: pps.Transform8x8Mode,
 					LeftNZ: leftNZ, TopNZ: topNZ, LeftChromaNZ: leftChromaNZ, TopChromaNZ: topChromaNZ,
 				})
-				currentQP = (currentQP + int(mb.QPDelta) + 52) % 52
+				currentQP = updateQP(currentQP, int(mb.QPDelta))
 			}
 			d.reconstructMB(f, mb, mbX, mbY, currentQP, sps)
 			nzCtx[mbIdx] = mb.TotalCoeff
@@ -301,7 +309,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					continue
 				}
 				if mbIntra != nil {
-					currentQP = (currentQP + int(mbIntra.QPDelta) + 52) % 52
+					currentQP = updateQP(currentQP, int(mbIntra.QPDelta))
 					d.reconstructMB(f, mbIntra, mbX, mbY, currentQP, sps)
 					nzCtx[mbIdx] = mbIntra.TotalCoeff
 					chromaNZCtx[mbIdx] = mbIntra.ChromaTotalCoeff
@@ -317,7 +325,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					continue
 				}
 				applyMVPredictors(mbInter, mv4Ctx, ref4Ctx, mv4Stride, mbX, mbY)
-				currentQP = (currentQP + int(mbInter.QPDelta) + 52) % 52
+				currentQP = updateQP(currentQP, int(mbInter.QPDelta))
 				d.reconstructMBInter(f, mbInter, mbX, mbY, currentQP)
 				nzCtx[mbIdx] = mbInter.TotalCoeff
 				chromaNZCtx[mbIdx] = mbInter.ChromaTotalCoeff
@@ -357,14 +365,14 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					SliceQP: int32(currentQP), Transform8x8: pps.Transform8x8Mode,
 					LeftNZ: leftNZ, TopNZ: topNZ, LeftChromaNZ: leftChromaNZ, TopChromaNZ: topChromaNZ,
 				})
-				currentQP = (currentQP + int(mb.QPDelta) + 52) % 52
+				currentQP = updateQP(currentQP, int(mb.QPDelta))
 				d.reconstructMB(f, mb, mbX, mbY, currentQP, sps)
 				nzCtx[mbIdx] = mb.TotalCoeff
 				chromaNZCtx[mbIdx] = mb.ChromaTotalCoeff
 				writeBackIntra4x4(ref4Ctx, mv4Stride, mbX, mbY)
 			} else {
 				applyMVPredictors(&mbInter, mv4Ctx, ref4Ctx, mv4Stride, mbX, mbY)
-				currentQP = (currentQP + int(mbInter.QPDelta) + 52) % 52
+				currentQP = updateQP(currentQP, int(mbInter.QPDelta))
 				d.reconstructMBInter(f, &mbInter, mbX, mbY, currentQP)
 				nzCtx[mbIdx] = mbInter.TotalCoeff
 				chromaNZCtx[mbIdx] = mbInter.ChromaTotalCoeff
