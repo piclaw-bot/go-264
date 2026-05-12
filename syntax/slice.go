@@ -60,6 +60,12 @@ func skipPredWeightTable(r *nal.Reader, h *Header, sps *nal.SPS) {
 }
 
 func ParseHeader(payload []byte, nalType uint8, sps *nal.SPS, pps *nal.PPS) (*Header, *nal.Reader) {
+	if sps == nil {
+		sps = &nal.SPS{Log2MaxFrameNum: 4, Log2MaxPocLsb: 4, FrameMbsOnlyFlag: true, ChromaFormatIDC: 1}
+	}
+	if pps == nil {
+		pps = &nal.PPS{NumRefIdxL0Active: 1, NumRefIdxL1Active: 1}
+	}
 	r := nal.NewReader(payload)
 	h := &Header{}
 

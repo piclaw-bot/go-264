@@ -48,6 +48,21 @@ func (w *testBitWriter) bytes() []byte {
 	return out
 }
 
+func TestParseHeaderHandlesNilParameterSets(t *testing.T) {
+	var w testBitWriter
+	w.ue(0)          // first_mb_in_slice
+	w.ue(SliceTypeI) // slice_type
+	w.ue(0)          // pic_parameter_set_id
+	w.se(0)          // slice_qp_delta
+	h, r := ParseHeader(w.bytes(), nal.TypeSliceNonIDR, nil, nil)
+	if h == nil || r == nil {
+		t.Fatalf("ParseHeader returned nil header/reader")
+	}
+	if h.SliceType != SliceTypeI || h.FirstMbInSlice != 0 || h.PPSID != 0 {
+		t.Fatalf("unexpected header: %+v", h)
+	}
+}
+
 func TestSkipPredWeightTableConsumesWeightedPredictionSyntax(t *testing.T) {
 	var w testBitWriter
 	w.ue(0)  // luma_log2_weight_denom
