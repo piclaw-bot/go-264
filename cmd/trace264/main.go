@@ -120,7 +120,7 @@ func traceSlice(nalIdx int, unit nal.Unit, spsMap map[uint32]*nal.SPS, ppsMap ma
 				SliceQP: int32(currentQP), Transform8x8: pps.Transform8x8Mode,
 				LeftNZ: leftNZ, TopNZ: topNZ, LeftChromaNZ: leftChromaNZ, TopChromaNZ: topChromaNZ,
 			})
-			currentQP = (currentQP + int(mb.QPDelta)%52 + 52) % 52
+			currentQP = updateQP(currentQP, int(mb.QPDelta))
 			nzCtx[mbIdx] = mb.TotalCoeff
 			chromaNZCtx[mbIdx] = mb.ChromaTotalCoeff
 			writeBackIntra4x4(ref4Ctx, mv4Stride, mbX, mbY)
@@ -136,7 +136,7 @@ func traceSlice(nalIdx int, unit nal.Unit, spsMap map[uint32]*nal.SPS, ppsMap ma
 				skipRun = int(r.ReadUE())
 			}
 			if skipRun > 0 {
-				skipMV := predictSkipMV(mvCtx, refCtx, predMV, mbIdx, mbX, mbY, mbWidth)
+				skipMV := predMV
 				fmt.Printf("  mb=%04d x=%02d y=%02d bits=%d..%d type=P_SKIP remainingSkip=%d qp=%d mv0=(%d,%d) ref0=0\n", mbIdx, mbX, mbY, start, r.Position(), skipRun-1, currentQP, skipMV.X, skipMV.Y)
 				mvCtx[mbIdx] = skipMV
 				refCtx[mbIdx] = 0
@@ -158,7 +158,7 @@ func traceSlice(nalIdx int, unit nal.Unit, spsMap map[uint32]*nal.SPS, ppsMap ma
 				SliceQP: int32(currentQP), Transform8x8: pps.Transform8x8Mode,
 				LeftNZ: leftNZ, TopNZ: topNZ, LeftChromaNZ: leftChromaNZ, TopChromaNZ: topChromaNZ,
 			})
-			currentQP = (currentQP + int(intra.QPDelta)%52 + 52) % 52
+			currentQP = updateQP(currentQP, int(intra.QPDelta))
 			nzCtx[mbIdx] = intra.TotalCoeff
 			chromaNZCtx[mbIdx] = intra.ChromaTotalCoeff
 			refCtx[mbIdx] = -1
@@ -172,7 +172,7 @@ func traceSlice(nalIdx int, unit nal.Unit, spsMap map[uint32]*nal.SPS, ppsMap ma
 		rawMV0 := mb.MV[0]
 		pred0 := predictMotion4x4(mv4Ctx, ref4Ctx, mv4Stride, mbX*4, mbY*4, 4, mb.RefIdx[0])
 		applyMVPredictors(&mb, mvCtx, refCtx, mv4Ctx, ref4Ctx, mv4Stride, mbIdx, mbX, mbY, mbWidth)
-		currentQP = (currentQP + int(mb.QPDelta)%52 + 52) % 52
+		currentQP = updateQP(currentQP, int(mb.QPDelta))
 		nzCtx[mbIdx] = mb.TotalCoeff
 		chromaNZCtx[mbIdx] = mb.ChromaTotalCoeff
 		mvCtx[mbIdx], refCtx[mbIdx] = representativeRightEdgeMV(&mb)
@@ -180,6 +180,10 @@ func traceSlice(nalIdx int, unit nal.Unit, spsMap map[uint32]*nal.SPS, ppsMap ma
 		fmt.Printf("  mb=%04d x=%02d y=%02d bits=%d..%d type=P:%d cbp=%02x qpd=%d qp=%d mvd0=(%d,%d) pred0=(%d,%d) mv0=(%d,%d) ref0=%d tc=%v\n", mbIdx, mbX, mbY, start, r.Position(), mb.MBType, mb.CBP, mb.QPDelta, currentQP, rawMV0.X, rawMV0.Y, pred0.X, pred0.Y, mb.MV[0].X, mb.MV[0].Y, mb.RefIdx[0], mb.TotalCoeff)
 	}
 	return nil
+}
+
+func updateQP(current, delta int) int {
+	return (current + delta + 52) % 52
 }
 
 func writeBackInter4x4(mv4 []syntax.MotionVector, ref4 []int8, stride4, mbX, mbY int, mb *syntax.MBInter) {
@@ -245,10 +249,6 @@ func representativeRightEdgeMV(mb *syntax.MBInter) (syntax.MotionVector, int8) {
 	default:
 		return mb.MV[0], mb.RefIdx[0]
 	}
-}
-
-func predictSkipMV(ctx []syntax.MotionVector, refCtx []int8, pred syntax.MotionVector, mbIdx, mbX, mbY, mbWidth int) syntax.MotionVector {
-	return pred
 }
 
 func predictSkipMV4x4(mv4 []syntax.MotionVector, ref4 []int8, stride4, x4, y4 int) syntax.MotionVector {
