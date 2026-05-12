@@ -54,7 +54,18 @@ func (d *Decoder) reconstructIPCM(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY i
 	}
 }
 
+func intraMBInFrame(f *frame.Frame, mbX, mbY int) bool {
+	if f == nil || f.StrideY <= 0 {
+		return false
+	}
+	baseX, baseY := mbX*16, mbY*16
+	return baseX >= 0 && baseY >= 0 && baseX+16 <= f.Width && baseY+16 <= f.Height && (baseY+15)*f.StrideY+baseX+16 <= len(f.Y)
+}
+
 func (d *Decoder) reconstruct16x16(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY, qp int) {
+	if mb == nil || !intraMBInFrame(f, mbX, mbY) {
+		return
+	}
 	mode := int(mb.Intra16x16PredMode)
 	top := make([]uint8, 16)
 	left := make([]uint8, 16)
@@ -158,6 +169,9 @@ func (d *Decoder) reconstruct16x16(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY,
 }
 
 func (d *Decoder) reconstruct4x4(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY, qp int) {
+	if mb == nil || !intraMBInFrame(f, mbX, mbY) {
+		return
+	}
 	for blkIdx := 0; blkIdx < 16; blkIdx++ {
 		bx := blk4x4X[blkIdx]
 		by := blk4x4Y[blkIdx]
@@ -292,6 +306,9 @@ func (d *Decoder) reconstruct4x4(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY, q
 // reconstruct8x8 handles I_NxN macroblocks using 8×8 DCT (High profile
 // transform_size_8x8_flag=1).
 func (d *Decoder) reconstruct8x8(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY, qp int) {
+	if mb == nil || !intraMBInFrame(f, mbX, mbY) {
+		return
+	}
 	blk8x8Offsets := [4][2]int{{0, 0}, {8, 0}, {0, 8}, {8, 8}}
 	for b8 := 0; b8 < 4; b8++ {
 		bx := blk8x8Offsets[b8][0]

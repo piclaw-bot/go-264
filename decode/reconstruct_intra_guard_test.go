@@ -13,6 +13,24 @@ func TestReconstructMBHandlesNilInputs(t *testing.T) {
 	d.reconstructMB(frame.NewFrame(16, 16), nil, 0, 0, 26, nil)
 }
 
+func TestIntraLumaReconstructorsHandleInvalidInputs(t *testing.T) {
+	d := &Decoder{}
+	f := frame.NewFrame(16, 16)
+	mb := &syntax.MBIntra{MBType: syntax.MBTypeINxN}
+	d.reconstruct16x16(nil, mb, 0, 0, 26)
+	d.reconstruct16x16(f, nil, 0, 0, 26)
+	d.reconstruct16x16(f, mb, -1, 0, 26)
+	d.reconstruct16x16(f, mb, 2, 0, 26)
+	d.reconstruct4x4(nil, mb, 0, 0, 26)
+	d.reconstruct4x4(f, nil, 0, 0, 26)
+	d.reconstruct4x4(f, mb, -1, 0, 26)
+	d.reconstruct4x4(f, mb, 2, 0, 26)
+	d.reconstruct8x8(nil, mb, 0, 0, 26)
+	d.reconstruct8x8(f, nil, 0, 0, 26)
+	d.reconstruct8x8(f, mb, -1, 0, 26)
+	d.reconstruct8x8(f, mb, 2, 0, 26)
+}
+
 func TestReconstructIPCMHandlesOutOfFrameInputs(t *testing.T) {
 	d := &Decoder{}
 	f := frame.NewFrame(16, 16)
