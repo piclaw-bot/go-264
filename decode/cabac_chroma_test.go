@@ -34,6 +34,15 @@ func TestStoreCABACChromaACPreservesDC(t *testing.T) {
 	}
 }
 
+func TestCABACTransform8x8CtxClampsToSpecRange(t *testing.T) {
+	cases := map[int]int{-3: 0, -1: 0, 0: 0, 1: 1, 2: 2, 3: 2, 99: 2}
+	for in, want := range cases {
+		if got := cabacTransform8x8Ctx(in); got != want {
+			t.Fatalf("cabacTransform8x8Ctx(%d) got %d want %d", in, got, want)
+		}
+	}
+}
+
 func TestStoreCABACChromaHelpersIgnoreInvalidInputs(t *testing.T) {
 	storeCABACChromaDC(nil, 0, [4]int16{1, 2, 3, 4})
 	storeCABACChromaAC(nil, 0, 0, [16]int16{})
