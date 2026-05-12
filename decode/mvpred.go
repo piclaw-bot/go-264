@@ -119,10 +119,10 @@ func predictSkipMV4x4(mv4 []syntax.MotionVector, ref4 []int8, stride4, x4, y4 in
 
 func getMV4(mv4 []syntax.MotionVector, ref4 []int8, stride4, x4, y4 int) (syntax.MotionVector, int8) {
 	const partNotAvailable int8 = -2
-	if x4 < 0 || y4 < 0 || x4 >= stride4 || y4*stride4+x4 >= len(ref4) {
+	idx := y4*stride4 + x4
+	if stride4 <= 0 || x4 < 0 || y4 < 0 || x4 >= stride4 || idx < 0 || idx >= len(ref4) || idx >= len(mv4) {
 		return syntax.MotionVector{}, partNotAvailable
 	}
-	idx := y4*stride4 + x4
 	return mv4[idx], ref4[idx]
 }
 
