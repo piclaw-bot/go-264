@@ -237,6 +237,9 @@ func (d *Decoder) fillChromaInterPred(dst []uint8, plane []uint8, stride, width,
 }
 
 func (d *Decoder) writeChromaInterResidual(f *frame.Frame, mb *syntax.MBInter, predicted []uint8, comp int, mbX, mbY, qp int) {
+	if f == nil || mb == nil || len(predicted) < 64 || f.StrideC <= 0 {
+		return
+	}
 	dstBaseX := mbX * 8
 	dstBaseY := mbY * 8
 	plane := f.U
@@ -327,6 +330,9 @@ func (d *Decoder) copyInterSubRect(dst []uint8, ref *frame.Frame, srcBaseX, srcB
 }
 
 func (d *Decoder) writeInterResidual(f *frame.Frame, mb *syntax.MBInter, predicted []uint8, mbX, mbY, qp int) {
+	if f == nil || mb == nil || len(predicted) < 256 || f.StrideY <= 0 {
+		return
+	}
 	cbpLuma := mb.CBP & 0xF
 	if mb.Use8x8Transform {
 		for group := 0; group < 4; group++ {

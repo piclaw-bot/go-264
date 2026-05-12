@@ -53,6 +53,20 @@ func assertPredictedChroma8x8(t *testing.T, f *frame.Frame, comp int, predicted 
 	}
 }
 
+func TestWriteInterResidualMalformedInputsDoNotPanic(t *testing.T) {
+	var d Decoder
+	d.writeInterResidual(nil, nil, nil, 0, 0, 26)
+	d.writeInterResidual(frame.NewFrame(16, 16), nil, nil, 0, 0, 26)
+	d.writeInterResidual(frame.NewFrame(16, 16), &syntax.MBInter{}, make([]uint8, 4), 0, 0, 26)
+}
+
+func TestWriteChromaInterResidualMalformedInputsDoNotPanic(t *testing.T) {
+	var d Decoder
+	d.writeChromaInterResidual(nil, nil, nil, 0, 0, 0, 26)
+	d.writeChromaInterResidual(frame.NewFrame(16, 16), nil, nil, 0, 0, 0, 26)
+	d.writeChromaInterResidual(frame.NewFrame(16, 16), &syntax.MBInter{}, make([]uint8, 4), 0, 0, 0, 26)
+}
+
 func TestWriteChromaInterResidualZeroCBPCopiesPrediction(t *testing.T) {
 	var d Decoder
 	f := frame.NewFrame(16, 16)
