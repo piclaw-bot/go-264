@@ -23,6 +23,33 @@ func TestReconstructMBBidiHandlesInvalidInputs(t *testing.T) {
 	d.reconstructMBBidi(frame.NewFrame(16, 16), &syntax.MBBidi{}, 2, 0, 26)
 }
 
+func TestReconstructMBBidiUsesPartitionListMapping(t *testing.T) {
+	d := &Decoder{DPB: frame.NewDPB(4)}
+	ref0 := frame.NewFrame(16, 16)
+	ref1 := frame.NewFrame(16, 16)
+	for i := range ref0.Y {
+		ref0.Y[i] = 20
+		ref1.Y[i] = 80
+	}
+	d.DPB.Frames = []*frame.Frame{ref0, ref1}
+	f := frame.NewFrame(16, 16)
+	d.reconstructMBBidi(f, &syntax.MBBidi{MBType: 12}, 0, 0, 26) // B_L0_Bi_16x8
+	for y := 0; y < 8; y++ {
+		for x := 0; x < 16; x++ {
+			if got := f.PixelY(x, y); got != 80 {
+				t.Fatalf("top L0 partition pixel (%d,%d) got %d want 80", x, y, got)
+			}
+		}
+	}
+	for y := 8; y < 16; y++ {
+		for x := 0; x < 16; x++ {
+			if got := f.PixelY(x, y); got != 50 {
+				t.Fatalf("bottom Bi partition pixel (%d,%d) got %d want blend 50", x, y, got)
+			}
+		}
+	}
+}
+
 func TestReconstructMBBidiUsesParsedReferenceIndices(t *testing.T) {
 	d := &Decoder{DPB: frame.NewDPB(4)}
 	ref0 := frame.NewFrame(16, 16)

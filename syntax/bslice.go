@@ -232,6 +232,12 @@ func decodeBResidual(r *nal.Reader, mb *MBBidi, opts BidiDecodeOpts) {
 	decodeInterResidualCAVLC(r, mb.CBP, &mb.Coeffs, &mb.CoeffsChroma, &mb.TotalCoeff, &mb.ChromaTotalCoeff, opts.LeftNZ, opts.TopNZ, opts.LeftChromaNZ, opts.TopChromaNZ)
 }
 
+// BPartUsesL0 reports whether a non-B_8x8 B macroblock partition uses list 0.
+func BPartUsesL0(mbType uint32, partIdx int) bool { return usesL0(mbType, partIdx) }
+
+// BPartUsesL1 reports whether a non-B_8x8 B macroblock partition uses list 1.
+func BPartUsesL1(mbType uint32, partIdx int) bool { return usesL1(mbType, partIdx) }
+
 // usesL0 returns true if the partition uses list 0 (forward) prediction.
 func usesL0(mbType uint32, partIdx int) bool {
 	if mbType >= uint32(len(bMBUsesL0)) || partIdx < 0 || partIdx > 1 {

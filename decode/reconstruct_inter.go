@@ -446,6 +446,64 @@ func (d *Decoder) writeInterResidual(f *frame.Frame, mb *syntax.MBInter, predict
 	}
 }
 
+func fillBPredBlock(dst []uint8, ref *frame.Frame, srcBaseX, srcBaseY, dstX, dstY, w, h int, mv syntax.MotionVector) {
+	if ref == nil || ref.Width <= 0 || ref.Height <= 0 || len(dst) < 256 {
+		return
+	}
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			sx := clampInt(srcBaseX+x+int(mv.X>>2), 0, ref.Width-1)
+			sy := clampInt(srcBaseY+y+int(mv.Y>>2), 0, ref.Height-1)
+			dst[(dstY+y)*16+dstX+x] = ref.PixelY(sx, sy)
+		}
+	}
+}
+
+func bMacroblockPartCount(mbType uint32) int {
+	if mbType >= 4 && mbType <= 21 {
+		return 2
+	}
+	return 1
+}
+
+func bPartRect(mbType uint32, part int) (x, y, w, h int) {
+	if part != 1 {
+		part = 0
+	}
+	if mbType == syntax.BMBTypeL016x8 || mbType == syntax.BMBTypeL116x8 || mbType == syntax.BMBTypeBi16x8 || mbType == 10 || mbType == 12 || mbType == 14 || mbType == 16 || mbType == 18 || mbType == 20 {
+		return 0, part * 8, 16, 8
+	}
+	return part * 8, 0, 8, 16
+}
+
+func (d *Decoder) fillBPartPrediction(dst []uint8, mb *syntax.MBBidi, mbX, mbY, dstX, dstY, w, h, part int) {
+	if d == nil || mb == nil || len(dst) < 256 {
+		return
+	}
+	var predL0, predL1 [256]uint8
+	if syntax.BPartUsesL0(mb.MBType, part) {
+		fillBPredBlock(predL0[:], d.refL0(mb.RefIdxL0[part]), mbX*16+dstX, mbY*16+dstY, dstX, dstY, w, h, mb.MVL0[part])
+	}
+	if syntax.BPartUsesL1(mb.MBType, part) {
+		fillBPredBlock(predL1[:], d.refL1(mb.RefIdxL1[part]), mbX*16+dstX, mbY*16+dstY, dstX, dstY, w, h, mb.MVL1[part])
+	}
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			idx := (dstY+y)*16 + dstX + x
+			useL0 := syntax.BPartUsesL0(mb.MBType, part)
+			useL1 := syntax.BPartUsesL1(mb.MBType, part)
+			switch {
+			case useL0 && useL1:
+				dst[idx] = uint8((uint16(predL0[idx]) + uint16(predL1[idx]) + 1) >> 1)
+			case useL1:
+				dst[idx] = predL1[idx]
+			default:
+				dst[idx] = predL0[idx]
+			}
+		}
+	}
+}
+
 func coeff8x8NonZero(block [64]int16) bool {
 	for i := range block {
 		if block[i] != 0 {
@@ -476,30 +534,25 @@ func (d *Decoder) reconstructMBBidi(f *frame.Frame, mb *syntax.MBBidi, mbX, mbY,
 		return
 	}
 
-	var predL0 [256]uint8
-	var predL1 [256]uint8
-	mvL0 := mb.MVL0[0]
-	mvL1 := mb.MVL1[0]
-
-	for y := 0; y < 16; y++ {
-		for x := 0; x < 16; x++ {
-			sx0 := clampInt(mbX*16+x+int(mvL0.X>>2), 0, refL0.Width-1)
-			sy0 := clampInt(mbY*16+y+int(mvL0.Y>>2), 0, refL0.Height-1)
-			predL0[y*16+x] = refL0.PixelY(sx0, sy0)
-			sx1 := clampInt(mbX*16+x+int(mvL1.X>>2), 0, refL1.Width-1)
-			sy1 := clampInt(mbY*16+y+int(mvL1.Y>>2), 0, refL1.Height-1)
-			predL1[y*16+x] = refL1.PixelY(sx1, sy1)
-		}
-	}
-
 	var blended [256]uint8
-	useBi := mb.MBType == syntax.BMBTypeBi16x16 || mb.MBType == syntax.BMBTypeDirect16x16
-	if useBi {
-		syntax.BiPredBlend(blended[:], predL0[:], predL1[:], 256)
-	} else if syntax.BMBTypeL116x16 == mb.MBType {
-		copy(blended[:], predL1[:])
+	if bMacroblockPartCount(mb.MBType) == 2 {
+		for part := 0; part < 2; part++ {
+			x0, y0, w, h := bPartRect(mb.MBType, part)
+			d.fillBPartPrediction(blended[:], mb, mbX, mbY, x0, y0, w, h, part)
+		}
 	} else {
-		copy(blended[:], predL0[:])
+		var predL0 [256]uint8
+		var predL1 [256]uint8
+		fillBPredBlock(predL0[:], refL0, mbX*16, mbY*16, 0, 0, 16, 16, mb.MVL0[0])
+		fillBPredBlock(predL1[:], refL1, mbX*16, mbY*16, 0, 0, 16, 16, mb.MVL1[0])
+		useBi := mb.MBType == syntax.BMBTypeBi16x16 || mb.MBType == syntax.BMBTypeDirect16x16
+		if useBi {
+			syntax.BiPredBlend(blended[:], predL0[:], predL1[:], 256)
+		} else if syntax.BMBTypeL116x16 == mb.MBType {
+			copy(blended[:], predL1[:])
+		} else {
+			copy(blended[:], predL0[:])
+		}
 	}
 	residualMB := &syntax.MBInter{
 		CBP:              mb.CBP,
