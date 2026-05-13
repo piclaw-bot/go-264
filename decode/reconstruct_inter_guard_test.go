@@ -71,8 +71,8 @@ func TestReconstructMBBidiUsesB8x8SubListMapping(t *testing.T) {
 	if got := f.PixelY(0, 8); got != 60 {
 		t.Fatalf("B8x8 Bi sub block got %d want blend 60", got)
 	}
-	if got := f.PixelY(8, 8); got != 0 {
-		t.Fatalf("B8x8 direct placeholder sub block got %d want untouched 0", got)
+	if got := f.PixelY(8, 8); got != 60 {
+		t.Fatalf("B8x8 direct fallback sub block got %d want blend 60", got)
 	}
 }
 

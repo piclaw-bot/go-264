@@ -487,7 +487,16 @@ func (d *Decoder) fillBSubPrediction(dst []uint8, mb *syntax.MBBidi, mbX, mbY, d
 	if d == nil || mb == nil || len(dst) < 256 || part < 0 || part >= 4 {
 		return
 	}
-	d.fillBPredByUse(dst, mbX, mbY, dstX, dstY, 8, 8, mb.RefIdxL0[part], mb.RefIdxL1[part], mb.MVL0[part], mb.MVL1[part], syntax.BSubUsesL0(mb.SubMBType[part]), syntax.BSubUsesL1(mb.SubMBType[part]))
+	useL0 := syntax.BSubUsesL0(mb.SubMBType[part])
+	useL1 := syntax.BSubUsesL1(mb.SubMBType[part])
+	if mb.SubMBType[part] == 0 {
+		// Direct B sub-MBs need colocated-MV derivation. Until that is wired, use
+		// the same conservative direct fallback as full-block B_Direct_16x16:
+		// blend list 0 and list 1 with the stored/default zero MVs instead of
+		// leaving the sub-rectangle black.
+		useL0, useL1 = true, true
+	}
+	d.fillBPredByUse(dst, mbX, mbY, dstX, dstY, 8, 8, mb.RefIdxL0[part], mb.RefIdxL1[part], mb.MVL0[part], mb.MVL1[part], useL0, useL1)
 }
 
 func (d *Decoder) fillBPredByUse(dst []uint8, mbX, mbY, dstX, dstY, w, h int, refIdxL0, refIdxL1 int8, mvL0, mvL1 syntax.MotionVector, useL0, useL1 bool) {
