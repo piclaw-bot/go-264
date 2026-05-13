@@ -49,8 +49,13 @@ func DecodeMBBidi(r *nal.Reader, sliceQP int32, numRefL0, numRefL1 uint32) *MBBi
 		return mb // intra MB in B-slice
 	}
 
+	// Direct mode derives refs/MVs from colocated state, but non-skip
+	// B_Direct_16x16 still carries coded_block_pattern/residual syntax below.
 	if mb.MBType == BMBTypeDirect16x16 {
-		// Direct mode: MV derived from co-located MB, no explicit MV
+		mb.CBP = decodeCBPInter(r)
+		if mb.CBP > 0 {
+			mb.QPDelta = r.ReadSE()
+		}
 		return mb
 	}
 

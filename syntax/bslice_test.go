@@ -165,6 +165,18 @@ func TestDecodeMBBidiB8x8UsesSubMBListUse(t *testing.T) {
 	}
 }
 
+func TestDecodeMBBidiDirectConsumesCBPAndQPDelta(t *testing.T) {
+	var w testBitWriter
+	w.ue(BMBTypeDirect16x16)
+	w.ue(1) // inter CBP table code 1 => cbp=16, so mb_qp_delta follows
+	w.se(-2)
+
+	mb := DecodeMBBidi(nal.NewReader(w.bytes()), 26, 1, 1)
+	if mb.MBType != BMBTypeDirect16x16 || mb.CBP != 16 || mb.QPDelta != -2 {
+		t.Fatalf("direct B MB did not consume CBP/QP syntax: type=%d cbp=%d qpd=%d", mb.MBType, mb.CBP, mb.QPDelta)
+	}
+}
+
 func TestDecodeMBBidiUsesTruncatedExpGolombRefs(t *testing.T) {
 	var w testBitWriter
 	w.ue(BMBTypeL016x16)
