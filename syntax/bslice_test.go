@@ -103,6 +103,15 @@ func TestBSubMBListUseMatchesFFmpegTable(t *testing.T) {
 	}
 }
 
+func TestBSubMBPartCountsMatchFFmpegTable(t *testing.T) {
+	want := []int{1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 4, 4, 4, 0}
+	for subType, count := range want {
+		if got := bSubMBPartCountForType(uint32(subType)); got != count {
+			t.Fatalf("bSubMBPartCountForType(%d) got %d want %d", subType, got, count)
+		}
+	}
+}
+
 func TestDecodeMBBidiB8x8UsesSubMBListUse(t *testing.T) {
 	var w testBitWriter
 	w.ue(BMBTypeB8x8)
@@ -136,5 +145,24 @@ func TestDecodeMBBidiB8x8UsesSubMBListUse(t *testing.T) {
 	}
 	if mb.RefIdxL0[3] != 2 || mb.RefIdxL1[3] != 4 || mb.MVL0[3] != (MotionVector{X: 7, Y: -8}) || mb.MVL1[3] != (MotionVector{X: 11, Y: -12}) {
 		t.Fatalf("Bi sub-MB decoded as %+v", mb)
+	}
+}
+
+func TestDecodeMBBidiB8x8ConsumesAllSubPartitionMVDs(t *testing.T) {
+	var w testBitWriter
+	w.ue(BMBTypeB8x8)
+	for i := 0; i < 4; i++ {
+		w.ue(10) // B_L0_8x8: four L0 sub-partitions in FFmpeg's table
+	}
+	for i := int32(1); i <= 16; i++ {
+		w.se(i)
+		w.se(-i)
+	}
+	w.ue(0) // CBP=0; if extra MVDs are not consumed this is read from the wrong bit position
+
+	mb := DecodeMBBidi(nal.NewReader(w.bytes()), 26, 1, 1)
+	want := [4]MotionVector{{X: 1, Y: -1}, {X: 5, Y: -5}, {X: 9, Y: -9}, {X: 13, Y: -13}}
+	if mb.MVL0 != want || mb.CBP != 0 || mb.QPDelta != 0 {
+		t.Fatalf("B_8x8 sub-partition MVD consumption drifted: mv=%v cbp=%d qpd=%d", mb.MVL0, mb.CBP, mb.QPDelta)
 	}
 }

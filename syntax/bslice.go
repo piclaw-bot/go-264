@@ -94,12 +94,22 @@ func DecodeMBBidi(r *nal.Reader, sliceQP int32, numRefL0, numRefL1 uint32) *MBBi
 	// Motion vectors
 	for i := 0; i < numParts; i++ {
 		if usesL0Part(i) {
-			mb.MVL0[i] = decodeMVD(r)
+			for subPart := 0; subPart < bSubMBPartCountForType(mb.SubMBType[i]); subPart++ {
+				mvd := decodeMVD(r)
+				if subPart == 0 {
+					mb.MVL0[i] = mvd
+				}
+			}
 		}
 	}
 	for i := 0; i < numParts; i++ {
 		if usesL1Part(i) {
-			mb.MVL1[i] = decodeMVD(r)
+			for subPart := 0; subPart < bSubMBPartCountForType(mb.SubMBType[i]); subPart++ {
+				mvd := decodeMVD(r)
+				if subPart == 0 {
+					mb.MVL1[i] = mvd
+				}
+			}
 		}
 	}
 
@@ -142,6 +152,12 @@ var bSubMBUsesL1 = [13]bool{
 	2: true, 3: true, 6: true, 7: true, 8: true, 9: true, 11: true, 12: true,
 }
 
+var bSubMBPartCount = [13]int{
+	0: 1, 1: 1, 2: 1, 3: 1,
+	4: 2, 5: 2, 6: 2, 7: 2, 8: 2, 9: 2,
+	10: 4, 11: 4, 12: 4,
+}
+
 var bMBUsesL1 = [23][2]bool{
 	2:  {true, false}, // B_L1_16x16
 	3:  {true, false}, // B_Bi_16x16
@@ -170,6 +186,13 @@ func usesBSubL0(subType uint32) bool {
 
 func usesBSubL1(subType uint32) bool {
 	return subType < uint32(len(bSubMBUsesL1)) && bSubMBUsesL1[subType]
+}
+
+func bSubMBPartCountForType(subType uint32) int {
+	if subType < uint32(len(bSubMBPartCount)) {
+		return bSubMBPartCount[subType]
+	}
+	return 0
 }
 
 // usesL0 returns true if the partition uses list 0 (forward) prediction.
