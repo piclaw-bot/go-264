@@ -74,6 +74,10 @@ func TestCABACDecoderPublicMethodsHandleInvalidInputs(t *testing.T) {
 	if dec.DecodeBin(nil) != 0 || dec.DecodeBypass() != 0 || dec.DecodeTerminate() != 0 || dec.DecodeUEG(0) != 0 {
 		t.Fatal("decoder without reader should return zero")
 	}
+	dec = &CABACDecoder{r: nal.NewReader([]byte{0xff, 0xff})}
+	if dec.DecodeBin(&CABACCtx{PState: 32}) != 0 || dec.DecodeBypass() != 0 || dec.DecodeTerminate() != 0 || dec.DecodeUEG(-1) != 0 {
+		t.Fatal("decoder with zero range should return zero")
+	}
 	dec = NewCABACDecoder(nal.NewReader([]byte{0xff, 0xff}))
 	if dec.DecodeBin(nil) != 0 {
 		t.Fatal("nil context should decode as zero")
