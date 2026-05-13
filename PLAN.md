@@ -61,12 +61,12 @@ Implemented:
 - CABAC context initialization from FFmpeg/spec tables.
 - P-slice `mb_type` decision tree.
 - CABAC intra-in-P decode path wired through intra reconstruction.
-- CABAC skip, ref_idx, MVD, CBP, DQP syntax helpers, including neighbour-dependent skip/ref/MVD/transform-size contexts and guarded helper boundaries for malformed direct use.
-- CABAC residual category/bounds validation, FFmpeg-style 8×8 residual non-zero-context write-back, and MV/ref context guards for malformed direct helper/tool inputs.
-- CABAC P8x8 sub-MB type decoding and variable sub-partition MVD consumption.
-- CABAC chroma DC/AC coefficient placement across the four chroma 4×4 blocks.
+- CABAC skip, ref_idx, MVD, CBP, DQP syntax helpers, including neighbour-dependent skip/ref/MVD/transform-size/chroma-pred contexts and guarded helper boundaries for malformed direct use.
+- CABAC residual category/bounds validation, FFmpeg-style 8×8 residual quadrant layout and non-zero-context write-back, and MV/ref context guards for malformed direct helper/tool inputs.
+- CABAC P8x8 sub-MB type decoding, variable sub-partition MVD consumption, and FFmpeg-style transform_size_8x8_flag eligibility for full-8x8-only sub partitions.
+- CABAC chroma DC/AC coefficient placement across the four chroma 4×4 blocks for both inter and intra paths.
 - CABAC coded-block-flag and residual decoding.
-- CABAC end-of-slice terminate handling.
+- CABAC end-of-slice terminate handling and byte-aligned arithmetic decoder initialization after slice header parsing.
 - H.264 zigzag scan mapping for residual output.
 - I8x8 prediction modes and strong reference-pixel filtering.
 - Inter-MB `transform_size_8x8_flag` decode path and 8×8 residual category support.
@@ -86,7 +86,7 @@ Still gated:
 | `dark64` avg PSNR | 31.23 dB |
 | Baseline CAVLC avg PSNR | 27.65 dB |
 | Baseline YUV PSNR | Y=39.58 U=26.47 V=21.76 dB |
-| `bbb-frame0` CABAC avg PSNR | 7.92 dB |
+| `bbb-frame0` CABAC avg PSNR | 7.81 dB |
 | BBB baseline decode allocations | ~10.9 MB/op, ~1.3k allocs/op |
 | BBB baseline decode sample | ~44-52 ms/op typical recent sample |
 
@@ -125,11 +125,11 @@ Recent completed guardrails and low-level improvements:
 - `pred.InterPred16x16At` has fast paths for interior fractional-MV bilinear interpolation plus horizontal-only/vertical-only fractional interpolation while preserving the clipped edge path.
 - `decode.copyInterSubRect` copies integer-MV P8x8 sub-rectangles directly, preserving fractional fallback semantics.
 - `decode.fillChromaInterPred` has an interior 8×8 row-copy fast path plus malformed-input guards; inter chroma prediction now respects P16x8/P8x16/P8x8 partition boundaries and P8x8 8×4/4×8/4×4 sub-partition MVs at 4:2:0 scale.
-- Inter luma/chroma residual write-back now writes directly to frame rows after the same add + clip operation, avoiding per-pixel setter calls in the hot path; direct helper inputs, frame extents, residual category/coefficient bounds, and CABAC 8×8 residual non-zero counts are guarded to avoid panics or stale neighbour context on malformed internal tests/tools.
+- Inter luma/chroma residual write-back now writes directly to frame rows after the same add + clip operation, avoiding per-pixel setter calls in the hot path; direct helper inputs, frame extents, residual category/coefficient bounds, and CABAC 8×8 residual quadrant/non-zero-context handling are guarded to avoid panics, coefficient scrambling, or stale neighbour context on malformed internal tests/tools.
 - Inter zero-residual paths copy prediction directly for uncoded luma CBP groups, zero-`TotalCoeff` 4×4 blocks, all-zero 8×8 transform groups, chroma CBP=0, and zero chroma 4×4 residual blocks.
 - Decoder and `trace264` now share the same QP wraparound semantics and 4×4 MV/ref-cache source-of-truth model; stale macroblock-level trace MV context was removed, and MV cache read/fill helpers reject bad strides, short slices, and negative origins.
 - SPS/PPS parsing has defensive scaling-list wraparound and continues past PPS slice-group maps before reading ref counts, weighted prediction flags, QP offsets, deblocking flags, and High-profile extensions. Slice parsing now follows FFmpeg ordering for POC type 0/1 deltas, reference marking gated by `nal_ref_idc`, SP/SI fields, and unsigned deblocking idc syntax.
-- Intra/inter/B reconstruction use fixed stack prediction buffers for 16×16 temporaries and guard direct helper/tool inputs for nil frames, nil macroblocks, invalid references, and out-of-frame macroblock coordinates.
+- Intra/inter/B reconstruction use fixed stack prediction buffers for 16×16 temporaries and guard direct helper/tool inputs for nil frames, nil macroblocks, invalid references, and out-of-frame macroblock coordinates. B-slice list-use syntax helpers now follow FFmpeg/H.264 table mappings instead of simplified broad fallbacks.
 - `transform.IDCT4x4BatchMask` skips transform work for known-zero dense residual slots.
 - `transform.Dequant4x4` uses precomputed scale tables; `Dequant4x4Block` handles fixed-size hot decode blocks; public `Quant4x4`/`Dequant4x4` helpers are hardened for short blocks and invalid QP values.
 
