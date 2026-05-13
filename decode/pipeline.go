@@ -389,12 +389,22 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 			}
 		} else {
 			// B-slice
-			mbBidi := syntax.DecodeMBBidi(r, qp, hdr.NumRefIdxL0Active, hdr.NumRefIdxL1Active)
+			mbBidi := syntax.DecodeMBBidi(r, int32(currentQP), hdr.NumRefIdxL0Active, hdr.NumRefIdxL1Active)
 			if mbBidi.MBType >= syntax.BMBTypeIntra {
-				mb := &syntax.MBIntra{MBType: mbBidi.MBType - syntax.BMBTypeIntra}
-				d.reconstructMB(f, mb, mbX, mbY, int(qp), sps)
+				mb := mbBidi.Intra
+				if mb == nil {
+					mb = &syntax.MBIntra{MBType: mbBidi.MBType - syntax.BMBTypeIntra}
+				}
+				currentQP = updateQP(currentQP, int(mb.QPDelta))
+				d.reconstructMB(f, mb, mbX, mbY, currentQP, sps)
+				nzCtx[mbIdx] = mb.TotalCoeff
+				chromaNZCtx[mbIdx] = mb.ChromaTotalCoeff
+				writeBackIntra4x4(ref4Ctx, mv4Stride, mbX, mbY)
 			} else {
-				d.reconstructMBBidi(f, mbBidi, mbX, mbY, int(qp))
+				currentQP = updateQP(currentQP, int(mbBidi.QPDelta))
+				d.reconstructMBBidi(f, mbBidi, mbX, mbY, currentQP)
+				nzCtx[mbIdx] = mbBidi.TotalCoeff
+				chromaNZCtx[mbIdx] = mbBidi.ChromaTotalCoeff
 			}
 		}
 	}
