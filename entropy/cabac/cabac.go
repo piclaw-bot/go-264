@@ -114,6 +114,19 @@ func (d *CABACDecoder) DecodeBypass() uint32 {
 }
 
 // DecodeTerminate decodes the end-of-slice flag.
+func (d *CABACDecoder) ByteAlign() {
+	if d != nil && d.r != nil {
+		d.r.ByteAlign()
+	}
+}
+
+func (d *CABACDecoder) ReadPCMByte() uint8 {
+	if d == nil || d.r == nil {
+		return 0
+	}
+	return uint8(d.r.ReadBits(8))
+}
+
 func (d *CABACDecoder) DecodeTerminate() uint32 {
 	d.codIRange -= 2
 	if d.codILow >= d.codIRange {

@@ -249,6 +249,22 @@ func cabacTransform8x8Ctx(ctx int) int {
 	return ctx
 }
 
+func decodeCABACIPCMSamples(dec *cabac.CABACDecoder, mb *syntax.MBIntra) {
+	if dec == nil || mb == nil {
+		return
+	}
+	dec.ByteAlign()
+	for i := range mb.PCMY {
+		mb.PCMY[i] = dec.ReadPCMByte()
+	}
+	for i := range mb.PCMCb {
+		mb.PCMCb[i] = dec.ReadPCMByte()
+	}
+	for i := range mb.PCMCr {
+		mb.PCMCr[i] = dec.ReadPCMByte()
+	}
+}
+
 func splitLuma8x8Residual(dst *[16][16]int16, group int, src [64]int16) {
 	if dst == nil || group < 0 || group >= 4 {
 		return
@@ -381,7 +397,8 @@ func decodeCABACIntraMBWithParams(dec *cabac.CABACDecoder, models []cabac.CABACC
 	}
 	if isI16 {
 		if dec.DecodeTerminate() == 1 {
-			mb.MBType = 25 // I_PCM
+			mb.MBType = syntax.MBTypeIPCM
+			decodeCABACIPCMSamples(dec, mb)
 			return mb
 		}
 		// I_16x16: binarize cbp_luma / cbp_chroma / pred_mode.
