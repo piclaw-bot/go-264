@@ -82,6 +82,9 @@ func TestCABACDecoderPublicMethodsHandleInvalidInputs(t *testing.T) {
 	if dec.DecodeBin(nil) != 0 {
 		t.Fatal("nil context should decode as zero")
 	}
+	if dec.DecodeBin(&CABACCtx{PState: 64}) != 0 || dec.DecodeBin(&CABACCtx{PState: 32, ValMPS: 2}) != 0 {
+		t.Fatal("invalid context state should decode as zero")
+	}
 }
 
 func TestValidResidualCoeffCount(t *testing.T) {

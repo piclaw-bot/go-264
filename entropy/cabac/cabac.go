@@ -87,7 +87,7 @@ func (d *CABACDecoder) Reset() {
 
 // DecodeBin decodes one binary decision using the given context.
 func (d *CABACDecoder) DecodeBin(ctx *CABACCtx) uint32 {
-	if d == nil || d.r == nil || ctx == nil || d.codIRange == 0 {
+	if d == nil || d.r == nil || ctx == nil || d.codIRange == 0 || ctx.PState > 63 || ctx.ValMPS > 1 {
 		return 0
 	}
 	qIdx := (d.codIRange >> 6) & 3
