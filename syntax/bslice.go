@@ -3,7 +3,10 @@ package syntax
 // B-slice macroblock types and bidirectional prediction.
 // ITU-T H.264 §7.3.5, Table 7-14
 
-import "github.com/rcarmo/go-264/nal"
+import (
+	cavlc "github.com/rcarmo/go-264/entropy/cavlc"
+	"github.com/rcarmo/go-264/nal"
+)
 
 // B-slice macroblock types
 const (
@@ -26,15 +29,18 @@ const (
 
 // MBBidi describes a decoded B-slice macroblock.
 type MBBidi struct {
-	MBType    uint32
-	RefIdxL0  [4]int8
-	RefIdxL1  [4]int8
-	MVL0      [4]MotionVector
-	MVL1      [4]MotionVector
-	SubMBType [4]uint32
-	CBP       uint32
-	QPDelta   int32
-	Coeffs    [16][16]int16
+	MBType           uint32
+	RefIdxL0         [4]int8
+	RefIdxL1         [4]int8
+	MVL0             [4]MotionVector
+	MVL1             [4]MotionVector
+	SubMBType        [4]uint32
+	CBP              uint32
+	QPDelta          int32
+	Coeffs           [16][16]int16
+	CoeffsChroma     [2][4][16]int16
+	TotalCoeff       [16]int
+	ChromaTotalCoeff [2][4]int
 }
 
 // DecodeMBBidi decodes one macroblock from a B-slice.
@@ -52,10 +58,7 @@ func DecodeMBBidi(r *nal.Reader, sliceQP int32, numRefL0, numRefL1 uint32) *MBBi
 	// Direct mode derives refs/MVs from colocated state, but non-skip
 	// B_Direct_16x16 still carries coded_block_pattern/residual syntax below.
 	if mb.MBType == BMBTypeDirect16x16 {
-		mb.CBP = decodeCBPInter(r)
-		if mb.CBP > 0 {
-			mb.QPDelta = r.ReadSE()
-		}
+		decodeBResidual(r, mb)
 		return mb
 	}
 
@@ -118,11 +121,7 @@ func DecodeMBBidi(r *nal.Reader, sliceQP int32, numRefL0, numRefL1 uint32) *MBBi
 		}
 	}
 
-	// CBP + residual
-	mb.CBP = decodeCBPInter(r)
-	if mb.CBP > 0 {
-		mb.QPDelta = r.ReadSE()
-	}
+	decodeBResidual(r, mb)
 
 	return mb
 }
@@ -198,6 +197,48 @@ func bSubMBPartCountForType(subType uint32) int {
 		return bSubMBPartCount[subType]
 	}
 	return 0
+}
+
+func decodeBResidual(r *nal.Reader, mb *MBBidi) {
+	if r == nil || mb == nil {
+		return
+	}
+	mb.CBP = decodeCBPInter(r)
+	if mb.CBP > 0 {
+		mb.QPDelta = r.ReadSE()
+	}
+	cbpLuma := mb.CBP & 0xF
+	for blk := 0; blk < 16; blk++ {
+		group := blk / 4
+		if cbpLuma&(1<<uint(group)) == 0 {
+			continue
+		}
+		block, tc := cavlc.DecodeCAVLCBlock(r, computeNC4x4Ctx(blk, mb.TotalCoeff[:], nil, nil))
+		mb.Coeffs[blk] = [16]int16(block)
+		mb.TotalCoeff[blk] = tc
+	}
+	cbpChroma := mb.CBP >> 4
+	if cbpChroma == 0 {
+		return
+	}
+	for comp := 0; comp < 2; comp++ {
+		dcBlock4 := cavlc.DecodeCAVLCChromaDC(r)
+		for i := 0; i < 4; i++ {
+			mb.CoeffsChroma[comp][i][0] = dcBlock4[i]
+		}
+	}
+	if cbpChroma != 2 {
+		return
+	}
+	for comp := 0; comp < 2; comp++ {
+		for blk := 0; blk < 4; blk++ {
+			acBlock, tc := cavlc.DecodeCAVLCBlockAC(r, computeNCChroma4x4Ctx(blk, mb.ChromaTotalCoeff[comp][:], nil, nil, comp))
+			for j := 1; j < 16; j++ {
+				mb.CoeffsChroma[comp][blk][j] = acBlock[j]
+			}
+			mb.ChromaTotalCoeff[comp][blk] = tc
+		}
+	}
 }
 
 // usesL0 returns true if the partition uses list 0 (forward) prediction.

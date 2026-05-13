@@ -165,6 +165,23 @@ func TestDecodeMBBidiB8x8UsesSubMBListUse(t *testing.T) {
 	}
 }
 
+func TestDecodeMBBidiConsumesLumaResidualSyntax(t *testing.T) {
+	var w testBitWriter
+	w.ue(BMBTypeL016x16)
+	w.se(0)
+	w.se(0)
+	w.ue(2) // inter CBP table code 2 => cbp=1, four luma 4x4 blocks follow
+	w.se(0)
+	for i := 0; i < 4; i++ {
+		w.bit(1) // nC=0 coeff_token (0 coeffs, 0 trailing ones)
+	}
+
+	mb := DecodeMBBidi(nal.NewReader(w.bytes()), 26, 1, 1)
+	if mb.CBP != 1 || mb.QPDelta != 0 || mb.TotalCoeff[0] != 0 || mb.TotalCoeff[3] != 0 {
+		t.Fatalf("B residual syntax was not consumed/stored correctly: cbp=%d qpd=%d tc=%v", mb.CBP, mb.QPDelta, mb.TotalCoeff)
+	}
+}
+
 func TestDecodeMBBidiDirectConsumesCBPAndQPDelta(t *testing.T) {
 	var w testBitWriter
 	w.ue(BMBTypeDirect16x16)
