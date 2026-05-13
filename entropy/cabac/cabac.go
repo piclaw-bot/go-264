@@ -64,7 +64,8 @@ var rangeTabLPS = [64][4]uint32{
 	{6, 8, 9, 11}, {6, 7, 9, 10}, {6, 7, 8, 9}, {2, 2, 2, 2},
 }
 
-// NewCABACDecoder initializes the arithmetic decoder.
+// NewCABACDecoder routes construction through Reset so normal slice starts and
+// post-I_PCM restarts share the same range/low initialization path.
 func NewCABACDecoder(r *nal.Reader) *CABACDecoder {
 	d := &CABACDecoder{r: r}
 	d.Reset()
@@ -95,7 +96,7 @@ func (d *CABACDecoder) DecodeBin(ctx *CABACCtx) uint32 {
 
 	var binVal uint32
 	if d.codILow >= d.codIRange {
-		// LPS path
+		// LPS renormalizes around the smaller interval and may flip MPS at state 0.
 		binVal = 1 - uint32(ctx.ValMPS)
 		d.codILow -= d.codIRange
 		d.codIRange = codIRangeLPS
@@ -104,12 +105,11 @@ func (d *CABACDecoder) DecodeBin(ctx *CABACCtx) uint32 {
 		}
 		ctx.PState = transIdxLPS[ctx.PState]
 	} else {
-		// MPS path
+		// MPS keeps the reduced range and only adapts the probability state.
 		binVal = uint32(ctx.ValMPS)
 		ctx.PState = transIdxMPS[ctx.PState]
 	}
 
-	// Renormalize
 	d.renorm()
 	return binVal
 }
@@ -166,7 +166,8 @@ func (d *CABACDecoder) DecodeUEG(k int) uint32 {
 	if k < 0 {
 		k = 0
 	}
-	// Truncated unary + exp-Golomb suffix
+	// CABAC UEG is a bypass-coded truncated-unary prefix followed by the suffix;
+	// keep the loop bounded so malformed streams cannot spin forever.
 	var v uint32
 	for d.DecodeBypass() == 1 {
 		v++
@@ -177,7 +178,6 @@ func (d *CABACDecoder) DecodeUEG(k int) uint32 {
 	if v < uint32(k) {
 		return v
 	}
-	// Exp-Golomb suffix
 	suffix := uint32(0)
 	for i := 0; i < int(v)-k+1; i++ {
 		suffix = (suffix << 1) | d.DecodeBypass()
