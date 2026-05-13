@@ -41,23 +41,46 @@ type MBBidi struct {
 	Intra            *MBIntra
 }
 
+// BidiDecodeOpts carries context for CAVLC B-slice macroblock decoding.
+// Zero-value is safe: single-reference lists, no neighbour contexts, no 8x8 transform.
+type BidiDecodeOpts struct {
+	SliceQP      int32
+	NumRefL0     uint32
+	NumRefL1     uint32
+	Transform8x8 bool
+	LeftNZ       *[16]int
+	TopNZ        *[16]int
+	LeftChromaNZ *[2][4]int
+	TopChromaNZ  *[2][4]int
+}
+
 // DecodeMBBidi decodes one macroblock from a B-slice.
 func DecodeMBBidi(r *nal.Reader, sliceQP int32, numRefL0, numRefL1 uint32) *MBBidi {
+	return DecodeMBBidiWithOpts(r, BidiDecodeOpts{SliceQP: sliceQP, NumRefL0: numRefL0, NumRefL1: numRefL1})
+}
+
+// DecodeMBBidiWithOpts decodes one macroblock from a B-slice with neighbour
+// state for residual nC and transform-size syntax decisions.
+func DecodeMBBidiWithOpts(r *nal.Reader, opts BidiDecodeOpts) *MBBidi {
 	mb := &MBBidi{}
 	if r == nil {
 		return mb
 	}
+	numRefL0, numRefL1 := opts.NumRefL0, opts.NumRefL1
 	mb.MBType = r.ReadUE()
 
 	if mb.MBType >= BMBTypeIntra {
-		mb.Intra = DecodeMBIntraWithType(r, mb.MBType-BMBTypeIntra, IntraDecodeOpts{})
+		mb.Intra = DecodeMBIntraWithType(r, mb.MBType-BMBTypeIntra, IntraDecodeOpts{
+			SliceQP: opts.SliceQP, Transform8x8: opts.Transform8x8,
+			LeftNZ: opts.LeftNZ, TopNZ: opts.TopNZ, LeftChromaNZ: opts.LeftChromaNZ, TopChromaNZ: opts.TopChromaNZ,
+		})
 		return mb
 	}
 
 	// Direct mode derives refs/MVs from colocated state, but non-skip
 	// B_Direct_16x16 still carries coded_block_pattern/residual syntax below.
 	if mb.MBType == BMBTypeDirect16x16 {
-		decodeBResidual(r, mb)
+		decodeBResidual(r, mb, opts)
 		return mb
 	}
 
@@ -120,7 +143,7 @@ func DecodeMBBidi(r *nal.Reader, sliceQP int32, numRefL0, numRefL1 uint32) *MBBi
 		}
 	}
 
-	decodeBResidual(r, mb)
+	decodeBResidual(r, mb, opts)
 
 	return mb
 }
@@ -198,7 +221,7 @@ func bSubMBPartCountForType(subType uint32) int {
 	return 0
 }
 
-func decodeBResidual(r *nal.Reader, mb *MBBidi) {
+func decodeBResidual(r *nal.Reader, mb *MBBidi, opts BidiDecodeOpts) {
 	if r == nil || mb == nil {
 		return
 	}
@@ -206,7 +229,7 @@ func decodeBResidual(r *nal.Reader, mb *MBBidi) {
 	if mb.CBP > 0 {
 		mb.QPDelta = r.ReadSE()
 	}
-	decodeInterResidualCAVLC(r, mb.CBP, &mb.Coeffs, &mb.CoeffsChroma, &mb.TotalCoeff, &mb.ChromaTotalCoeff, nil, nil, nil, nil)
+	decodeInterResidualCAVLC(r, mb.CBP, &mb.Coeffs, &mb.CoeffsChroma, &mb.TotalCoeff, &mb.ChromaTotalCoeff, opts.LeftNZ, opts.TopNZ, opts.LeftChromaNZ, opts.TopChromaNZ)
 }
 
 // usesL0 returns true if the partition uses list 0 (forward) prediction.

@@ -118,6 +118,7 @@ func DecodeMBIntraWithType(r *nal.Reader, mbType uint32, opts IntraDecodeOpts) *
 	if opts.Transform8x8 && mb.MBType == 0 && (mb.CodedBlockPattern&0xF) != 0 {
 		use8x8 = r.ReadBool()
 	}
+	mb.Use8x8Transform = use8x8
 
 	// QP delta
 	if mb.CodedBlockPattern > 0 || (mb.MBType >= 1 && mb.MBType <= 24) {

@@ -165,6 +165,29 @@ func TestDecodeMBBidiB8x8UsesSubMBListUse(t *testing.T) {
 	}
 }
 
+func TestDecodeMBBidiWithOptsPassesTransform8x8ToIntraPayload(t *testing.T) {
+	var w testBitWriter
+	w.ue(BMBTypeIntra) // B-slice I_NxN
+	for i := 0; i < 16; i++ {
+		w.bit(1) // current intra helper still consumes I4x4 prediction flags before the transform flag
+	}
+	w.ue(0)  // chroma intra pred mode
+	w.ue(4)  // intra CBP table code 4 => cbp=23, luma coded
+	w.bit(1) // transform_size_8x8_flag
+	w.se(0)
+	for i := 0; i < 16; i++ {
+		w.bit(1) // zero-coeff AC blocks consumed by intra residual path
+	}
+	for comp := 0; comp < 2; comp++ {
+		w.bit(1) // zero chroma DC
+	}
+
+	mb := DecodeMBBidiWithOpts(nal.NewReader(w.bytes()), BidiDecodeOpts{Transform8x8: true})
+	if mb.Intra == nil || !mb.Intra.Use8x8Transform {
+		t.Fatalf("B-intra did not receive transform8x8 option: %+v", mb.Intra)
+	}
+}
+
 func TestDecodeMBBidiConsumesIntraPayload(t *testing.T) {
 	var w testBitWriter
 	w.ue(BMBTypeIntra) // B-slice I_NxN

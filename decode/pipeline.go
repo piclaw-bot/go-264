@@ -389,7 +389,11 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 			}
 		} else {
 			// B-slice
-			mbBidi := syntax.DecodeMBBidi(r, int32(currentQP), hdr.NumRefIdxL0Active, hdr.NumRefIdxL1Active)
+			mbBidi := syntax.DecodeMBBidiWithOpts(r, syntax.BidiDecodeOpts{
+				SliceQP: int32(currentQP), NumRefL0: hdr.NumRefIdxL0Active, NumRefL1: hdr.NumRefIdxL1Active,
+				Transform8x8: pps.Transform8x8Mode,
+				LeftNZ:       leftNZ, TopNZ: topNZ, LeftChromaNZ: leftChromaNZ, TopChromaNZ: topChromaNZ,
+			})
 			if mbBidi.MBType >= syntax.BMBTypeIntra {
 				mb := mbBidi.Intra
 				if mb == nil {
