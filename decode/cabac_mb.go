@@ -22,7 +22,7 @@ const cabacMinMacroblockContexts = 402
 
 // decodeCABACPInterMB decodes one CABAC-coded P-slice macroblock.
 // Returns (inter, nil, true) for P-skip, (nil, intra, false) for intra-in-P.
-func decodeCABACPInterMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, numRefFrames uint32, leftNZ, topNZ *[16]int, leftChromaNZ, topChromaNZ *[2][4]int, leftCBP, topCBP uint32, leftNonSkip, topNonSkip bool, refCtxs [4]int, mvd4 []syntax.MotionVector, stride4, mbX, mbY int, transform8x8Mode bool, transform8x8Ctx int, leftMBType, topMBType uint32, leftChromaPred, topChromaPred int8, leftEdge8x8, topEdge8x8 [2]int8) (*syntax.MBInter, *syntax.MBIntra, bool) {
+func decodeCABACPInterMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, numRefFrames uint32, lastQScaleDiff int, leftNZ, topNZ *[16]int, leftChromaNZ, topChromaNZ *[2][4]int, leftCBP, topCBP uint32, leftNonSkip, topNonSkip bool, refCtxs [4]int, mvd4 []syntax.MotionVector, stride4, mbX, mbY int, transform8x8Mode bool, transform8x8Ctx int, leftMBType, topMBType uint32, leftChromaPred, topChromaPred int8, leftEdge8x8, topEdge8x8 [2]int8) (*syntax.MBInter, *syntax.MBIntra, bool) {
 	mb := &syntax.MBInter{MBType: syntax.PMBTypeP16x16}
 	if dec == nil || len(models) < cabacMinMacroblockContexts {
 		return mb, nil, true
@@ -48,7 +48,7 @@ func decodeCABACPInterMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, numRe
 		}
 	} else {
 		// FFmpeg h264_cabac.c decodes intra-in-P via decode_cabac_intra_mb_type(ctx_base=17, intra_slice=0).
-		intra := decodeCABACIntraMBWithParams(dec, models, leftNZ, topNZ, leftChromaNZ, topChromaNZ, leftCBP, topCBP, leftMBType, topMBType, leftChromaPred, topChromaPred, transform8x8Mode, transform8x8Ctx, leftEdge8x8, topEdge8x8, 17, false)
+		intra := decodeCABACIntraMBWithParams(dec, models, lastQScaleDiff, leftNZ, topNZ, leftChromaNZ, topChromaNZ, leftCBP, topCBP, leftMBType, topMBType, leftChromaPred, topChromaPred, transform8x8Mode, transform8x8Ctx, leftEdge8x8, topEdge8x8, 17, false)
 		return nil, intra, false
 	}
 	parts := 1
@@ -110,7 +110,7 @@ func decodeCABACPInterMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, numRe
 	}
 	mb.CBP = syntax.DecodeCABACCBP(dec, models, leftCBP, topCBP)
 	if mb.CBP != 0 {
-		mb.QPDelta = int32(syntax.DecodeCABACDQP(dec, models, 0))
+		mb.QPDelta = int32(syntax.DecodeCABACDQP(dec, models, lastQScaleDiff))
 		use8x8Residual := false
 		if !cabacInter8x8TransformAllowed(mb) {
 			transform8x8Mode = false
@@ -322,11 +322,11 @@ func storeCABACIntraChromaAC(mb *syntax.MBIntra, comp, blk int, ac [16]int16) {
 // decodeCABACIntraMB decodes one CABAC-coded I-slice intra macroblock.
 // Models the FFmpeg decode_cabac_intra_mb_type / decode_cabac_mb_intra4x4_pred_mode
 // / decode_cabac_mb_chroma_pre_mode flow from h264_cabac.c.
-func decodeCABACIntraMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, leftNZ, topNZ *[16]int, leftChromaNZ, topChromaNZ *[2][4]int, leftCBP, topCBP uint32, leftMBType, topMBType uint32, leftChromaPred, topChromaPred int8, transform8x8Mode bool, transform8x8Ctx int, leftEdge8x8, topEdge8x8 [2]int8) *syntax.MBIntra {
-	return decodeCABACIntraMBWithParams(dec, models, leftNZ, topNZ, leftChromaNZ, topChromaNZ, leftCBP, topCBP, leftMBType, topMBType, leftChromaPred, topChromaPred, transform8x8Mode, transform8x8Ctx, leftEdge8x8, topEdge8x8, 3, true)
+func decodeCABACIntraMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, lastQScaleDiff int, leftNZ, topNZ *[16]int, leftChromaNZ, topChromaNZ *[2][4]int, leftCBP, topCBP uint32, leftMBType, topMBType uint32, leftChromaPred, topChromaPred int8, transform8x8Mode bool, transform8x8Ctx int, leftEdge8x8, topEdge8x8 [2]int8) *syntax.MBIntra {
+	return decodeCABACIntraMBWithParams(dec, models, lastQScaleDiff, leftNZ, topNZ, leftChromaNZ, topChromaNZ, leftCBP, topCBP, leftMBType, topMBType, leftChromaPred, topChromaPred, transform8x8Mode, transform8x8Ctx, leftEdge8x8, topEdge8x8, 3, true)
 }
 
-func decodeCABACIntraMBWithParams(dec *cabac.CABACDecoder, models []cabac.CABACCtx, leftNZ, topNZ *[16]int, leftChromaNZ, topChromaNZ *[2][4]int, leftCBP, topCBP uint32, leftMBType, topMBType uint32, leftChromaPred, topChromaPred int8, transform8x8Mode bool, transform8x8Ctx int, leftEdge8x8, topEdge8x8 [2]int8, ctxBase int, intraSlice bool) *syntax.MBIntra {
+func decodeCABACIntraMBWithParams(dec *cabac.CABACDecoder, models []cabac.CABACCtx, lastQScaleDiff int, leftNZ, topNZ *[16]int, leftChromaNZ, topChromaNZ *[2][4]int, leftCBP, topCBP uint32, leftMBType, topMBType uint32, leftChromaPred, topChromaPred int8, transform8x8Mode bool, transform8x8Ctx int, leftEdge8x8, topEdge8x8 [2]int8, ctxBase int, intraSlice bool) *syntax.MBIntra {
 	mb := &syntax.MBIntra{}
 	if dec == nil || len(models) < 128 || ctxBase < 0 || ctxBase+5 >= len(models) {
 		return mb
@@ -465,7 +465,7 @@ func decodeCABACIntraMBWithParams(dec *cabac.CABACDecoder, models []cabac.CABACC
 
 	// QP delta
 	if mb.CodedBlockPattern > 0 || (mb.MBType >= 1 && mb.MBType <= 24) {
-		mb.QPDelta = int32(syntax.DecodeCABACDQP(dec, models, 0))
+		mb.QPDelta = int32(syntax.DecodeCABACDQP(dec, models, lastQScaleDiff))
 	}
 
 	// Residual coefficients

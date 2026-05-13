@@ -160,6 +160,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 	decodeAfterSkipRun := false
 	var cabacDec *cabac.CABACDecoder
 	var cabacModels []cabac.CABACCtx
+	cabacLastQScaleDiff := 0
 	if pps.EntropyCodingMode == 1 {
 		// FFmpeg realigns the parsed slice-header bitstream before CABAC init.
 		// CABAC arithmetic bytes are byte-aligned after cabac_alignment_one_bit;
@@ -222,7 +223,8 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 						topEdge8x8[bc] = -1
 					}
 				}
-				mb = decodeCABACIntraMB(cabacDec, cabacModels, leftNZ, topNZ, leftChromaNZ, topChromaNZ, leftCBP, topCBP, leftMBType, topMBType, leftChromaPred, topChromaPred, pps.Transform8x8Mode, transform8x8CABACCtx, leftEdge8x8, topEdge8x8)
+				mb = decodeCABACIntraMB(cabacDec, cabacModels, cabacLastQScaleDiff, leftNZ, topNZ, leftChromaNZ, topChromaNZ, leftCBP, topCBP, leftMBType, topMBType, leftChromaPred, topChromaPred, pps.Transform8x8Mode, transform8x8CABACCtx, leftEdge8x8, topEdge8x8)
+				cabacLastQScaleDiff = int(mb.QPDelta)
 				currentQP = updateQP(currentQP, int(mb.QPDelta))
 			} else {
 				mb = syntax.DecodeMBIntra(r, syntax.IntraDecodeOpts{
@@ -299,8 +301,9 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					}
 				}
 				refIdxCtxs := cabacRefIdxCtxsForMB(ref4Ctx, mv4Stride, mbX, mbY)
-				mbInter, mbIntra, skipped := decodeCABACPInterMB(cabacDec, cabacModels, hdr.NumRefIdxL0Active, leftNZ, topNZ, leftChromaNZ, topChromaNZ, leftCBP, topCBP, leftNonSkip, topNonSkip, refIdxCtxs, mvd4Ctx, mv4Stride, mbX, mbY, pps.Transform8x8Mode, transform8x8CABACCtx, leftMBType, topMBType, leftChromaPred, topChromaPred, leftEdge8x8, topEdge8x8)
+				mbInter, mbIntra, skipped := decodeCABACPInterMB(cabacDec, cabacModels, hdr.NumRefIdxL0Active, cabacLastQScaleDiff, leftNZ, topNZ, leftChromaNZ, topChromaNZ, leftCBP, topCBP, leftNonSkip, topNonSkip, refIdxCtxs, mvd4Ctx, mv4Stride, mbX, mbY, pps.Transform8x8Mode, transform8x8CABACCtx, leftMBType, topMBType, leftChromaPred, topChromaPred, leftEdge8x8, topEdge8x8)
 				if skipped {
+					cabacLastQScaleDiff = 0
 					skipMV := predMV
 					mbInter.MV[0] = skipMV
 					d.reconstructMBInter(f, mbInter, mbX, mbY, currentQP)
@@ -313,6 +316,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					continue
 				}
 				if mbIntra != nil {
+					cabacLastQScaleDiff = int(mbIntra.QPDelta)
 					currentQP = updateQP(currentQP, int(mbIntra.QPDelta))
 					d.reconstructMB(f, mbIntra, mbX, mbY, currentQP, sps)
 					nzCtx[mbIdx] = mbIntra.TotalCoeff
@@ -329,6 +333,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					continue
 				}
 				applyMVPredictors(mbInter, mv4Ctx, ref4Ctx, mv4Stride, mbX, mbY)
+				cabacLastQScaleDiff = int(mbInter.QPDelta)
 				currentQP = updateQP(currentQP, int(mbInter.QPDelta))
 				d.reconstructMBInter(f, mbInter, mbX, mbY, currentQP)
 				nzCtx[mbIdx] = mbInter.TotalCoeff
