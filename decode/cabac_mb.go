@@ -112,6 +112,9 @@ func decodeCABACPInterMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, numRe
 	if mb.CBP != 0 {
 		mb.QPDelta = int32(syntax.DecodeCABACDQP(dec, models, 0))
 		use8x8Residual := false
+		if !cabacInter8x8TransformAllowed(mb.MBType) {
+			transform8x8Mode = false
+		}
 		if transform8x8Mode && mb.CBP&0xF != 0 {
 			if decodeCABACTransform8x8Flag(dec, models, transform8x8Ctx) {
 				use8x8Residual = true
@@ -196,6 +199,13 @@ func decodeCABACPSubMBType(dec *cabac.CABACDecoder, models []cabac.CABACCtx) uin
 		return 2 // P_L0_4x8
 	}
 	return 3 // P_L0_4x4
+}
+
+func cabacInter8x8TransformAllowed(mbType uint32) bool {
+	// FFmpeg runs get_dct8x8_allowed() for partition_count==4 macroblocks before
+	// reading transform_size_8x8_flag. P_8x8/P_8x8ref0 carry sub_mb_type syntax;
+	// their sub partitions make the flag absent, so consuming it would desync CABAC.
+	return mbType != syntax.PMBTypeP8x8 && mbType != syntax.PMBTypeP8x8ref0
 }
 
 func decodeCABACTransform8x8Flag(dec *cabac.CABACDecoder, models []cabac.CABACCtx, ctx int) bool {

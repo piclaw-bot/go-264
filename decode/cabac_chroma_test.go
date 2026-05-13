@@ -65,6 +65,19 @@ func TestDecodeCABACPInterMBHandlesShortContextTable(t *testing.T) {
 	}
 }
 
+func TestCABACInter8x8TransformAllowedMatchesFFmpegP8x8Gate(t *testing.T) {
+	for _, mbType := range []uint32{syntax.PMBTypeP8x8, syntax.PMBTypeP8x8ref0} {
+		if cabacInter8x8TransformAllowed(mbType) {
+			t.Fatalf("mb_type %d unexpectedly allows transform_size_8x8_flag", mbType)
+		}
+	}
+	for _, mbType := range []uint32{syntax.PMBTypeP16x16, syntax.PMBTypeP16x8, syntax.PMBTypeP8x16} {
+		if !cabacInter8x8TransformAllowed(mbType) {
+			t.Fatalf("mb_type %d unexpectedly disallows transform_size_8x8_flag", mbType)
+		}
+	}
+}
+
 func TestDecodeCABACTransform8x8FlagHandlesInvalidInputs(t *testing.T) {
 	if decodeCABACTransform8x8Flag(nil, nil, 0) {
 		t.Fatal("nil decoder/models decoded a transform-size flag")
