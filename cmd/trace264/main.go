@@ -155,6 +155,7 @@ func traceSlice(nalIdx int, unit nal.Unit, spsMap map[uint32]*nal.SPS, ppsMap ma
 			})
 			qpd := bTraceQPDelta(mbB)
 			currentQP = updateQP(currentQP, int(qpd))
+			traceBUpdateContexts(mbB, nzCtx, chromaNZCtx, ref4Ctx, mv4Stride, mbX, mbY)
 			fmt.Printf("  mb=%04d x=%02d y=%02d bits=%d..%d type=B:%d cbp=%02x qpd=%d qp=%d refL0=%v refL1=%v mvL0=%v mvL1=%v\n", mbIdx, mbX, mbY, bStart, r.Position(), mbB.MBType, mbB.CBP, qpd, currentQP, mbB.RefIdxL0, mbB.RefIdxL1, mbB.MVL0, mbB.MVL1)
 			continue
 		}
@@ -205,6 +206,24 @@ func bTraceQPDelta(mb *syntax.MBBidi) int32 {
 		return mb.Intra.QPDelta
 	}
 	return mb.QPDelta
+}
+
+func traceBUpdateContexts(mb *syntax.MBBidi, nzCtx [][16]int, chromaNZCtx [][2][4]int, ref4Ctx []int8, mv4Stride, mbX, mbY int) {
+	if mb == nil || mbY < 0 || mbX < 0 || mv4Stride <= 0 {
+		return
+	}
+	idx := mbY*(mv4Stride/4) + mbX
+	if idx < 0 || idx >= len(nzCtx) || idx >= len(chromaNZCtx) {
+		return
+	}
+	if mb.Intra != nil {
+		nzCtx[idx] = mb.Intra.TotalCoeff
+		chromaNZCtx[idx] = mb.Intra.ChromaTotalCoeff
+		writeBackIntra4x4(ref4Ctx, mv4Stride, mbX, mbY)
+		return
+	}
+	nzCtx[idx] = mb.TotalCoeff
+	chromaNZCtx[idx] = mb.ChromaTotalCoeff
 }
 
 func writeBackInter4x4(mv4 []syntax.MotionVector, ref4 []int8, stride4, mbX, mbY int, mb *syntax.MBInter) {

@@ -85,6 +85,27 @@ func TestTraceSliceBUsesBidiDecoder(t *testing.T) {
 	}
 }
 
+func TestTraceBContextHelpers(t *testing.T) {
+	var nz [][16]int
+	var chroma [][2][4]int
+	mbInter := &syntax.MBBidi{TotalCoeff: [16]int{0: 2}, ChromaTotalCoeff: [2][4]int{{0: 1}}}
+	traceBUpdateContexts(mbInter, nz, chroma, nil, 4, 0, 0)
+	if len(nz) != 0 || len(chroma) != 0 {
+		t.Fatal("short context slices should not be written")
+	}
+	nz = make([][16]int, 1)
+	chroma = make([][2][4]int, 1)
+	traceBUpdateContexts(mbInter, nz, chroma, make([]int8, 16), 4, 0, 0)
+	if nz[0][0] != 2 || chroma[0][0][0] != 1 {
+		t.Fatalf("B inter contexts not stored: nz=%v chroma=%v", nz[0], chroma[0])
+	}
+	mbIntra := &syntax.MBBidi{Intra: &syntax.MBIntra{TotalCoeff: [16]int{1: 3}, ChromaTotalCoeff: [2][4]int{{1: 4}}}}
+	traceBUpdateContexts(mbIntra, nz, chroma, make([]int8, 16), 4, 0, 0)
+	if nz[0][1] != 3 || chroma[0][0][1] != 4 {
+		t.Fatalf("B intra contexts not stored: nz=%v chroma=%v", nz[0], chroma[0])
+	}
+}
+
 func TestBTraceQPDeltaUsesIntraPayload(t *testing.T) {
 	if got := bTraceQPDelta(nil); got != 0 {
 		t.Fatalf("nil B MB qpd got %d want 0", got)
