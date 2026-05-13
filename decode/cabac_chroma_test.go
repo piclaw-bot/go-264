@@ -35,6 +35,21 @@ func TestStoreCABACChromaACPreservesDC(t *testing.T) {
 	}
 }
 
+func TestCABACChromaDCCtxUsesFFmpegCBPHighBits(t *testing.T) {
+	nza, nzb := cabacChromaDCCtx(0, 0x40, 0x80)
+	if nza != 1 || nzb != 0 {
+		t.Fatalf("Cb ctx got (%d,%d) want (1,0)", nza, nzb)
+	}
+	nza, nzb = cabacChromaDCCtx(1, 0x40, 0x80)
+	if nza != 0 || nzb != 1 {
+		t.Fatalf("Cr ctx got (%d,%d) want (0,1)", nza, nzb)
+	}
+	nza, nzb = cabacChromaDCCtx(2, 0xff, 0xff)
+	if nza != 0 || nzb != 0 {
+		t.Fatalf("invalid comp ctx got (%d,%d) want (0,0)", nza, nzb)
+	}
+}
+
 func TestCABACChromaPredModeCtxMatchesFFmpeg(t *testing.T) {
 	cases := []struct {
 		left, top int8

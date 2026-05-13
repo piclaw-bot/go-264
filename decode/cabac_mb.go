@@ -154,8 +154,12 @@ func decodeCABACPInterMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, numRe
 		var nzMBChroma [2][4]int
 		if chromaCBP > 0 {
 			for comp := 0; comp < 2; comp++ {
+				nza, nzb := cabacChromaDCCtx(comp, leftCBP, topCBP)
 				var dc [4]int16
-				dec.DecodeCABACResidual(models, 3, 4, dc[:], 0, 0)
+				tc := dec.DecodeCABACResidual(models, 3, 4, dc[:], nza, nzb)
+				if tc > 0 {
+					mb.CBP |= 0x40 << uint(comp)
+				}
 				storeCABACChromaDC(mb, comp, dc)
 			}
 		}
@@ -277,6 +281,21 @@ func joinLuma8x8Residual(src [16][16]int16, group int) [64]int16 {
 		}
 	}
 	return out
+}
+
+func cabacChromaDCCtx(comp int, leftCBP, topCBP uint32) (int, int) {
+	if comp < 0 || comp >= 2 {
+		return 0, 0
+	}
+	mask := uint32(0x40 << uint(comp))
+	nza, nzb := 0, 0
+	if leftCBP&mask != 0 {
+		nza = 1
+	}
+	if topCBP&mask != 0 {
+		nzb = 1
+	}
+	return nza, nzb
 }
 
 func storeCABACChromaDC(mb *syntax.MBInter, comp int, dc [4]int16) {
@@ -528,8 +547,12 @@ func decodeCABACIntraMBWithParams(dec *cabac.CABACDecoder, models []cabac.CABACC
 	chromaCBP := (mb.CodedBlockPattern >> 4) & 0x3
 	if chromaCBP > 0 {
 		for comp := 0; comp < 2; comp++ {
+			nza, nzb := cabacChromaDCCtx(comp, leftCBP, topCBP)
 			var dc [4]int16
-			dec.DecodeCABACResidual(models, 3, 4, dc[:], 0, 0)
+			tc := dec.DecodeCABACResidual(models, 3, 4, dc[:], nza, nzb)
+			if tc > 0 {
+				mb.CodedBlockPattern |= 0x40 << uint(comp)
+			}
 			storeCABACIntraChromaDC(mb, comp, dc)
 		}
 	}
