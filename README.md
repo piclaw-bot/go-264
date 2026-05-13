@@ -10,7 +10,7 @@ The current focus is a correct, inspectable decoder core. Encoder work remains p
 |---|---:|---|
 | Annex B / NAL parsing | ✅ | Start-code scan, emulation-prevention removal, SPS/PPS parsing including PPS slice-group-map skipping and scaling-list guardrails |
 | Bitstream reader | ✅ | Fixed-width, Exp-Golomb, fuzz-tested |
-| Slice syntax | ✅ | I/P/B header parsing, POC/ref-marking/SP-SI/deblock field consumption, weighted-prediction table skipping, I_PCM sample consumption, and FFmpeg-aligned B-slice list-use mapping; macroblock syntax lives in `syntax/` |
+| Slice syntax | ✅ | I/P/B header parsing, POC/ref-marking/SP-SI/deblock field consumption, weighted-prediction table skipping, I_PCM sample consumption, FFmpeg-aligned B-slice list-use/sub-partition syntax, and B intra/residual payload consumption; macroblock syntax lives in `syntax/` |
 | CAVLC | ✅ | Baseline CAVLC decode is the current hard-gated completion point |
 | CABAC | 🔶 | Real CABAC contexts, P-slice/intra-in-P syntax, residuals, CBP/DQP/ref/MVD; byte-aligned arithmetic init, FFmpeg luma/chroma/DQP contexts, I_PCM payload/reset handling, and 8×8 residual layout/non-zero context; I8x8 flag still quality-gated |
 | Intra prediction | ✅ | I4x4, I8x8, I16x16, chroma DC/horizontal/vertical/plane; I8x8 strong reference filter implemented |
@@ -61,7 +61,7 @@ go-264/
 ├── internal/tables/  Reproducible table generator commands used by go:generate
 └── cmd/
     ├── decode264     Annex B decoder: color PNG, luma PNG, or raw YUV output
-    ├── trace264      CAVLC MB trace tool; rejects CABAC streams loudly for now
+    ├── trace264      CAVLC MB trace tool with P/B syntax tracing; rejects CABAC streams loudly for now
     ├── trace264cmp   Syntax/parity comparison and frame/MB histogram summaries
     └── trace264diff  Trace diff helper
 ```
@@ -86,7 +86,7 @@ go build -o /workspace/tmp/trace264 ./cmd/trace264
 /workspace/tmp/trace264 -i input_baseline.h264 -limit 64
 ```
 
-`trace264` is a CAVLC syntax tracer. CABAC streams are rejected explicitly until MB-level CABAC tracing is wired to the decode path; this avoids misleading CAVLC traces for Main/High streams. Its P-slice QP and MV-prediction bookkeeping is kept aligned with the decoder so CAVLC diagnostic output uses the same wraparound and 4×4 MV/ref cache semantics.
+`trace264` is a CAVLC syntax tracer. CABAC streams are rejected explicitly until MB-level CABAC tracing is wired to the decode path; this avoids misleading CAVLC traces for Main/High streams. Its P/B-slice QP, B-intra payload, and MV-prediction bookkeeping is kept aligned with the decoder so CAVLC diagnostic output uses the same wraparound and 4×4 MV/ref cache semantics.
 
 ### Compare against FFmpeg-derived frame metadata
 
@@ -130,7 +130,7 @@ Recent performance/safety work:
 - MV/ref caches are the single source of motion-prediction context in the decoder and trace tooling. Cache reads/fills and CABAC MV/ref context helpers reject malformed strides, short slices, and negative origins instead of panicking in direct helper/tool use.
 - QP updates are centralized through a wraparound helper so both decoder and `trace264` normalize arbitrary signed deltas consistently; SPS/PPS scaling-list wraparound uses the same defensive modulo style for malformed deltas.
 - Inter zero-residual paths copy prediction directly: uncoded luma CBP groups, zero-`TotalCoeff` 4×4 blocks, all-zero 8×8 transform groups, chroma CBP=0, and zero chroma 4×4 residual blocks.
-- Slice/PPS parsing now consumes POC deltas, non-reference-slice ref-marking absence, SP/SI-only fields, weighted-prediction tables, reference-list modification operands, deblocking idc/offsets, and slice-group-map syntax so later CABAC init, QP, deblock, and High-profile PPS fields stay bit-aligned even where weighted prediction/FMO reconstruction itself is not yet implemented. CABAC slice data is byte-aligned before arithmetic decoder initialization, matching FFmpeg.
+- Slice/PPS parsing now consumes POC deltas, non-reference-slice ref-marking absence, SP/SI-only fields, weighted-prediction tables, reference-list modification operands, deblocking idc/offsets, and slice-group-map syntax so later CABAC init, QP, deblock, and High-profile PPS fields stay bit-aligned even where weighted prediction/FMO reconstruction itself is not yet implemented. B-slice CAVLC syntax now consumes table-driven sub-MB list use, truncated-Golomb ref_idx, sub-partition MVD counts, direct/intra/residual payloads, and clamps malformed TE ref indices. CABAC slice data is byte-aligned before arithmetic decoder initialization, matching FFmpeg.
 - I_PCM macroblocks now consume aligned raw 8-bit 4:2:0 luma/chroma samples and reconstruct them directly, avoiding slice desynchronization after PCM payloads. The CABAC path also resets arithmetic state after raw I_PCM bytes, matching FFmpeg; raw sample writes are extent-guarded for direct helper use.
 - Intra/inter/B reconstruction use fixed stack prediction buffers for 16×16 temporaries. Direct reconstruction helpers now guard nil frames/macroblocks, invalid references, and out-of-frame macroblock coordinates instead of panicking in tests/tools.
 - `transform.IDCT4x4BatchMask` skips IDCT for known-zero dense residual slots.
@@ -162,7 +162,7 @@ Generators live in `internal/tables/` and are marked with `//go:build ignore` so
 - CABAC P-slice syntax now covers intra-in-P, skip/ref/MVD neighbour contexts, P8x8 sub-MB types and transform-size eligibility, chroma prediction mode contexts, `mb_qp_delta` context state, luma/chroma DC coded-block contexts, chroma DC/AC placement, residual category bounds, FFmpeg-style 8×8 residual layout/non-zero-context write-back, CABAC I_PCM payload/reset handling, and byte-aligned arithmetic initialization, but Main/High frame quality remains below the correctness gate. CABAC residual/ref_idx/MVD/arithmetic helper boundaries are guarded against malformed direct use.
 - CABAC I8x8 `transform_size_8x8_flag` decode is intentionally guarded by `enableCABACI8x8Transform=false` because consuming the flag currently lowers BBB CABAC quality; it remains gated on better I8x8 neighbour-mode inference / reconstruction parity.
 - SIMD acceleration is in incremental integration: parity/fallback gates are present, an IDCT4x4 batch seam exists, and current work is focused on measured hot paths rather than speculative assembly.
-- Weighted prediction and FMO slice-group reconstruction are not implemented yet; the parser now consumes their syntax, plus reference marking/list-modification, POC, SP/SI, and deblocking fields, to keep subsequent fields aligned. B-slice list-use decisions are table-driven from FFmpeg/H.264 rather than simplified broad fallbacks, though B reconstruction remains much less mature than Baseline/P-slice paths.
+- Weighted prediction and FMO slice-group reconstruction are not implemented yet; the parser now consumes their syntax, plus reference marking/list-modification, POC, SP/SI, and deblocking fields, to keep subsequent fields aligned. B-slice list-use/sub-partition decisions are table-driven from FFmpeg/H.264, B ref_idx syntax uses clamped TE decoding, and B intra/residual payloads are consumed and exposed to trace/decode paths, though B reconstruction remains much less mature than Baseline/P-slice paths.
 - Encoder API, rate control, and full x264-like encode pipeline are planned but not yet implemented.
 - GPU work is experimental scaffolding only.
 
