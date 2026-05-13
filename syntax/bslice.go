@@ -12,11 +12,11 @@ const (
 	BMBTypeL116x16     = 2
 	BMBTypeBi16x16     = 3
 	BMBTypeL016x8      = 4
-	BMBTypeL016x8b     = 5 // second partition L1
+	BMBTypeL016x8b     = 5 // actually B_L0_8x16 in Table 7-14; kept for API compatibility
 	BMBTypeL116x8      = 6
-	BMBTypeL116x8b     = 7
-	BMBTypeBi16x8      = 8
-	BMBTypeBi16x8b     = 9
+	BMBTypeL116x8b     = 7 // actually B_L1_8x16
+	BMBTypeBi16x8      = 8 // B_L0_L1_16x8
+	BMBTypeBi16x8b     = 9 // B_L0_L1_8x16
 	BMBTypeL08x16      = 10
 	BMBTypeL18x16      = 11
 	BMBTypeBi8x16      = 12
@@ -99,44 +99,64 @@ func DecodeMBBidi(r *nal.Reader, sliceQP int32, numRefL0, numRefL1 uint32) *MBBi
 	return mb
 }
 
+var bMBUsesL0 = [23][2]bool{
+	1:  {true, false}, // B_L0_16x16
+	3:  {true, false}, // B_Bi_16x16
+	4:  {true, true},  // B_L0_L0_16x8
+	5:  {true, true},  // B_L0_L0_8x16
+	8:  {true, false}, // B_L0_L1_16x8
+	9:  {true, false}, // B_L0_L1_8x16
+	10: {false, true}, // B_L1_L0_16x8
+	11: {false, true}, // B_L1_L0_8x16
+	12: {true, true},  // B_L0_Bi_16x8
+	13: {true, true},  // B_L0_Bi_8x16
+	14: {false, true}, // B_L1_Bi_16x8
+	15: {false, true}, // B_L1_Bi_8x16
+	16: {true, true},  // B_Bi_L0_16x8
+	17: {true, true},  // B_Bi_L0_8x16
+	18: {true, false}, // B_Bi_L1_16x8
+	19: {true, false}, // B_Bi_L1_8x16
+	20: {true, true},  // B_Bi_Bi_16x8
+	21: {true, true},  // B_Bi_Bi_8x16
+	22: {true, true},  // B_8x8: actual use is sub_mb_type-driven; legacy decoder uses this gate only for coarse syntax
+}
+
+var bMBUsesL1 = [23][2]bool{
+	2:  {true, false}, // B_L1_16x16
+	3:  {true, false}, // B_Bi_16x16
+	6:  {true, true},  // B_L1_L1_16x8
+	7:  {true, true},  // B_L1_L1_8x16
+	8:  {false, true}, // B_L0_L1_16x8
+	9:  {false, true}, // B_L0_L1_8x16
+	10: {true, false}, // B_L1_L0_16x8
+	11: {true, false}, // B_L1_L0_8x16
+	12: {false, true}, // B_L0_Bi_16x8
+	13: {false, true}, // B_L0_Bi_8x16
+	14: {true, true},  // B_L1_Bi_16x8
+	15: {true, true},  // B_L1_Bi_8x16
+	16: {true, false}, // B_Bi_L0_16x8
+	17: {true, false}, // B_Bi_L0_8x16
+	18: {true, true},  // B_Bi_L1_16x8
+	19: {true, true},  // B_Bi_L1_8x16
+	20: {true, true},  // B_Bi_Bi_16x8
+	21: {true, true},  // B_Bi_Bi_8x16
+	22: {true, true},  // B_8x8: actual use is sub_mb_type-driven; legacy decoder uses this gate only for coarse syntax
+}
+
 // usesL0 returns true if the partition uses list 0 (forward) prediction.
 func usesL0(mbType uint32, partIdx int) bool {
-	switch mbType {
-	case BMBTypeL016x16, BMBTypeBi16x16:
-		return true
-	case BMBTypeL116x16:
+	if mbType >= uint32(len(bMBUsesL0)) || partIdx < 0 || partIdx > 1 {
 		return false
-	case BMBTypeL016x8, BMBTypeL016x8b:
-		return partIdx == 0
-	case BMBTypeBi16x8, BMBTypeBi16x8b, BMBTypeBi8x16:
-		return true
-	case BMBTypeL08x16:
-		return true
 	}
-	if mbType >= 4 && mbType <= 21 {
-		return true // simplified
-	}
-	return false
+	return bMBUsesL0[mbType][partIdx]
 }
 
 // usesL1 returns true if the partition uses list 1 (backward) prediction.
 func usesL1(mbType uint32, partIdx int) bool {
-	switch mbType {
-	case BMBTypeL116x16, BMBTypeBi16x16:
-		return true
-	case BMBTypeL016x16:
+	if mbType >= uint32(len(bMBUsesL1)) || partIdx < 0 || partIdx > 1 {
 		return false
-	case BMBTypeL116x8, BMBTypeL116x8b:
-		return partIdx == 0
-	case BMBTypeBi16x8, BMBTypeBi16x8b, BMBTypeBi8x16:
-		return true
-	case BMBTypeL18x16:
-		return true
 	}
-	if mbType >= 4 && mbType <= 21 {
-		return true // simplified
-	}
-	return false
+	return bMBUsesL1[mbType][partIdx]
 }
 
 // BiPredBlend blends L0 and L1 predictions for bidirectional prediction.
