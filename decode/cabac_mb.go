@@ -112,7 +112,7 @@ func decodeCABACPInterMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, numRe
 	if mb.CBP != 0 {
 		mb.QPDelta = int32(syntax.DecodeCABACDQP(dec, models, 0))
 		use8x8Residual := false
-		if !cabacInter8x8TransformAllowed(mb.MBType) {
+		if !cabacInter8x8TransformAllowed(mb) {
 			transform8x8Mode = false
 		}
 		if transform8x8Mode && mb.CBP&0xF != 0 {
@@ -201,11 +201,22 @@ func decodeCABACPSubMBType(dec *cabac.CABACDecoder, models []cabac.CABACCtx) uin
 	return 3 // P_L0_4x4
 }
 
-func cabacInter8x8TransformAllowed(mbType uint32) bool {
-	// FFmpeg runs get_dct8x8_allowed() for partition_count==4 macroblocks before
-	// reading transform_size_8x8_flag. P_8x8/P_8x8ref0 carry sub_mb_type syntax;
-	// their sub partitions make the flag absent, so consuming it would desync CABAC.
-	return mbType != syntax.PMBTypeP8x8 && mbType != syntax.PMBTypeP8x8ref0
+func cabacInter8x8TransformAllowed(mb *syntax.MBInter) bool {
+	if mb == nil {
+		return false
+	}
+	if mb.MBType != syntax.PMBTypeP8x8 && mb.MBType != syntax.PMBTypeP8x8ref0 {
+		return true
+	}
+	// FFmpeg get_dct8x8_allowed() keeps transform_size_8x8_flag present for
+	// P_8x8 only when every sub_mb_type is the full 8x8 partition. Any 8x4,
+	// 4x8, or 4x4 sub-partition disables the flag; consuming it would desync CABAC.
+	for _, subType := range mb.SubMBType {
+		if subType != 0 {
+			return false
+		}
+	}
+	return true
 }
 
 func decodeCABACTransform8x8Flag(dec *cabac.CABACDecoder, models []cabac.CABACCtx, ctx int) bool {

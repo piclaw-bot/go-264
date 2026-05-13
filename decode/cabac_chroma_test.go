@@ -66,15 +66,26 @@ func TestDecodeCABACPInterMBHandlesShortContextTable(t *testing.T) {
 }
 
 func TestCABACInter8x8TransformAllowedMatchesFFmpegP8x8Gate(t *testing.T) {
-	for _, mbType := range []uint32{syntax.PMBTypeP8x8, syntax.PMBTypeP8x8ref0} {
-		if cabacInter8x8TransformAllowed(mbType) {
-			t.Fatalf("mb_type %d unexpectedly allows transform_size_8x8_flag", mbType)
-		}
-	}
 	for _, mbType := range []uint32{syntax.PMBTypeP16x16, syntax.PMBTypeP16x8, syntax.PMBTypeP8x16} {
-		if !cabacInter8x8TransformAllowed(mbType) {
+		if !cabacInter8x8TransformAllowed(&syntax.MBInter{MBType: mbType}) {
 			t.Fatalf("mb_type %d unexpectedly disallows transform_size_8x8_flag", mbType)
 		}
+	}
+	if !cabacInter8x8TransformAllowed(&syntax.MBInter{MBType: syntax.PMBTypeP8x8}) {
+		t.Fatal("P8x8 with four 8x8 sub partitions should allow transform_size_8x8_flag")
+	}
+	if !cabacInter8x8TransformAllowed(&syntax.MBInter{MBType: syntax.PMBTypeP8x8ref0}) {
+		t.Fatal("P8x8ref0 with four 8x8 sub partitions should allow transform_size_8x8_flag")
+	}
+	for _, subType := range []uint32{1, 2, 3} {
+		mb := &syntax.MBInter{MBType: syntax.PMBTypeP8x8}
+		mb.SubMBType[2] = subType
+		if cabacInter8x8TransformAllowed(mb) {
+			t.Fatalf("P8x8 sub_mb_type %d unexpectedly allows transform_size_8x8_flag", subType)
+		}
+	}
+	if cabacInter8x8TransformAllowed(nil) {
+		t.Fatal("nil macroblock allowed transform_size_8x8_flag")
 	}
 }
 
