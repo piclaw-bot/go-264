@@ -145,8 +145,9 @@ func traceSlice(nalIdx int, unit nal.Unit, spsMap map[uint32]*nal.SPS, ppsMap ma
 		if hdr.SliceType == syntax.SliceTypeB {
 			bStart := r.Position()
 			mbB := syntax.DecodeMBBidi(r, int32(currentQP), hdr.NumRefIdxL0Active, hdr.NumRefIdxL1Active)
-			currentQP = updateQP(currentQP, int(mbB.QPDelta))
-			fmt.Printf("  mb=%04d x=%02d y=%02d bits=%d..%d type=B:%d cbp=%02x qpd=%d qp=%d refL0=%v refL1=%v mvL0=%v mvL1=%v\n", mbIdx, mbX, mbY, bStart, r.Position(), mbB.MBType, mbB.CBP, mbB.QPDelta, currentQP, mbB.RefIdxL0, mbB.RefIdxL1, mbB.MVL0, mbB.MVL1)
+			qpd := bTraceQPDelta(mbB)
+			currentQP = updateQP(currentQP, int(qpd))
+			fmt.Printf("  mb=%04d x=%02d y=%02d bits=%d..%d type=B:%d cbp=%02x qpd=%d qp=%d refL0=%v refL1=%v mvL0=%v mvL1=%v\n", mbIdx, mbX, mbY, bStart, r.Position(), mbB.MBType, mbB.CBP, qpd, currentQP, mbB.RefIdxL0, mbB.RefIdxL1, mbB.MVL0, mbB.MVL1)
 			continue
 		}
 		mb := syntax.DecodeMBInter(r, syntax.InterDecodeOpts{
@@ -186,6 +187,16 @@ func updateQP(current, delta int) int {
 		qp += 52
 	}
 	return qp
+}
+
+func bTraceQPDelta(mb *syntax.MBBidi) int32 {
+	if mb == nil {
+		return 0
+	}
+	if mb.Intra != nil {
+		return mb.Intra.QPDelta
+	}
+	return mb.QPDelta
 }
 
 func writeBackInter4x4(mv4 []syntax.MotionVector, ref4 []int8, stride4, mbX, mbY int, mb *syntax.MBInter) {

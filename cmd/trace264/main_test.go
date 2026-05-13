@@ -84,6 +84,18 @@ func TestTraceSliceBUsesBidiDecoder(t *testing.T) {
 	}
 }
 
+func TestBTraceQPDeltaUsesIntraPayload(t *testing.T) {
+	if got := bTraceQPDelta(nil); got != 0 {
+		t.Fatalf("nil B MB qpd got %d want 0", got)
+	}
+	if got := bTraceQPDelta(&syntax.MBBidi{QPDelta: 3}); got != 3 {
+		t.Fatalf("inter B qpd got %d want 3", got)
+	}
+	if got := bTraceQPDelta(&syntax.MBBidi{QPDelta: 3, Intra: &syntax.MBIntra{QPDelta: -2}}); got != -2 {
+		t.Fatalf("B-intra qpd got %d want -2", got)
+	}
+}
+
 func TestUpdateQPMatchesDecoderModulo(t *testing.T) {
 	cases := []struct {
 		current, delta int
