@@ -66,26 +66,39 @@ func DecodeMBBidi(r *nal.Reader, sliceQP int32, numRefL0, numRefL1 uint32) *MBBi
 		}
 	}
 
+	usesL0Part := func(part int) bool {
+		if mb.MBType == BMBTypeB8x8 {
+			return usesBSubL0(mb.SubMBType[part])
+		}
+		return usesL0(mb.MBType, part)
+	}
+	usesL1Part := func(part int) bool {
+		if mb.MBType == BMBTypeB8x8 {
+			return usesBSubL1(mb.SubMBType[part])
+		}
+		return usesL1(mb.MBType, part)
+	}
+
 	// Reference indices
 	for i := 0; i < numParts; i++ {
-		if usesL0(mb.MBType, i) && numRefL0 > 1 {
+		if usesL0Part(i) && numRefL0 > 1 {
 			mb.RefIdxL0[i] = int8(r.ReadUE())
 		}
 	}
 	for i := 0; i < numParts; i++ {
-		if usesL1(mb.MBType, i) && numRefL1 > 1 {
+		if usesL1Part(i) && numRefL1 > 1 {
 			mb.RefIdxL1[i] = int8(r.ReadUE())
 		}
 	}
 
 	// Motion vectors
 	for i := 0; i < numParts; i++ {
-		if usesL0(mb.MBType, i) {
+		if usesL0Part(i) {
 			mb.MVL0[i] = decodeMVD(r)
 		}
 	}
 	for i := 0; i < numParts; i++ {
-		if usesL1(mb.MBType, i) {
+		if usesL1Part(i) {
 			mb.MVL1[i] = decodeMVD(r)
 		}
 	}
@@ -121,6 +134,14 @@ var bMBUsesL0 = [23][2]bool{
 	22: {true, true},  // B_8x8: actual use is sub_mb_type-driven; legacy decoder uses this gate only for coarse syntax
 }
 
+var bSubMBUsesL0 = [13]bool{
+	1: true, 3: true, 4: true, 5: true, 8: true, 9: true, 10: true, 12: true,
+}
+
+var bSubMBUsesL1 = [13]bool{
+	2: true, 3: true, 6: true, 7: true, 8: true, 9: true, 11: true, 12: true,
+}
+
 var bMBUsesL1 = [23][2]bool{
 	2:  {true, false}, // B_L1_16x16
 	3:  {true, false}, // B_Bi_16x16
@@ -141,6 +162,14 @@ var bMBUsesL1 = [23][2]bool{
 	20: {true, true},  // B_Bi_Bi_16x8
 	21: {true, true},  // B_Bi_Bi_8x16
 	22: {true, true},  // B_8x8: actual use is sub_mb_type-driven; legacy decoder uses this gate only for coarse syntax
+}
+
+func usesBSubL0(subType uint32) bool {
+	return subType < uint32(len(bSubMBUsesL0)) && bSubMBUsesL0[subType]
+}
+
+func usesBSubL1(subType uint32) bool {
+	return subType < uint32(len(bSubMBUsesL1)) && bSubMBUsesL1[subType]
 }
 
 // usesL0 returns true if the partition uses list 0 (forward) prediction.

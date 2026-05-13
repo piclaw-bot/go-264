@@ -1,6 +1,10 @@
 package syntax
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/rcarmo/go-264/nal"
+)
 
 func TestBiPredBlend(t *testing.T) {
 	l0 := []uint8{100, 200, 50, 0}
@@ -72,5 +76,65 @@ func TestUsesL0L1MatchesFFmpegBMBTypeTable(t *testing.T) {
 func TestUsesL0L1RejectsInvalidInputs(t *testing.T) {
 	if usesL0(99, 0) || usesL1(99, 0) || usesL0(1, -1) || usesL1(1, 2) {
 		t.Fatal("invalid B-slice list-use query returned true")
+	}
+}
+
+func TestBSubMBListUseMatchesFFmpegTable(t *testing.T) {
+	cases := []struct {
+		subType uint32
+		wantL0  bool
+		wantL1  bool
+	}{
+		{0, false, false}, // direct
+		{1, true, false}, {2, false, true}, {3, true, true},
+		{4, true, false}, {5, true, false},
+		{6, false, true}, {7, false, true},
+		{8, true, true}, {9, true, true},
+		{10, true, false}, {11, false, true}, {12, true, true},
+		{13, false, false},
+	}
+	for _, c := range cases {
+		if got := usesBSubL0(c.subType); got != c.wantL0 {
+			t.Fatalf("usesBSubL0(%d) got %v want %v", c.subType, got, c.wantL0)
+		}
+		if got := usesBSubL1(c.subType); got != c.wantL1 {
+			t.Fatalf("usesBSubL1(%d) got %v want %v", c.subType, got, c.wantL1)
+		}
+	}
+}
+
+func TestDecodeMBBidiB8x8UsesSubMBListUse(t *testing.T) {
+	var w testBitWriter
+	w.ue(BMBTypeB8x8)
+	w.ue(0) // direct: no refs or MVD
+	w.ue(1) // L0: L0 ref/MVD only
+	w.ue(2) // L1: L1 ref/MVD only
+	w.ue(3) // Bi: both lists
+	w.ue(1) // L0 ref for part 1
+	w.ue(2) // L0 ref for part 3
+	w.ue(3) // L1 ref for part 2
+	w.ue(4) // L1 ref for part 3
+	w.se(5)
+	w.se(-6) // L0 MVD part 1
+	w.se(7)
+	w.se(-8) // L0 MVD part 3
+	w.se(9)
+	w.se(-10) // L1 MVD part 2
+	w.se(11)
+	w.se(-12) // L1 MVD part 3
+	w.ue(0)   // CBP=0
+
+	mb := DecodeMBBidi(nal.NewReader(w.bytes()), 26, 5, 5)
+	if mb.RefIdxL0[0] != 0 || mb.MVL0[0] != (MotionVector{}) || mb.RefIdxL1[0] != 0 || mb.MVL1[0] != (MotionVector{}) {
+		t.Fatal("direct B sub-MB consumed explicit list syntax")
+	}
+	if mb.RefIdxL0[1] != 1 || mb.MVL0[1] != (MotionVector{X: 5, Y: -6}) || mb.RefIdxL1[1] != 0 || mb.MVL1[1] != (MotionVector{}) {
+		t.Fatalf("L0 sub-MB decoded as %+v", mb)
+	}
+	if mb.RefIdxL1[2] != 3 || mb.MVL1[2] != (MotionVector{X: 9, Y: -10}) || mb.RefIdxL0[2] != 0 || mb.MVL0[2] != (MotionVector{}) {
+		t.Fatalf("L1 sub-MB decoded as %+v", mb)
+	}
+	if mb.RefIdxL0[3] != 2 || mb.RefIdxL1[3] != 4 || mb.MVL0[3] != (MotionVector{X: 7, Y: -8}) || mb.MVL1[3] != (MotionVector{X: 11, Y: -12}) {
+		t.Fatalf("Bi sub-MB decoded as %+v", mb)
 	}
 }
