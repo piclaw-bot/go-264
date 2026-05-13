@@ -65,6 +65,21 @@ func TestCABACDecoder_DecodeTerminate(t *testing.T) {
 	t.Log("No termination in 5 steps (expected for non-terminal data)")
 }
 
+func TestCABACDecoderPublicMethodsHandleInvalidInputs(t *testing.T) {
+	var nilDec *CABACDecoder
+	if nilDec.DecodeBin(nil) != 0 || nilDec.DecodeBypass() != 0 || nilDec.DecodeTerminate() != 0 || nilDec.DecodeUEG(0) != 0 {
+		t.Fatal("nil decoder methods should return zero")
+	}
+	dec := &CABACDecoder{}
+	if dec.DecodeBin(nil) != 0 || dec.DecodeBypass() != 0 || dec.DecodeTerminate() != 0 || dec.DecodeUEG(0) != 0 {
+		t.Fatal("decoder without reader should return zero")
+	}
+	dec = NewCABACDecoder(nal.NewReader([]byte{0xff, 0xff}))
+	if dec.DecodeBin(nil) != 0 {
+		t.Fatal("nil context should decode as zero")
+	}
+}
+
 func TestValidResidualCoeffCount(t *testing.T) {
 	cases := []struct {
 		cat, maxCoeff int

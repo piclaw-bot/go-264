@@ -86,6 +86,9 @@ func (d *CABACDecoder) Reset() {
 
 // DecodeBin decodes one binary decision using the given context.
 func (d *CABACDecoder) DecodeBin(ctx *CABACCtx) uint32 {
+	if d == nil || d.r == nil || ctx == nil {
+		return 0
+	}
 	qIdx := (d.codIRange >> 6) & 3
 	codIRangeLPS := rangeTabLPS[ctx.PState][qIdx]
 	d.codIRange -= codIRangeLPS
@@ -113,6 +116,9 @@ func (d *CABACDecoder) DecodeBin(ctx *CABACCtx) uint32 {
 
 // DecodeBypass decodes a binary decision with equal probability (p=0.5).
 func (d *CABACDecoder) DecodeBypass() uint32 {
+	if d == nil || d.r == nil {
+		return 0
+	}
 	d.codILow <<= 1
 	d.codILow |= d.r.ReadBit()
 	d.count++
@@ -141,6 +147,9 @@ func (d *CABACDecoder) ReadPCMByte() uint8 {
 
 // DecodeTerminate decodes the end-of-slice flag.
 func (d *CABACDecoder) DecodeTerminate() uint32 {
+	if d == nil || d.r == nil {
+		return 0
+	}
 	d.codIRange -= 2
 	if d.codILow >= d.codIRange {
 		return 1 // end of slice
@@ -151,6 +160,9 @@ func (d *CABACDecoder) DecodeTerminate() uint32 {
 
 // DecodeUEG decodes an unsigned exp-Golomb binarization via CABAC bypass.
 func (d *CABACDecoder) DecodeUEG(k int) uint32 {
+	if d == nil || d.r == nil {
+		return 0
+	}
 	// Truncated unary + exp-Golomb suffix
 	var v uint32
 	for d.DecodeBypass() == 1 {
@@ -171,6 +183,9 @@ func (d *CABACDecoder) DecodeUEG(k int) uint32 {
 }
 
 func (d *CABACDecoder) renorm() {
+	if d == nil || d.r == nil {
+		return
+	}
 	for d.codIRange < 256 {
 		d.codIRange <<= 1
 		d.codILow <<= 1
