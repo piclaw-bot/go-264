@@ -71,6 +71,10 @@ func NewCABACDecoder(r *nal.Reader) *CABACDecoder {
 	return d
 }
 
+// Reset starts a fresh CABAC arithmetic decoder at the reader's current byte.
+// H.264 I_PCM temporarily leaves CABAC coding for raw sample bytes; after those
+// bytes FFmpeg reinitializes the arithmetic decoder, so callers need this same
+// primitive instead of carrying stale range/low state across the raw payload.
 func (d *CABACDecoder) Reset() {
 	if d == nil || d.r == nil {
 		return
@@ -120,13 +124,14 @@ func (d *CABACDecoder) DecodeBypass() uint32 {
 	return 0
 }
 
-// DecodeTerminate decodes the end-of-slice flag.
+// ByteAlign advances to the next raw byte boundary before I_PCM byte reads.
 func (d *CABACDecoder) ByteAlign() {
 	if d != nil && d.r != nil {
 		d.r.ByteAlign()
 	}
 }
 
+// ReadPCMByte consumes one raw byte while CABAC coding is suspended for I_PCM.
 func (d *CABACDecoder) ReadPCMByte() uint8 {
 	if d == nil || d.r == nil {
 		return 0
@@ -134,6 +139,7 @@ func (d *CABACDecoder) ReadPCMByte() uint8 {
 	return uint8(d.r.ReadBits(8))
 }
 
+// DecodeTerminate decodes the end-of-slice flag.
 func (d *CABACDecoder) DecodeTerminate() uint32 {
 	d.codIRange -= 2
 	if d.codILow >= d.codIRange {
