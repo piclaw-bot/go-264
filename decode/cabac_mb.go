@@ -124,11 +124,9 @@ func decodeCABACPInterMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, numRe
 				if mb.CBP&(1<<uint(group)) != 0 {
 					var buf [64]int16
 					tc := dec.DecodeCABACResidual(models, 5, 64, buf[:], 0, 0)
+					splitLuma8x8Residual(&mb.Coeffs, group, buf)
 					for sub := 0; sub < 4; sub++ {
 						blkIdx := group*4 + sub
-						for j := 0; j < 16; j++ {
-							mb.Coeffs[blkIdx][j] = buf[sub*16+j]
-						}
 						nzMB[blkIdx] = tc
 						mb.TotalCoeff[blkIdx] = tc
 					}
@@ -213,6 +211,40 @@ func cabacTransform8x8Ctx(ctx int) int {
 		return 2
 	}
 	return ctx
+}
+
+func splitLuma8x8Residual(dst *[16][16]int16, group int, src [64]int16) {
+	if dst == nil || group < 0 || group >= 4 {
+		return
+	}
+	for sub := 0; sub < 4; sub++ {
+		blkIdx := group*4 + sub
+		baseX := (sub & 1) * 4
+		baseY := (sub >> 1) * 4
+		for y := 0; y < 4; y++ {
+			for x := 0; x < 4; x++ {
+				dst[blkIdx][y*4+x] = src[(baseY+y)*8+baseX+x]
+			}
+		}
+	}
+}
+
+func joinLuma8x8Residual(src [16][16]int16, group int) [64]int16 {
+	var out [64]int16
+	if group < 0 || group >= 4 {
+		return out
+	}
+	for sub := 0; sub < 4; sub++ {
+		blkIdx := group*4 + sub
+		baseX := (sub & 1) * 4
+		baseY := (sub >> 1) * 4
+		for y := 0; y < 4; y++ {
+			for x := 0; x < 4; x++ {
+				out[(baseY+y)*8+baseX+x] = src[blkIdx][y*4+x]
+			}
+		}
+	}
+	return out
 }
 
 func storeCABACChromaDC(mb *syntax.MBInter, comp int, dc [4]int16) {
@@ -441,11 +473,9 @@ func decodeCABACIntraMBWithParams(dec *cabac.CABACDecoder, models []cabac.CABACC
 				if cbpLuma&(1<<uint(group)) != 0 {
 					var buf [64]int16
 					tc := dec.DecodeCABACResidual(models, 5, 64, buf[:], 0, 0)
+					splitLuma8x8Residual(&mb.Coeffs, group, buf)
 					for sub := 0; sub < 4; sub++ {
 						blkIdx := group*4 + sub
-						for j := 0; j < 16; j++ {
-							mb.Coeffs[blkIdx][j] = buf[sub*16+j]
-						}
 						mb.TotalCoeff[blkIdx] = tc
 						nzMB[blkIdx] = tc
 					}

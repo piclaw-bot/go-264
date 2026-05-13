@@ -349,13 +349,7 @@ func (d *Decoder) reconstruct8x8(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY, q
 		var predicted [64]uint8
 		pred.PredIntra8x8(predicted[:], mode, top, left, topLeft)
 
-		var block [64]int16
-		for sub := 0; sub < 4; sub++ {
-			blkIdx := b8*4 + sub
-			for j := 0; j < 16; j++ {
-				block[sub*16+j] = mb.Coeffs[blkIdx][j]
-			}
-		}
+		block := joinLuma8x8Residual(mb.Coeffs, b8)
 		transform.Dequant8x8(block[:], qp)
 		transform.IDCT8x8(block[:])
 

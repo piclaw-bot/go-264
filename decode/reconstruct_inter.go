@@ -360,12 +360,7 @@ func (d *Decoder) writeInterResidual(f *frame.Frame, mb *syntax.MBInter, predict
 				}
 				continue
 			}
-			var block [64]int16
-			for sub := 0; sub < 4; sub++ {
-				for j := 0; j < 16; j++ {
-					block[sub*16+j] = mb.Coeffs[group*4+sub][j]
-				}
-			}
+			block := joinLuma8x8Residual(mb.Coeffs, group)
 			if !coeff8x8NonZero(block) {
 				for py := 0; py < 8; py++ {
 					copy(f.Y[(dstY+py)*f.StrideY+dstX:(dstY+py)*f.StrideY+dstX+8], predicted[(groupY+py)*16+groupX:(groupY+py)*16+groupX+8])
