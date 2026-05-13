@@ -487,9 +487,12 @@ func (d *Decoder) reconstructMBBidi(f *frame.Frame, mb *syntax.MBBidi, mbX, mbY,
 	} else {
 		copy(blended[:], predL0[:])
 	}
-	for y := 0; y < 16; y++ {
-		for x := 0; x < 16; x++ {
-			f.SetPixelY(mbX*16+x, mbY*16+y, blended[y*16+x])
-		}
+	residualMB := &syntax.MBInter{
+		CBP:              mb.CBP,
+		Coeffs:           mb.Coeffs,
+		TotalCoeff:       mb.TotalCoeff,
+		CoeffsChroma:     mb.CoeffsChroma,
+		ChromaTotalCoeff: mb.ChromaTotalCoeff,
 	}
+	d.writeInterResidual(f, residualMB, blended[:], mbX, mbY, qp)
 }
