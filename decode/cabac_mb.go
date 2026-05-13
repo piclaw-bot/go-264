@@ -283,6 +283,17 @@ func joinLuma8x8Residual(src [16][16]int16, group int) [64]int16 {
 	return out
 }
 
+func cabacLumaDCCtx(leftCBP, topCBP uint32) (int, int) {
+	nza, nzb := 0, 0
+	if leftCBP&0x100 != 0 {
+		nza = 1
+	}
+	if topCBP&0x100 != 0 {
+		nzb = 1
+	}
+	return nza, nzb
+}
+
 func cabacChromaDCCtx(comp int, leftCBP, topCBP uint32) (int, int) {
 	if comp < 0 || comp >= 2 {
 		return 0, 0
@@ -492,8 +503,12 @@ func decodeCABACIntraMBWithParams(dec *cabac.CABACDecoder, models []cabac.CABACC
 	var nzMBChroma [2][4]int
 	if mb.MBType >= 1 && mb.MBType <= 24 {
 		// I_16x16: luma DC (cat=0) then luma AC (cat=1) per block if cbp_luma
+		nza, nzb := cabacLumaDCCtx(leftCBP, topCBP)
 		var dcBuf [16]int16
-		dec.DecodeCABACResidual(models, 0, 16, dcBuf[:], 0, 0)
+		dcTC := dec.DecodeCABACResidual(models, 0, 16, dcBuf[:], nza, nzb)
+		if dcTC > 0 {
+			mb.CodedBlockPattern |= 0x100
+		}
 		for pos := 0; pos < 16; pos++ {
 			blk := blkXYToIdx[pos/4][pos%4]
 			mb.Coeffs[blk][0] = dcBuf[pos]

@@ -35,6 +35,17 @@ func TestStoreCABACChromaACPreservesDC(t *testing.T) {
 	}
 }
 
+func TestCABACLumaDCCtxUsesFFmpegCBPHighBit(t *testing.T) {
+	nza, nzb := cabacLumaDCCtx(0x100, 0)
+	if nza != 1 || nzb != 0 {
+		t.Fatalf("left luma DC ctx got (%d,%d) want (1,0)", nza, nzb)
+	}
+	nza, nzb = cabacLumaDCCtx(0, 0x100)
+	if nza != 0 || nzb != 1 {
+		t.Fatalf("top luma DC ctx got (%d,%d) want (0,1)", nza, nzb)
+	}
+}
+
 func TestCABACChromaDCCtxUsesFFmpegCBPHighBits(t *testing.T) {
 	nza, nzb := cabacChromaDCCtx(0, 0x40, 0x80)
 	if nza != 1 || nzb != 0 {
