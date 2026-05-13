@@ -235,6 +235,26 @@ func storeCABACChromaAC(mb *syntax.MBInter, comp, blk int, ac [16]int16) {
 	}
 }
 
+func storeCABACIntraChromaDC(mb *syntax.MBIntra, comp int, dc [4]int16) {
+	if mb == nil || comp < 0 || comp >= 2 {
+		return
+	}
+	for blk := 0; blk < 4; blk++ {
+		mb.CoeffsChroma[comp][blk][0] = dc[blk]
+	}
+}
+
+func storeCABACIntraChromaAC(mb *syntax.MBIntra, comp, blk int, ac [16]int16) {
+	if mb == nil || comp < 0 || comp >= 2 || blk < 0 || blk >= 4 {
+		return
+	}
+	// Same CABAC chroma split as inter: AC residuals occupy coeff slots 1..15,
+	// while slot 0 is supplied by the separately decoded chroma DC block.
+	for j := 1; j < 16; j++ {
+		mb.CoeffsChroma[comp][blk][j] = ac[j]
+	}
+}
+
 // decodeCABACIntraMB decodes one CABAC-coded I-slice intra macroblock.
 // Models the FFmpeg decode_cabac_intra_mb_type / decode_cabac_mb_intra4x4_pred_mode
 // / decode_cabac_mb_chroma_pre_mode flow from h264_cabac.c.
@@ -452,18 +472,18 @@ func decodeCABACIntraMBWithParams(dec *cabac.CABACDecoder, models []cabac.CABACC
 	chromaCBP := (mb.CodedBlockPattern >> 4) & 0x3
 	if chromaCBP > 0 {
 		for comp := 0; comp < 2; comp++ {
-			var buf [16]int16
-			dec.DecodeCABACResidual(models, 3, 4, buf[:], 0, 0)
-			mb.CoeffsChroma[comp][0] = [16]int16(buf)
+			var dc [4]int16
+			dec.DecodeCABACResidual(models, 3, 4, dc[:], 0, 0)
+			storeCABACIntraChromaDC(mb, comp, dc)
 		}
 	}
 	if chromaCBP > 1 {
 		for comp := 0; comp < 2; comp++ {
 			for blk := 0; blk < 4; blk++ {
 				nza, nzb := nzCBFCtxChroma(comp, blk, &nzMBChroma, leftChromaNZ, topChromaNZ)
-				var buf [16]int16
-				tc := dec.DecodeCABACResidual(models, 4, 15, buf[:], nza, nzb)
-				mb.CoeffsChroma[comp][blk] = [16]int16(buf)
+				var ac [16]int16
+				tc := dec.DecodeCABACResidual(models, 4, 15, ac[:], nza, nzb)
+				storeCABACIntraChromaAC(mb, comp, blk, ac)
 				mb.ChromaTotalCoeff[comp][blk] = tc
 				nzMBChroma[comp][blk] = tc
 			}

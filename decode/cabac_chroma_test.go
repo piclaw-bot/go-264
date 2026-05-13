@@ -35,6 +35,29 @@ func TestStoreCABACChromaACPreservesDC(t *testing.T) {
 	}
 }
 
+func TestStoreCABACIntraChromaResidualsMatchDCSplit(t *testing.T) {
+	mb := &syntax.MBIntra{}
+	storeCABACIntraChromaDC(mb, 1, [4]int16{5, 6, 7, 8})
+	for blk, want := range []int16{5, 6, 7, 8} {
+		if got := mb.CoeffsChroma[1][blk][0]; got != want {
+			t.Fatalf("intra block %d DC got %d want %d", blk, got, want)
+		}
+	}
+	var ac [16]int16
+	for i := range ac {
+		ac[i] = int16(100 + i)
+	}
+	storeCABACIntraChromaAC(mb, 1, 2, ac)
+	if got := mb.CoeffsChroma[1][2][0]; got != 7 {
+		t.Fatalf("intra AC overwrote DC: got %d want 7", got)
+	}
+	for i := 1; i < 16; i++ {
+		if got, want := mb.CoeffsChroma[1][2][i], ac[i]; got != want {
+			t.Fatalf("intra AC[%d] got %d want %d", i, got, want)
+		}
+	}
+}
+
 func TestDecodeCABACPInterMBHandlesShortContextTable(t *testing.T) {
 	mb, intra, skipped := decodeCABACPInterMB(nil, make([]cabac.CABACCtx, 24), 1, nil, nil, nil, nil, 0, 0, false, false, [4]int{}, nil, 0, 0, 0, true, 0, 0, 0, 0, 0, [2]int8{}, [2]int8{})
 	if mb == nil || intra != nil || !skipped {
