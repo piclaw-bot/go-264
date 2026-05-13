@@ -165,6 +165,20 @@ func TestDecodeMBBidiB8x8UsesSubMBListUse(t *testing.T) {
 	}
 }
 
+func TestDecodeMBBidiUsesTruncatedExpGolombRefs(t *testing.T) {
+	var w testBitWriter
+	w.ue(BMBTypeL016x16)
+	w.bit(0) // TE(1) ref_idx=1; plain UE would consume following MVD bits too
+	w.se(0)
+	w.se(0)
+	w.ue(0) // CBP=0
+
+	mb := DecodeMBBidi(nal.NewReader(w.bytes()), 26, 2, 1)
+	if mb.RefIdxL0[0] != 1 || mb.MVL0[0] != (MotionVector{}) || mb.CBP != 0 || mb.QPDelta != 0 {
+		t.Fatalf("B ref_idx TE decode drifted: ref=%v mv=%v cbp=%d qpd=%d", mb.RefIdxL0, mb.MVL0, mb.CBP, mb.QPDelta)
+	}
+}
+
 func TestDecodeMBBidiB8x8ConsumesAllSubPartitionMVDs(t *testing.T) {
 	var w testBitWriter
 	w.ue(BMBTypeB8x8)

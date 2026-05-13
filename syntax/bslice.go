@@ -82,12 +82,12 @@ func DecodeMBBidi(r *nal.Reader, sliceQP int32, numRefL0, numRefL1 uint32) *MBBi
 	// Reference indices
 	for i := 0; i < numParts; i++ {
 		if usesL0Part(i) && numRefL0 > 1 {
-			mb.RefIdxL0[i] = int8(r.ReadUE())
+			mb.RefIdxL0[i] = int8(readTE(r, int(numRefL0-1)))
 		}
 	}
 	for i := 0; i < numParts; i++ {
 		if usesL1Part(i) && numRefL1 > 1 {
-			mb.RefIdxL1[i] = int8(r.ReadUE())
+			mb.RefIdxL1[i] = int8(readTE(r, int(numRefL1-1)))
 		}
 	}
 
