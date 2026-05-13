@@ -165,6 +165,26 @@ func TestDecodeMBBidiB8x8UsesSubMBListUse(t *testing.T) {
 	}
 }
 
+func TestDecodeMBBidiConsumesIntraPayload(t *testing.T) {
+	var w testBitWriter
+	w.ue(BMBTypeIntra) // B-slice I_NxN
+	for i := 0; i < 16; i++ {
+		w.bit(1) // prev_intra_pred_mode_flag
+	}
+	w.ue(0) // chroma intra pred mode
+	w.ue(3) // intra CBP table code 3 => cbp=0
+
+	mb := DecodeMBBidi(nal.NewReader(w.bytes()), 26, 1, 1)
+	if mb.Intra == nil || mb.Intra.MBType != 0 || mb.Intra.ChromaPredMode != 0 || mb.Intra.CodedBlockPattern != 0 {
+		t.Fatalf("B intra payload not consumed: %+v", mb.Intra)
+	}
+	for i, mode := range mb.Intra.IntraPredMode {
+		if mode != -1 {
+			t.Fatalf("intra pred mode %d got %d want -1", i, mode)
+		}
+	}
+}
+
 func TestDecodeMBBidiConsumesLumaResidualSyntax(t *testing.T) {
 	var w testBitWriter
 	w.ue(BMBTypeL016x16)

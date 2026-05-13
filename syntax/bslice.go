@@ -41,6 +41,7 @@ type MBBidi struct {
 	CoeffsChroma     [2][4][16]int16
 	TotalCoeff       [16]int
 	ChromaTotalCoeff [2][4]int
+	Intra            *MBIntra
 }
 
 // DecodeMBBidi decodes one macroblock from a B-slice.
@@ -52,7 +53,8 @@ func DecodeMBBidi(r *nal.Reader, sliceQP int32, numRefL0, numRefL1 uint32) *MBBi
 	mb.MBType = r.ReadUE()
 
 	if mb.MBType >= BMBTypeIntra {
-		return mb // intra MB in B-slice
+		mb.Intra = DecodeMBIntraWithType(r, mb.MBType-BMBTypeIntra, IntraDecodeOpts{})
+		return mb
 	}
 
 	// Direct mode derives refs/MVs from colocated state, but non-skip
