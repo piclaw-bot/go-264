@@ -23,6 +23,20 @@ func TestReconstructMBBidiHandlesInvalidInputs(t *testing.T) {
 	d.reconstructMBBidi(frame.NewFrame(16, 16), &syntax.MBBidi{}, 2, 0, 26)
 }
 
+func TestReconstructMBBidiPartitionFallbackUsesCurrentFrame(t *testing.T) {
+	d := &Decoder{}
+	f := frame.NewFrame(16, 16)
+	for i := range f.Y {
+		f.Y[i] = 77
+	}
+	d.reconstructMBBidi(f, &syntax.MBBidi{MBType: 12}, 0, 0, 26) // B_L0_Bi_16x8
+	for i, got := range f.Y {
+		if got != 77 {
+			t.Fatalf("partition fallback pixel %d got %d want current-frame prediction 77", i, got)
+		}
+	}
+}
+
 func TestReconstructMBBidiUsesPartitionListMapping(t *testing.T) {
 	d := &Decoder{DPB: frame.NewDPB(4)}
 	ref0 := frame.NewFrame(16, 16)

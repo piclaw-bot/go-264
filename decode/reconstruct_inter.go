@@ -476,14 +476,14 @@ func bPartRect(mbType uint32, part int) (x, y, w, h int) {
 	return part * 8, 0, 8, 16
 }
 
-func (d *Decoder) fillBPartPrediction(dst []uint8, mb *syntax.MBBidi, mbX, mbY, dstX, dstY, w, h, part int) {
+func (d *Decoder) fillBPartPrediction(dst []uint8, mb *syntax.MBBidi, fallback *frame.Frame, mbX, mbY, dstX, dstY, w, h, part int) {
 	if d == nil || mb == nil || len(dst) < 256 {
 		return
 	}
-	d.fillBPredByUse(dst, mbX, mbY, dstX, dstY, w, h, mb.RefIdxL0[part], mb.RefIdxL1[part], mb.MVL0[part], mb.MVL1[part], syntax.BPartUsesL0(mb.MBType, part), syntax.BPartUsesL1(mb.MBType, part))
+	d.fillBPredByUse(dst, fallback, mbX, mbY, dstX, dstY, w, h, mb.RefIdxL0[part], mb.RefIdxL1[part], mb.MVL0[part], mb.MVL1[part], syntax.BPartUsesL0(mb.MBType, part), syntax.BPartUsesL1(mb.MBType, part))
 }
 
-func (d *Decoder) fillBSubPrediction(dst []uint8, mb *syntax.MBBidi, mbX, mbY, dstX, dstY, part int) {
+func (d *Decoder) fillBSubPrediction(dst []uint8, mb *syntax.MBBidi, fallback *frame.Frame, mbX, mbY, dstX, dstY, part int) {
 	if d == nil || mb == nil || len(dst) < 256 || part < 0 || part >= 4 {
 		return
 	}
@@ -496,16 +496,24 @@ func (d *Decoder) fillBSubPrediction(dst []uint8, mb *syntax.MBBidi, mbX, mbY, d
 		// leaving the sub-rectangle black.
 		useL0, useL1 = true, true
 	}
-	d.fillBPredByUse(dst, mbX, mbY, dstX, dstY, 8, 8, mb.RefIdxL0[part], mb.RefIdxL1[part], mb.MVL0[part], mb.MVL1[part], useL0, useL1)
+	d.fillBPredByUse(dst, fallback, mbX, mbY, dstX, dstY, 8, 8, mb.RefIdxL0[part], mb.RefIdxL1[part], mb.MVL0[part], mb.MVL1[part], useL0, useL1)
 }
 
-func (d *Decoder) fillBPredByUse(dst []uint8, mbX, mbY, dstX, dstY, w, h int, refIdxL0, refIdxL1 int8, mvL0, mvL1 syntax.MotionVector, useL0, useL1 bool) {
+func (d *Decoder) fillBPredByUse(dst []uint8, fallback *frame.Frame, mbX, mbY, dstX, dstY, w, h int, refIdxL0, refIdxL1 int8, mvL0, mvL1 syntax.MotionVector, useL0, useL1 bool) {
 	var predL0, predL1 [256]uint8
 	if useL0 {
-		fillBPredBlock(predL0[:], d.refL0(refIdxL0), mbX*16+dstX, mbY*16+dstY, dstX, dstY, w, h, mvL0)
+		ref := d.refL0(refIdxL0)
+		if ref == nil {
+			ref = fallback
+		}
+		fillBPredBlock(predL0[:], ref, mbX*16+dstX, mbY*16+dstY, dstX, dstY, w, h, mvL0)
 	}
 	if useL1 {
-		fillBPredBlock(predL1[:], d.refL1(refIdxL1), mbX*16+dstX, mbY*16+dstY, dstX, dstY, w, h, mvL1)
+		ref := d.refL1(refIdxL1)
+		if ref == nil {
+			ref = fallback
+		}
+		fillBPredBlock(predL1[:], ref, mbX*16+dstX, mbY*16+dstY, dstX, dstY, w, h, mvL1)
 	}
 	for y := 0; y < h; y++ {
 		for x := 0; x < w; x++ {
@@ -557,12 +565,12 @@ func (d *Decoder) reconstructMBBidi(f *frame.Frame, mb *syntax.MBBidi, mbX, mbY,
 		for part := 0; part < 4; part++ {
 			x0 := (part & 1) * 8
 			y0 := (part >> 1) * 8
-			d.fillBSubPrediction(blended[:], mb, mbX, mbY, x0, y0, part)
+			d.fillBSubPrediction(blended[:], mb, f, mbX, mbY, x0, y0, part)
 		}
 	} else if bMacroblockPartCount(mb.MBType) == 2 {
 		for part := 0; part < 2; part++ {
 			x0, y0, w, h := bPartRect(mb.MBType, part)
-			d.fillBPartPrediction(blended[:], mb, mbX, mbY, x0, y0, w, h, part)
+			d.fillBPartPrediction(blended[:], mb, f, mbX, mbY, x0, y0, w, h, part)
 		}
 	} else {
 		var predL0 [256]uint8
