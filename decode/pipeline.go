@@ -348,17 +348,21 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 				}
 				continue
 			}
-			// CAVLC P-slice
-			if pps.EntropyCodingMode == 0 {
+			// CAVLC P/B slices carry mb_skip_run before the next non-skipped MB.
+			if pps.EntropyCodingMode == 0 && (hdr.SliceType == syntax.SliceTypeP || hdr.SliceType == syntax.SliceTypeB) {
 				if skipRun == 0 && !decodeAfterSkipRun {
 					skipRun = int(r.ReadUE())
 				}
 				if skipRun > 0 {
-					skipMV := predMV
-					mbSkip := &syntax.MBInter{MBType: syntax.PMBTypeP16x16}
-					mbSkip.MV[0] = skipMV
-					d.reconstructMBInter(f, mbSkip, mbX, mbY, currentQP)
-					writeBackInter4x4(mv4Ctx, ref4Ctx, mv4Stride, mbX, mbY, mbSkip)
+					if hdr.SliceType == syntax.SliceTypeB {
+						d.reconstructMBBidi(f, &syntax.MBBidi{MBType: syntax.BMBTypeDirect16x16}, mbX, mbY, currentQP)
+					} else {
+						skipMV := predMV
+						mbSkip := &syntax.MBInter{MBType: syntax.PMBTypeP16x16}
+						mbSkip.MV[0] = skipMV
+						d.reconstructMBInter(f, mbSkip, mbX, mbY, currentQP)
+						writeBackInter4x4(mv4Ctx, ref4Ctx, mv4Stride, mbX, mbY, mbSkip)
+					}
 					skipRun--
 					decodeAfterSkipRun = skipRun == 0
 					continue

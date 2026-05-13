@@ -75,6 +75,7 @@ func TestTraceSliceBUsesBidiDecoder(t *testing.T) {
 	w.bit(0)                            // ref_pic_list_modification_flag_l1
 	w.bit(0)                            // adaptive_ref_pic_marking_mode_flag
 	w.se(0)                             // slice_qp_delta
+	w.ue(0)                             // mb_skip_run: next MB is coded
 	w.ue(syntax.BMBTypeDirect16x16)     // direct B macroblock
 	unit := syntheticSliceUnit(w.bytes())
 	sps := map[uint32]*nal.SPS{0: {SPSID: 0, Log2MaxFrameNum: 4, PicOrderCntType: 2, FrameMbsOnlyFlag: true, ChromaFormatIDC: 1, PicWidthInMbs: 1, PicHeightInMapUnits: 1}}
@@ -93,6 +94,27 @@ func TestBTraceQPDeltaUsesIntraPayload(t *testing.T) {
 	}
 	if got := bTraceQPDelta(&syntax.MBBidi{QPDelta: 3, Intra: &syntax.MBIntra{QPDelta: -2}}); got != -2 {
 		t.Fatalf("B-intra qpd got %d want -2", got)
+	}
+}
+
+func TestTraceSliceBConsumesSkipRun(t *testing.T) {
+	var w testBitWriter
+	w.ue(0)                             // first_mb_in_slice
+	w.ue(syntax.SliceTypeB)             // slice_type
+	w.ue(0)                             // pic_parameter_set_id
+	w.bits = append(w.bits, 0, 0, 0, 0) // frame_num
+	w.bit(1)                            // direct_spatial_mv_pred_flag
+	w.bit(0)                            // num_ref_idx_active_override_flag
+	w.bit(0)                            // ref_pic_list_modification_flag_l0
+	w.bit(0)                            // ref_pic_list_modification_flag_l1
+	w.bit(0)                            // adaptive_ref_pic_marking_mode_flag
+	w.se(0)                             // slice_qp_delta
+	w.ue(1)                             // mb_skip_run: one skipped direct B MB
+	unit := syntheticSliceUnit(w.bytes())
+	sps := map[uint32]*nal.SPS{0: {SPSID: 0, Log2MaxFrameNum: 4, PicOrderCntType: 2, FrameMbsOnlyFlag: true, ChromaFormatIDC: 1, PicWidthInMbs: 1, PicHeightInMapUnits: 1}}
+	pps := map[uint32]*nal.PPS{0: {PPSID: 0, SPSID: 0, PicInitQP: 26, NumRefIdxL0Active: 1, NumRefIdxL1Active: 1}}
+	if err := traceSlice(0, unit, sps, pps, 1, false); err != nil {
+		t.Fatalf("traceSlice B skip returned %v", err)
 	}
 }
 

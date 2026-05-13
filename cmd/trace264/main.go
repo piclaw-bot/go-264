@@ -126,16 +126,20 @@ func traceSlice(nalIdx int, unit nal.Unit, spsMap map[uint32]*nal.SPS, ppsMap ma
 			continue
 		}
 		predMV := predictSkipMV4x4(mv4Ctx, ref4Ctx, mv4Stride, mbX*4, mbY*4)
-		if hdr.SliceType == syntax.SliceTypeP && pps.EntropyCodingMode == 0 {
+		if pps.EntropyCodingMode == 0 && (hdr.SliceType == syntax.SliceTypeP || hdr.SliceType == syntax.SliceTypeB) {
 			if skipRun == 0 && !decodeAfterSkipRun {
 				skipRun = int(r.ReadUE())
 			}
 			if skipRun > 0 {
-				skipMV := predMV
-				fmt.Printf("  mb=%04d x=%02d y=%02d bits=%d..%d type=P_SKIP remainingSkip=%d qp=%d mv0=(%d,%d) ref0=0\n", mbIdx, mbX, mbY, start, r.Position(), skipRun-1, currentQP, skipMV.X, skipMV.Y)
-				mbSkip := &syntax.MBInter{MBType: syntax.PMBTypeP16x16}
-				mbSkip.MV[0] = skipMV
-				writeBackInter4x4(mv4Ctx, ref4Ctx, mv4Stride, mbX, mbY, mbSkip)
+				if hdr.SliceType == syntax.SliceTypeB {
+					fmt.Printf("  mb=%04d x=%02d y=%02d bits=%d..%d type=B_SKIP remainingSkip=%d qp=%d\n", mbIdx, mbX, mbY, start, r.Position(), skipRun-1, currentQP)
+				} else {
+					skipMV := predMV
+					fmt.Printf("  mb=%04d x=%02d y=%02d bits=%d..%d type=P_SKIP remainingSkip=%d qp=%d mv0=(%d,%d) ref0=0\n", mbIdx, mbX, mbY, start, r.Position(), skipRun-1, currentQP, skipMV.X, skipMV.Y)
+					mbSkip := &syntax.MBInter{MBType: syntax.PMBTypeP16x16}
+					mbSkip.MV[0] = skipMV
+					writeBackInter4x4(mv4Ctx, ref4Ctx, mv4Stride, mbX, mbY, mbSkip)
+				}
 				skipRun--
 				decodeAfterSkipRun = skipRun == 0
 				continue
