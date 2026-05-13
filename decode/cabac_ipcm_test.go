@@ -8,8 +8,8 @@ import (
 	"github.com/rcarmo/go-264/syntax"
 )
 
-func TestDecodeCABACIPCMSamplesConsumesRawBytes(t *testing.T) {
-	payload := make([]byte, 384)
+func TestDecodeCABACIPCMSamplesConsumesRawBytesAndReinitializes(t *testing.T) {
+	payload := make([]byte, 386)
 	for i := range payload {
 		payload[i] = byte(i)
 	}
@@ -24,6 +24,9 @@ func TestDecodeCABACIPCMSamplesConsumesRawBytes(t *testing.T) {
 	}
 	if mb.PCMCr[0] != 64 || mb.PCMCr[63] != 127 {
 		t.Fatalf("Cr PCM endpoints got %d/%d want 64/127", mb.PCMCr[0], mb.PCMCr[63])
+	}
+	if dec.DecodeTerminate() != 0 {
+		t.Fatal("CABAC decoder was not reinitialized on bytes following I_PCM payload")
 	}
 }
 

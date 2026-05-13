@@ -263,6 +263,7 @@ func decodeCABACIPCMSamples(dec *cabac.CABACDecoder, mb *syntax.MBIntra) {
 	for i := range mb.PCMCr {
 		mb.PCMCr[i] = dec.ReadPCMByte()
 	}
+	dec.Reset()
 }
 
 func splitLuma8x8Residual(dst *[16][16]int16, group int, src [64]int16) {

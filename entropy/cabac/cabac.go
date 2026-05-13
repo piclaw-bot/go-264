@@ -67,10 +67,17 @@ var rangeTabLPS = [64][4]uint32{
 // NewCABACDecoder initializes the arithmetic decoder.
 func NewCABACDecoder(r *nal.Reader) *CABACDecoder {
 	d := &CABACDecoder{r: r}
-	d.codIRange = 510
-	d.codILow = uint32(r.ReadBits(9))
-	d.count = 9
+	d.Reset()
 	return d
+}
+
+func (d *CABACDecoder) Reset() {
+	if d == nil || d.r == nil {
+		return
+	}
+	d.codIRange = 510
+	d.codILow = uint32(d.r.ReadBits(9))
+	d.count = 9
 }
 
 // DecodeBin decodes one binary decision using the given context.
