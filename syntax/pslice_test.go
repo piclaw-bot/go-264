@@ -1,6 +1,10 @@
 package syntax
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/rcarmo/go-264/nal"
+)
 
 func TestMedian3(t *testing.T) {
 	tests := []struct{ a, b, c, want int16 }{
@@ -43,8 +47,24 @@ func TestPredictMV(t *testing.T) {
 }
 
 func TestSubMBPartCount(t *testing.T) {
-	if subMBPartCount(0) != 1 { t.Error("8x8 should be 1") }
-	if subMBPartCount(1) != 2 { t.Error("8x4 should be 2") }
-	if subMBPartCount(2) != 2 { t.Error("4x8 should be 2") }
-	if subMBPartCount(3) != 4 { t.Error("4x4 should be 4") }
+	if subMBPartCount(0) != 1 {
+		t.Error("8x8 should be 1")
+	}
+	if subMBPartCount(1) != 2 {
+		t.Error("8x4 should be 2")
+	}
+	if subMBPartCount(2) != 2 {
+		t.Error("4x8 should be 2")
+	}
+	if subMBPartCount(3) != 4 {
+		t.Error("4x4 should be 4")
+	}
+}
+
+func TestReadTEClampsMalformedUE(t *testing.T) {
+	var w testBitWriter
+	w.ue(99)
+	if got := readTE(nal.NewReader(w.bytes()), 3); got != 3 {
+		t.Fatalf("readTE malformed UE got %d want clamp 3", got)
+	}
 }

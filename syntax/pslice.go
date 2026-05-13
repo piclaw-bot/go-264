@@ -171,7 +171,11 @@ func readTE(r *nal.Reader, maxVal int) uint32 {
 	if maxVal == 1 {
 		return 1 - r.ReadBit()
 	}
-	return r.ReadUE()
+	v := r.ReadUE()
+	if v > uint32(maxVal) {
+		return uint32(maxVal)
+	}
+	return v
 }
 
 func decodeMVD(r *nal.Reader) MotionVector {
