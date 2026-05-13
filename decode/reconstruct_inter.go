@@ -22,6 +22,25 @@ func (d *Decoder) refL0(refIdx int8) *frame.Frame {
 	return d.DPB.Frames[len(d.DPB.Frames)-1-idx]
 }
 
+func (d *Decoder) refL1(refIdx int8) *frame.Frame {
+	if d == nil || d.DPB == nil || len(d.DPB.Frames) == 0 {
+		return nil
+	}
+	idx := int(refIdx)
+	if idx < 0 {
+		idx = 0
+	}
+	base := len(d.DPB.Frames) - 2
+	if base < 0 {
+		base = len(d.DPB.Frames) - 1
+	}
+	pos := base - idx
+	if pos < 0 || pos >= len(d.DPB.Frames) {
+		pos = base
+	}
+	return d.DPB.Frames[pos]
+}
+
 func (d *Decoder) reconstructMBInter(f *frame.Frame, mb *syntax.MBInter, mbX, mbY, qp int) {
 	if f == nil || mb == nil {
 		return
@@ -445,13 +464,8 @@ func (d *Decoder) reconstructMBBidi(f *frame.Frame, mb *syntax.MBBidi, mbX, mbY,
 	if dstBaseX < 0 || dstBaseY < 0 || dstBaseX+16 > f.Width || dstBaseY+16 > f.Height {
 		return
 	}
-	var refL0, refL1 *frame.Frame
-	if d.DPB != nil && len(d.DPB.Frames) > 0 {
-		refL0 = d.DPB.Frames[len(d.DPB.Frames)-1]
-	}
-	if d.DPB != nil && len(d.DPB.Frames) > 1 {
-		refL1 = d.DPB.Frames[len(d.DPB.Frames)-2]
-	}
+	refL0 := d.refL0(mb.RefIdxL0[0])
+	refL1 := d.refL1(mb.RefIdxL1[0])
 	if refL0 == nil {
 		refL0 = f
 	}
