@@ -120,44 +120,48 @@ func DecodeMBInter(r *nal.Reader, opts InterDecodeOpts) MBInter {
 		mb.QPDelta = r.ReadSE()
 	}
 
-	if mb.CBP > 0 {
-		cbpLuma := mb.CBP & 0xF
-		var nzCoeffs [16]int
-		for blk := 0; blk < 16; blk++ {
-			group := blk / 4
-			if cbpLuma&(1<<uint(group)) != 0 {
-				nC := computeNC4x4Ctx(blk, nzCoeffs[:], leftNZ, topNZ)
-				block, tc := cavlc.DecodeCAVLCBlock(r, nC)
-				mb.Coeffs[blk] = [16]int16(block)
-				nzCoeffs[blk] = tc
-				mb.TotalCoeff[blk] = tc
-			}
+	decodeInterResidualCAVLC(r, mb.CBP, &mb.Coeffs, &mb.CoeffsChroma, &mb.TotalCoeff, &mb.ChromaTotalCoeff, leftNZ, topNZ, leftChromaNZ, topChromaNZ)
+	return mb
+}
+
+func decodeInterResidualCAVLC(r *nal.Reader, cbp uint32, coeffs *[16][16]int16, coeffsChroma *[2][4][16]int16, totalCoeff *[16]int, chromaTotalCoeff *[2][4]int, leftNZ, topNZ *[16]int, leftChromaNZ, topChromaNZ *[2][4]int) {
+	if r == nil || cbp == 0 || coeffs == nil || coeffsChroma == nil || totalCoeff == nil || chromaTotalCoeff == nil {
+		return
+	}
+	cbpLuma := cbp & 0xF
+	for blk := 0; blk < 16; blk++ {
+		group := blk / 4
+		if cbpLuma&(1<<uint(group)) == 0 {
+			continue
 		}
-		cbpChroma := mb.CBP >> 4
-		if cbpChroma > 0 {
-			for comp := 0; comp < 2; comp++ {
-				dcBlock4 := cavlc.DecodeCAVLCChromaDC(r)
-				for i := 0; i < 4; i++ {
-					mb.CoeffsChroma[comp][i][0] = dcBlock4[i]
-				}
-			}
-			if cbpChroma == 2 {
-				for comp := 0; comp < 2; comp++ {
-					var nzChroma [4]int
-					for blk := 0; blk < 4; blk++ {
-						nC := computeNCChroma4x4Ctx(blk, nzChroma[:], leftChromaNZ, topChromaNZ, comp)
-						acBlock, tc := cavlc.DecodeCAVLCBlockAC(r, nC)
-						for j := 1; j < 16; j++ {
-							mb.CoeffsChroma[comp][blk][j] = acBlock[j]
-						}
-						nzChroma[blk] = tc
-						mb.ChromaTotalCoeff[comp][blk] = tc
-					}
-				}
-			}
+		nC := computeNC4x4Ctx(blk, totalCoeff[:], leftNZ, topNZ)
+		block, tc := cavlc.DecodeCAVLCBlock(r, nC)
+		coeffs[blk] = [16]int16(block)
+		totalCoeff[blk] = tc
+	}
+	cbpChroma := cbp >> 4
+	if cbpChroma == 0 {
+		return
+	}
+	for comp := 0; comp < 2; comp++ {
+		dcBlock4 := cavlc.DecodeCAVLCChromaDC(r)
+		for i := 0; i < 4; i++ {
+			coeffsChroma[comp][i][0] = dcBlock4[i]
 		}
 	}
-	return mb
+	if cbpChroma != 2 {
+		return
+	}
+	for comp := 0; comp < 2; comp++ {
+		for blk := 0; blk < 4; blk++ {
+			nC := computeNCChroma4x4Ctx(blk, chromaTotalCoeff[comp][:], leftChromaNZ, topChromaNZ, comp)
+			acBlock, tc := cavlc.DecodeCAVLCBlockAC(r, nC)
+			for j := 1; j < 16; j++ {
+				coeffsChroma[comp][blk][j] = acBlock[j]
+			}
+			chromaTotalCoeff[comp][blk] = tc
+		}
+	}
 }
 
 func readTE(r *nal.Reader, maxVal int) uint32 {

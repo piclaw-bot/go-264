@@ -3,10 +3,7 @@ package syntax
 // B-slice macroblock types and bidirectional prediction.
 // ITU-T H.264 §7.3.5, Table 7-14
 
-import (
-	cavlc "github.com/rcarmo/go-264/entropy/cavlc"
-	"github.com/rcarmo/go-264/nal"
-)
+import "github.com/rcarmo/go-264/nal"
 
 // B-slice macroblock types
 const (
@@ -209,38 +206,7 @@ func decodeBResidual(r *nal.Reader, mb *MBBidi) {
 	if mb.CBP > 0 {
 		mb.QPDelta = r.ReadSE()
 	}
-	cbpLuma := mb.CBP & 0xF
-	for blk := 0; blk < 16; blk++ {
-		group := blk / 4
-		if cbpLuma&(1<<uint(group)) == 0 {
-			continue
-		}
-		block, tc := cavlc.DecodeCAVLCBlock(r, computeNC4x4Ctx(blk, mb.TotalCoeff[:], nil, nil))
-		mb.Coeffs[blk] = [16]int16(block)
-		mb.TotalCoeff[blk] = tc
-	}
-	cbpChroma := mb.CBP >> 4
-	if cbpChroma == 0 {
-		return
-	}
-	for comp := 0; comp < 2; comp++ {
-		dcBlock4 := cavlc.DecodeCAVLCChromaDC(r)
-		for i := 0; i < 4; i++ {
-			mb.CoeffsChroma[comp][i][0] = dcBlock4[i]
-		}
-	}
-	if cbpChroma != 2 {
-		return
-	}
-	for comp := 0; comp < 2; comp++ {
-		for blk := 0; blk < 4; blk++ {
-			acBlock, tc := cavlc.DecodeCAVLCBlockAC(r, computeNCChroma4x4Ctx(blk, mb.ChromaTotalCoeff[comp][:], nil, nil, comp))
-			for j := 1; j < 16; j++ {
-				mb.CoeffsChroma[comp][blk][j] = acBlock[j]
-			}
-			mb.ChromaTotalCoeff[comp][blk] = tc
-		}
-	}
+	decodeInterResidualCAVLC(r, mb.CBP, &mb.Coeffs, &mb.CoeffsChroma, &mb.TotalCoeff, &mb.ChromaTotalCoeff, nil, nil, nil, nil)
 }
 
 // usesL0 returns true if the partition uses list 0 (forward) prediction.
