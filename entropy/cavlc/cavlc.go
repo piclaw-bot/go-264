@@ -348,12 +348,21 @@ func decodeCoeffTokenChromaDC(r *nal.Reader) (int, int) {
 // DecodeCAVLCChromaDC decodes a chroma DC 2×2 block (4:2:0, max 4 coefficients).
 func DecodeCAVLCChromaDC(r *nal.Reader) [4]int16 {
 	var block [4]int16
+	if r == nil {
+		return block
+	}
 	totalCoeff, trailingOnes := decodeCoeffTokenChromaDC(r)
 	if totalCoeff == 0 {
 		return block
 	}
+	if totalCoeff > 4 {
+		totalCoeff = 4
+	}
+	if trailingOnes > totalCoeff {
+		trailingOnes = totalCoeff
+	}
 
-	signs := make([]int16, trailingOnes)
+	var signs [3]int16
 	for i := trailingOnes - 1; i >= 0; i-- {
 		if r.ReadBit() == 1 {
 			signs[i] = -1
@@ -362,9 +371,9 @@ func DecodeCAVLCChromaDC(r *nal.Reader) [4]int16 {
 		}
 	}
 
-	levels := make([]int16, totalCoeff)
+	var levels [4]int16
 	idx := totalCoeff - 1
-	for i := trailingOnes - 1; i >= 0; i-- {
+	for i := trailingOnes - 1; i >= 0 && idx >= 0; i-- {
 		levels[idx] = signs[i]
 		idx--
 	}
