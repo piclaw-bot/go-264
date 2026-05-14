@@ -20,15 +20,18 @@ var zigZag4x4 = [16]int{
 	7, 11, 14, 15,
 }
 
-var zigZag8x8 = [64]int{
-	0, 1, 8, 16, 9, 2, 3, 10,
-	17, 24, 32, 25, 18, 11, 4, 5,
-	12, 19, 26, 33, 40, 48, 41, 34,
-	27, 20, 13, 6, 7, 14, 21, 28,
-	35, 42, 49, 56, 57, 50, 43, 36,
-	29, 22, 15, 23, 30, 37, 44, 51,
-	58, 59, 52, 45, 38, 31, 39, 46,
-	53, 60, 61, 54, 47, 55, 62, 63,
+// H.264 8x8 CAVLC scan order split into four 16-coefficient chunks.
+// FFmpeg uses zigzag_scan8x8_cavlc for MB_TYPE_8x8DCT residuals instead of the
+// plain 8x8 zig-zag order: each CAVLC block decodes every fourth 8x8 scan entry.
+var zigZag8x8CAVLC = [64]int{
+	0, 9, 17, 18, 12, 40, 27, 7,
+	35, 57, 29, 30, 58, 38, 53, 47,
+	1, 2, 24, 11, 19, 48, 20, 14,
+	42, 50, 22, 37, 59, 31, 60, 55,
+	8, 3, 32, 4, 26, 41, 13, 21,
+	49, 43, 15, 44, 52, 39, 61, 62,
+	16, 10, 25, 5, 33, 34, 6, 28,
+	56, 36, 23, 51, 45, 46, 54, 63,
 }
 
 func DecodeCAVLCBlock(r *nal.Reader, nC int) (Block4x4, int) {
@@ -118,7 +121,7 @@ func DecodeCAVLCBlock8x8Part(r *nal.Reader, nC int, part int) (Block8x8, int) {
 	if part < 0 || part > 3 {
 		return Block8x8{}, 0
 	}
-	return decodeCAVLCBlock8x8WithScan(r, nC, zigZag8x8[part*16:part*16+16])
+	return decodeCAVLCBlock8x8WithScan(r, nC, zigZag8x8CAVLC[part*16:part*16+16])
 }
 
 func decodeCAVLCBlockWithScan(r *nal.Reader, nC int, maxCoeff int, scan []int) (Block4x4, int) {
