@@ -240,7 +240,7 @@ func decodeBResidual(r *nal.Reader, mb *MBBidi, opts BidiDecodeOpts) {
 	if mb.CBP > 0 {
 		mb.QPDelta = r.ReadSE()
 	}
-	decodeInterResidualCAVLC(r, mb.CBP, &mb.Coeffs, &mb.CoeffsChroma, &mb.TotalCoeff, &mb.ChromaTotalCoeff, opts.LeftNZ, opts.TopNZ, opts.LeftChromaNZ, opts.TopChromaNZ)
+	decodeInterResidualCAVLC(r, mb.CBP, mb.Use8x8Transform, &mb.Coeffs, &mb.CoeffsChroma, &mb.TotalCoeff, &mb.ChromaTotalCoeff, opts.LeftNZ, opts.TopNZ, opts.LeftChromaNZ, opts.TopChromaNZ)
 }
 
 // BPartUsesL0 reports whether a non-B_8x8 B macroblock partition uses list 0.

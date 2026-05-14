@@ -3,6 +3,7 @@ package syntax
 import (
 	"testing"
 
+	cavlc "github.com/rcarmo/go-264/entropy/cavlc"
 	"github.com/rcarmo/go-264/nal"
 )
 
@@ -58,6 +59,19 @@ func TestSubMBPartCount(t *testing.T) {
 	}
 	if subMBPartCount(3) != 4 {
 		t.Error("4x4 should be 4")
+	}
+}
+
+func TestStoreInter8x8ResidualSplitsQuadrants(t *testing.T) {
+	var src cavlc.Block8x8
+	src[0] = 1
+	src[3] = 2
+	src[4*8] = 3
+	src[4*8+4] = 4
+	var dst [16][16]int16
+	storeInter8x8Residual(&dst, 1, src)
+	if dst[4][0] != 1 || dst[4][3] != 2 || dst[6][0] != 3 || dst[7][0] != 4 {
+		t.Fatalf("8x8 residual split mismatch: dst4=%v dst6=%v dst7=%v", dst[4], dst[6], dst[7])
 	}
 }
 

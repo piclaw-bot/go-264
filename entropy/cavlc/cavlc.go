@@ -7,6 +7,7 @@ import (
 )
 
 type Block4x4 [16]int16
+type Block8x8 [64]int16
 
 // H.264 4x4 zig-zag scan order (Table 6-1 / inverse scan mapping).
 // CAVLC places levels in scan order; the transform/dequant stages consume
@@ -17,6 +18,17 @@ var zigZag4x4 = [16]int{
 	5, 2, 3, 6,
 	9, 12, 13, 10,
 	7, 11, 14, 15,
+}
+
+var zigZag8x8 = [64]int{
+	0, 1, 8, 16, 9, 2, 3, 10,
+	17, 24, 32, 25, 18, 11, 4, 5,
+	12, 19, 26, 33, 40, 48, 41, 34,
+	27, 20, 13, 6, 7, 14, 21, 28,
+	35, 42, 49, 56, 57, 50, 43, 36,
+	29, 22, 15, 23, 30, 37, 44, 51,
+	58, 59, 52, 45, 38, 31, 39, 46,
+	53, 60, 61, 54, 47, 55, 62, 63,
 }
 
 func DecodeCAVLCBlock(r *nal.Reader, nC int) (Block4x4, int) {
@@ -102,6 +114,13 @@ func DecodeCAVLCBlockAC(r *nal.Reader, nC int) (Block4x4, int) {
 	return decodeCAVLCBlockWithScan(r, nC, 15, zigZag4x4[1:])
 }
 
+func DecodeCAVLCBlock8x8Part(r *nal.Reader, nC int, part int) (Block8x8, int) {
+	if part < 0 || part > 3 {
+		return Block8x8{}, 0
+	}
+	return decodeCAVLCBlock8x8WithScan(r, nC, zigZag8x8[part*16:part*16+16])
+}
+
 func decodeCAVLCBlockWithScan(r *nal.Reader, nC int, maxCoeff int, scan []int) (Block4x4, int) {
 	var block Block4x4
 	totalCoeff, trailingOnes := DecodeCoeffToken(r, nC)
@@ -153,6 +172,81 @@ func decodeCAVLCBlockWithScan(r *nal.Reader, nC int, maxCoeff int, scan []int) (
 	}
 	totalZeros := 0
 	if totalCoeff < maxCoeff {
+		totalZeros = DecodeTotalZeros(r, totalCoeff)
+	}
+	zerosLeft := totalZeros
+	coeffIdx := totalCoeff - 1
+	scanPos := totalCoeff + totalZeros - 1
+	for coeffIdx >= 0 {
+		if zerosLeft > 0 && coeffIdx > 0 {
+			run := DecodeRunBefore(r, zerosLeft)
+			if scanPos >= 0 && scanPos < len(scan) {
+				block[scan[scanPos]] = levels[coeffIdx]
+			}
+			scanPos -= run + 1
+			zerosLeft -= run
+		} else {
+			if scanPos >= 0 && scanPos < len(scan) {
+				block[scan[scanPos]] = levels[coeffIdx]
+			}
+			scanPos--
+		}
+		coeffIdx--
+	}
+	return block, totalCoeff
+}
+
+func decodeCAVLCBlock8x8WithScan(r *nal.Reader, nC int, scan []int) (Block8x8, int) {
+	var block Block8x8
+	totalCoeff, trailingOnes := DecodeCoeffToken(r, nC)
+	if totalCoeff == 0 {
+		return block, 0
+	}
+	if totalCoeff > 16 {
+		totalCoeff = 16
+	}
+	var signs [3]int16
+	for i := trailingOnes - 1; i >= 0; i-- {
+		if r.ReadBit() == 1 {
+			signs[i] = -1
+		} else {
+			signs[i] = 1
+		}
+	}
+	var levels [16]int16
+	idx := totalCoeff - 1
+	for i := trailingOnes - 1; i >= 0 && idx >= 0; i-- {
+		levels[idx] = signs[i]
+		idx--
+	}
+	suffixLength := 0
+	if totalCoeff > 10 && trailingOnes < 3 {
+		suffixLength = 1
+	}
+	for i := trailingOnes; i < totalCoeff; i++ {
+		levelCode := decodeLevelPrefix(r, suffixLength)
+		if i == trailingOnes && trailingOnes < 3 {
+			levelCode += 2
+		}
+		if levelCode%2 == 0 {
+			levels[idx] = int16((levelCode + 2) >> 1)
+		} else {
+			levels[idx] = int16(-((levelCode + 1) >> 1))
+		}
+		absLevel := levels[idx]
+		if absLevel < 0 {
+			absLevel = -absLevel
+		}
+		if suffixLength == 0 {
+			suffixLength = 1
+		}
+		if int(absLevel) > (3<<uint(suffixLength-1)) && suffixLength < 6 {
+			suffixLength++
+		}
+		idx--
+	}
+	totalZeros := 0
+	if totalCoeff < 16 {
 		totalZeros = DecodeTotalZeros(r, totalCoeff)
 	}
 	zerosLeft := totalZeros
