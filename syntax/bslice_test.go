@@ -208,6 +208,15 @@ func TestDecodeMBBidiConsumesIntraPayload(t *testing.T) {
 	}
 }
 
+func TestInterTransform8x8FlagPresentMatchesBDirectInference(t *testing.T) {
+	if interTransform8x8FlagPresent(true, 1, BMBTypeDirect16x16, [4]uint32{}, false) {
+		t.Fatal("B_Direct_16x16 without direct_8x8_inference must not consume transform flag")
+	}
+	if !interTransform8x8FlagPresent(true, 1, BMBTypeDirect16x16, [4]uint32{}, true) {
+		t.Fatal("B_Direct_16x16 with direct_8x8_inference should allow transform flag")
+	}
+}
+
 func TestInterTransform8x8FlagPresentMatchesB8x8DirectInference(t *testing.T) {
 	if interTransform8x8FlagPresent(true, 1, BMBTypeB8x8, [4]uint32{0, 1, 2, 3}, false) {
 		t.Fatal("direct B8x8 without direct_8x8_inference must not consume transform flag")

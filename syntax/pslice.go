@@ -139,6 +139,9 @@ func interTransform8x8FlagPresent(enabled bool, cbp uint32, mbType uint32, subTy
 			}
 		}
 	}
+	if mbType == BMBTypeDirect16x16 && !direct8x8Inference {
+		return false
+	}
 	if mbType == BMBTypeB8x8 {
 		for _, subType := range subTypes {
 			switch {
