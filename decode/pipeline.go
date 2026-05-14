@@ -348,8 +348,8 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 				}
 				continue
 			}
-			// CAVLC P/B slices carry mb_skip_run before the next non-skipped MB.
-			if pps.EntropyCodingMode == 0 && (hdr.SliceType == syntax.SliceTypeP || hdr.SliceType == syntax.SliceTypeB) {
+			// CAVLC P slices carry mb_skip_run before the next non-skipped MB.
+			if pps.EntropyCodingMode == 0 {
 				if skipRun == 0 && !decodeAfterSkipRun {
 					skipRun = int(r.ReadUE())
 				}
@@ -393,6 +393,18 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 			}
 		} else {
 			// B-slice
+			if pps.EntropyCodingMode == 0 {
+				if skipRun == 0 && !decodeAfterSkipRun {
+					skipRun = int(r.ReadUE())
+				}
+				if skipRun > 0 {
+					d.reconstructMBBidi(f, &syntax.MBBidi{MBType: syntax.BMBTypeDirect16x16}, mbX, mbY, currentQP)
+					skipRun--
+					decodeAfterSkipRun = skipRun == 0
+					continue
+				}
+				decodeAfterSkipRun = false
+			}
 			mbBidi := syntax.DecodeMBBidiWithOpts(r, syntax.BidiDecodeOpts{
 				SliceQP: int32(currentQP), NumRefL0: hdr.NumRefIdxL0Active, NumRefL1: hdr.NumRefIdxL1Active,
 				Transform8x8: pps.Transform8x8Mode, Direct8x8Inference: sps.Direct8x8Inference,
