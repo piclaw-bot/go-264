@@ -110,7 +110,6 @@ func decodeCABACPInterMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, numRe
 	}
 	mb.CBP = syntax.DecodeCABACCBP(dec, models, leftCBP, topCBP)
 	if mb.CBP != 0 {
-		mb.QPDelta = int32(syntax.DecodeCABACDQP(dec, models, lastQScaleDiff))
 		use8x8Residual := false
 		if !cabacInter8x8TransformAllowed(mb) {
 			transform8x8Mode = false
@@ -121,6 +120,7 @@ func decodeCABACPInterMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, numRe
 				mb.Use8x8Transform = true
 			}
 		}
+		mb.QPDelta = int32(syntax.DecodeCABACDQP(dec, models, lastQScaleDiff))
 		var nzMB [16]int
 		if use8x8Residual {
 			for group := 0; group < 4; group++ {
