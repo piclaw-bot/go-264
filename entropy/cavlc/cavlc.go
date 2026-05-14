@@ -36,9 +36,15 @@ var zigZag8x8CAVLC = [64]int{
 
 func DecodeCAVLCBlock(r *nal.Reader, nC int) (Block4x4, int) {
 	var block Block4x4
+	if r == nil {
+		return block, 0
+	}
 	totalCoeff, trailingOnes := DecodeCoeffToken(r, nC)
 	if totalCoeff == 0 {
 		return block, 0
+	}
+	if totalCoeff > 16 {
+		totalCoeff = 16
 	}
 	var signs [3]int16
 	for i := trailingOnes - 1; i >= 0; i-- {
@@ -114,11 +120,14 @@ func DecodeCAVLCBlock(r *nal.Reader, nC int) (Block4x4, int) {
 // starts after the DC coefficient. Returned coefficients are placed in
 // raster-order positions 1..15; position 0 is left zero for caller-supplied DC.
 func DecodeCAVLCBlockAC(r *nal.Reader, nC int) (Block4x4, int) {
+	if r == nil {
+		return Block4x4{}, 0
+	}
 	return decodeCAVLCBlockWithScan(r, nC, 15, zigZag4x4[1:])
 }
 
 func DecodeCAVLCBlock8x8Part(r *nal.Reader, nC int, part int) (Block8x8, int) {
-	if part < 0 || part > 3 {
+	if r == nil || part < 0 || part > 3 {
 		return Block8x8{}, 0
 	}
 	return decodeCAVLCBlock8x8WithScan(r, nC, zigZag8x8CAVLC[part*16:part*16+16])

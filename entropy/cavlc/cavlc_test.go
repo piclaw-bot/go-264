@@ -6,6 +6,18 @@ import (
 	"github.com/rcarmo/go-264/nal"
 )
 
+func TestCAVLCBlockDecodersHandleNilReader(t *testing.T) {
+	if _, tc := DecodeCAVLCBlock(nil, 0); tc != 0 {
+		t.Fatalf("DecodeCAVLCBlock(nil) totalCoeff=%d want 0", tc)
+	}
+	if _, tc := DecodeCAVLCBlockAC(nil, 0); tc != 0 {
+		t.Fatalf("DecodeCAVLCBlockAC(nil) totalCoeff=%d want 0", tc)
+	}
+	if _, tc := DecodeCAVLCBlock8x8Part(nil, 0, 0); tc != 0 {
+		t.Fatalf("DecodeCAVLCBlock8x8Part(nil) totalCoeff=%d want 0", tc)
+	}
+}
+
 func TestCAVLC8x8PartScanMatchesFFmpegChunks(t *testing.T) {
 	if zigZag8x8CAVLC[0] != 0 || zigZag8x8CAVLC[1] != 9 || zigZag8x8CAVLC[16] != 1 || zigZag8x8CAVLC[32] != 8 || zigZag8x8CAVLC[48] != 16 {
 		t.Fatalf("unexpected 8x8 CAVLC scan chunks: p0=%v p1=%v p2=%v p3=%v", zigZag8x8CAVLC[:4], zigZag8x8CAVLC[16:20], zigZag8x8CAVLC[32:36], zigZag8x8CAVLC[48:52])
