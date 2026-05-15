@@ -407,6 +407,16 @@ func storeCABACIntraChromaAC(mb *syntax.MBIntra, comp, blk int, ac [16]int16) {
 // decodeCABACIntraMB decodes one CABAC-coded I-slice intra macroblock.
 // Models the FFmpeg decode_cabac_intra_mb_type / decode_cabac_mb_intra4x4_pred_mode
 // / decode_cabac_mb_chroma_pre_mode flow from h264_cabac.c.
+func cabacPredIntraMode(left, top int8) int8 {
+	if left < 0 || top < 0 {
+		return 2
+	}
+	if top < left {
+		return top
+	}
+	return left
+}
+
 func decodeCABACIntraMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, lastQScaleDiff int, leftNZ, topNZ *[16]int, leftChromaNZ, topChromaNZ *[2][4]int, leftCBP, topCBP uint32, leftMBType, topMBType uint32, leftChromaPred, topChromaPred int8, transform8x8Mode bool, transform8x8Ctx int, leftEdge8x8, topEdge8x8 [2]int8) *syntax.MBIntra {
 	return decodeCABACIntraMBWithParams(dec, models, lastQScaleDiff, leftNZ, topNZ, leftChromaNZ, topChromaNZ, leftCBP, topCBP, leftMBType, topMBType, leftChromaPred, topChromaPred, transform8x8Mode, transform8x8Ctx, leftEdge8x8, topEdge8x8, 3, true)
 }
@@ -497,16 +507,7 @@ func decodeCABACIntraMBWithParams(dec *cabac.CABACDecoder, models []cabac.CABACC
 				} else {
 					topMode = localModes[i-2]
 				}
-				if leftMode < 0 {
-					leftMode = 2
-				}
-				if topMode < 0 {
-					topMode = 2
-				}
-				predMode := leftMode
-				if topMode < predMode {
-					predMode = topMode
-				}
+				predMode := cabacPredIntraMode(leftMode, topMode)
 				if traceBin("i8x8_prev", 68) == 1 {
 					mb.I8x8PredMode[i] = predMode
 				} else {

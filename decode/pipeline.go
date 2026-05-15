@@ -346,16 +346,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					} else {
 						topMode = mb.I8x8PredMode[b-2]
 					}
-					if leftMode < 0 {
-						leftMode = 2
-					}
-					if topMode < 0 {
-						topMode = 2
-					}
-					traceI8x8Pred[b] = leftMode
-					if topMode < traceI8x8Pred[b] {
-						traceI8x8Pred[b] = topMode
-					}
+					traceI8x8Pred[b] = cabacPredIntraMode(leftMode, topMode)
 				}
 				for b := 0; b < 4; b++ {
 					bc, br := b%2, b/2
