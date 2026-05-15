@@ -148,9 +148,12 @@ func (d *CABACDecoder) DecodeCABACResidual(models []CABACCtx, cat, maxCoeff int,
 			cbfBase = 93
 		}
 		cbfCtx := cbfBase + nza + 2*nzb
+		preLow, preRange, _ := d.DebugState()
+		preState := models[cbfCtx].DebugPackedState()
 		cbfBin := d.DecodeBin(&models[cbfCtx])
+		postLow, postRange, _ := d.DebugState()
 		if traceResidual {
-			fmt.Fprintf(os.Stderr, "GORES event=cbf cat=%d max=%d nza=%d nzb=%d ctx=%d bin=%d\n", cat, maxCoeff, nza, nzb, cbfCtx, cbfBin)
+			fmt.Fprintf(os.Stderr, "GORES event=cbf cat=%d max=%d nza=%d nzb=%d ctx=%d state=%d low=%d range=%d bin=%d post_state=%d post_low=%d post_range=%d\n", cat, maxCoeff, nza, nzb, cbfCtx, preState, preLow, preRange, cbfBin, models[cbfCtx].DebugPackedState(), postLow, postRange)
 		}
 		if cbfBin == 0 {
 			return 0 // coded_block_flag = 0
