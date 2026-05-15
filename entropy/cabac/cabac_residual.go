@@ -1,5 +1,10 @@
 package cabac
 
+import (
+	"fmt"
+	"os"
+)
+
 // CABAC residual coefficient decoding.
 // Implements decode_cabac_residual_internal from FFmpeg h264_cabac.c.
 // ITU-T H.264 §9.3.3.1 (significant-coeff-flag and coeff_abs_level binarization).
@@ -125,6 +130,7 @@ func (d *CABACDecoder) DecodeCABACResidual(models []CABACCtx, cat, maxCoeff int,
 	// CBF context: ctx = (nza>0) + 2*(nzb>0), base from cabacCBFBase[cat].
 	// For cat 5 (8x8 DCT), CBF is not separately decoded per block.
 	// Source: FFmpeg decode_cabac_residual_dc/nondc → get_cabac_cbf_ctx.
+	traceResidual := os.Getenv("GO264_CABAC_RESIDUAL_TRACE") != ""
 	if !is8x8 {
 		cbfBase := 0
 		switch cat {
@@ -142,7 +148,11 @@ func (d *CABACDecoder) DecodeCABACResidual(models []CABACCtx, cat, maxCoeff int,
 			cbfBase = 93
 		}
 		cbfCtx := cbfBase + nza + 2*nzb
-		if d.DecodeBin(&models[cbfCtx]) == 0 {
+		cbfBin := d.DecodeBin(&models[cbfCtx])
+		if traceResidual {
+			fmt.Fprintf(os.Stderr, "GORES event=cbf cat=%d max=%d nza=%d nzb=%d ctx=%d bin=%d\n", cat, maxCoeff, nza, nzb, cbfCtx, cbfBin)
+		}
+		if cbfBin == 0 {
 			return 0 // coded_block_flag = 0
 		}
 	}
@@ -186,6 +196,9 @@ func (d *CABACDecoder) DecodeCABACResidual(models []CABACCtx, cat, maxCoeff int,
 	}
 
 decode_levels:
+	if traceResidual {
+		fmt.Fprintf(os.Stderr, "GORES event=sig cat=%d max=%d count=%d idx=%v\n", cat, maxCoeff, coeffCount, index[:coeffCount])
+	}
 	if coeffCount == 0 {
 		return 0
 	}
@@ -249,6 +262,9 @@ decode_levels:
 				out[matrixPos] = int16(coeffAbs)
 			}
 		}
+	}
+	if traceResidual {
+		fmt.Fprintf(os.Stderr, "GORES event=levels cat=%d max=%d count=%d out=%v\n", cat, maxCoeff, coeffCount, out[:maxCoeff])
 	}
 	return coeffCount
 }

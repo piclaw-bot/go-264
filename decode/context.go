@@ -112,6 +112,27 @@ func cabacUnavailableCBP(leftCBP, topCBP uint32, mbX, mbY int, intra bool) (uint
 	return leftCBP, topCBP
 }
 
+func cabacTraceEdgeNZ(mbX, mbY int, leftNZ, topNZ *[16]int) (*[16]int, *[16]int) {
+	if !cabacTraceFFmpegEdgeCBP() {
+		return leftNZ, topNZ
+	}
+	if mbX == 0 {
+		var nz [16]int
+		for i := range nz {
+			nz[i] = 1
+		}
+		leftNZ = &nz
+	}
+	if mbY == 0 {
+		var nz [16]int
+		for i := range nz {
+			nz[i] = 1
+		}
+		topNZ = &nz
+	}
+	return leftNZ, topNZ
+}
+
 func clampInt(v, lo, hi int) int {
 	if v < lo {
 		return lo
