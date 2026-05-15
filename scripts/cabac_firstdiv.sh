@@ -4,7 +4,10 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 INPUT="${1:-/workspace/tmp/testsrc_cabac_p.h264}"
 OUTDIR="${2:-/workspace/tmp/go264-cabac-firstdiv}"
-LIMIT="${LIMIT:-256}"
+# Trace at least a full first frame for common fixtures. The comparator filters Go
+# events to FFmpeg's decoded frame range, so too-small limits cause false event-count
+# failures before a real divergence can be reported.
+LIMIT="${LIMIT:-4096}"
 FFSRC="${FFMPEG_SRC:-/workspace/tmp/ffmpeg-7.1.3}"
 FFMPEG="${FFMPEG:-$FFSRC/ffmpeg}"
 
