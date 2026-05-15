@@ -13,8 +13,8 @@ import argparse
 import re
 from pathlib import Path
 
-GO_RE = re.compile(r"GORECON part=i8x8 (?:frame=(\d+) )?.*?mb=(\d+) b8=(\d+) .*?predsum=(-?\d+) .*?outsum=(-?\d+) .*?block_out=\[([^\]]*)\]")
-FF_RE = re.compile(r"FFRECON part=i8x8 (?:frame=(\d+) )?.*?mb=(\d+) b8=(\d+) .*?predsum=(-?\d+) .*?outsum=(-?\d+) .*?block_out=\[([^\]]*)\]")
+GO_RE = re.compile(r"GORECON part=i8x8 (?:frame=(\d+) )?.*?mb=(\d+) b8=(\d+) .*?syntax_mode=(-?\d+) recon_mode=(-?\d+) .*?predsum=(-?\d+) .*?outsum=(-?\d+) .*?block_out=\[([^\]]*)\]")
+FF_RE = re.compile(r"FFRECON part=i8x8 (?:frame=(\d+) )?.*?mb=(\d+) b8=(\d+) .*?mode=(-?\d+) .*?predsum=(-?\d+) .*?outsum=(-?\d+) .*?block_out=\[([^\]]*)\]")
 
 
 def parse_blocks(path: Path, pattern: re.Pattern[str]) -> list[dict[str, object]]:
@@ -30,14 +30,28 @@ def parse_blocks(path: Path, pattern: re.Pattern[str]) -> list[dict[str, object]
         key = (mb, b8)
         occurrence = occurrence_by_key.get(key, 0)
         occurrence_by_key[key] = occurrence + 1
-        predsum = int(match.group(4))
-        outsum = int(match.group(5))
-        block_out = [int(v) for v in match.group(6).split()]
+        if pattern is GO_RE:
+            syntax_mode = int(match.group(4))
+            recon_mode = int(match.group(5))
+            ff_mode = None
+            predsum = int(match.group(6))
+            outsum = int(match.group(7))
+            block_out = [int(v) for v in match.group(8).split()]
+        else:
+            syntax_mode = None
+            recon_mode = None
+            ff_mode = int(match.group(4))
+            predsum = int(match.group(5))
+            outsum = int(match.group(6))
+            block_out = [int(v) for v in match.group(7).split()]
         blocks.append({
             "key": key,
             "frame_key": frame if frame is not None else occurrence,
             "frame": frame,
             "occurrence": occurrence,
+            "syntax_mode": syntax_mode,
+            "recon_mode": recon_mode,
+            "ff_mode": ff_mode,
             "predsum": predsum,
             "outsum": outsum,
             "block_out": block_out,
@@ -104,9 +118,10 @@ def main() -> int:
         frame = g["frame"]
         frame_label = f"frame={frame}" if frame is not None else f"occ={occurrence}"
         print(
-            f"{frame_label} occ={occurrence} mb={mb:04d} b8={b8} out_delta={out_delta:+d} "
-            f"pred_delta={pred_delta:+d} block_delta={block_delta} "
-            f"go_out={g['outsum']} ff_out={f['outsum']}"
+            f"{frame_label} occ={occurrence} mb={mb:04d} b8={b8} "
+            f"go_mode={g['syntax_mode']}/{g['recon_mode']} ff_mode={f['ff_mode']} "
+            f"out_delta={out_delta:+d} pred_delta={pred_delta:+d} "
+            f"block_delta={block_delta} go_out={g['outsum']} ff_out={f['outsum']}"
         )
     return 0
 
