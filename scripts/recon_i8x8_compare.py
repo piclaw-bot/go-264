@@ -188,11 +188,16 @@ def main() -> int:
         if yuv_samples is not None:
             sx = int(g["x"]) * 16 + (int(b8) & 1) * 8
             sy = int(g["y"]) * 16 + (int(b8) >> 1) * 8
-            if sx > 0 and 0 <= sy < args.height - 7:
+            if 0 <= sy < args.height - 7:
                 go_y, ff_y = yuv_samples
-                left_go = [go_y[(sy + i) * args.width + sx - 1] for i in range(8)]
-                left_ff = [ff_y[(sy + i) * args.width + sx - 1] for i in range(8)]
-                line += f" left_go={left_go} left_ff={left_ff}"
+                if sx > 0:
+                    left_go = [go_y[(sy + i) * args.width + sx - 1] for i in range(8)]
+                    left_ff = [ff_y[(sy + i) * args.width + sx - 1] for i in range(8)]
+                    line += f" left_go={left_go} left_ff={left_ff}"
+                if sx + 7 < args.width:
+                    right_go = [go_y[(sy + i) * args.width + sx + 7] for i in range(8)]
+                    right_ff = [ff_y[(sy + i) * args.width + sx + 7] for i in range(8)]
+                    line += f" right_go={right_go} right_ff={right_ff}"
         print(line)
     return 0
 
