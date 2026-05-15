@@ -238,7 +238,7 @@ func sliceGroupChangeCycleBits(sps *nal.SPS, pps *nal.PPS) int {
 	}
 	v := picSizeInMapUnits/pps.SliceGroupChangeRate + 1
 	bits := 0
-	for limit := uint32(1); limit < v; limit <<= 1 {
+	for x := v - 1; x > 0; x >>= 1 {
 		bits++
 	}
 	return bits

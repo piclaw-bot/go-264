@@ -48,6 +48,18 @@ func (w *testBitWriter) bytes() []byte {
 	return out
 }
 
+func TestSliceGroupChangeCycleBitsHandlesEdges(t *testing.T) {
+	if got := sliceGroupChangeCycleBits(&nal.SPS{PicWidthInMbs: 4, PicHeightInMapUnits: 4}, &nal.PPS{SliceGroupChangeRate: 5}); got != 2 {
+		t.Fatalf("cycle bits got %d want 2", got)
+	}
+	if got := sliceGroupChangeCycleBits(&nal.SPS{PicWidthInMbs: 1, PicHeightInMapUnits: 1}, &nal.PPS{SliceGroupChangeRate: 99}); got != 0 {
+		t.Fatalf("large change rate bits got %d want 0", got)
+	}
+	if got := sliceGroupChangeCycleBits(&nal.SPS{PicWidthInMbs: 1 << 31, PicHeightInMapUnits: 2}, &nal.PPS{SliceGroupChangeRate: 1}); got != 0 {
+		t.Fatalf("overflowed pic size should clamp to 0 bits, got %d", got)
+	}
+}
+
 func TestParseHeaderConsumesSliceGroupChangeCycle(t *testing.T) {
 	var w testBitWriter
 	w.ue(0)                             // first_mb_in_slice
@@ -59,7 +71,7 @@ func TestParseHeaderConsumesSliceGroupChangeCycle(t *testing.T) {
 	w.bit(0)                            // adaptive_ref_pic_marking_mode_flag
 	w.se(0)                             // slice_qp_delta
 	w.ue(1)                             // disable_deblocking_filter_idc
-	w.bits = append(w.bits, 1, 0, 1)    // slice_group_change_cycle (3 bits)
+	w.bits = append(w.bits, 1, 0)       // slice_group_change_cycle (2 bits)
 	w.bit(1)                            // sentinel after slice_group_change_cycle
 	sps := &nal.SPS{Log2MaxFrameNum: 4, PicWidthInMbs: 4, PicHeightInMapUnits: 4, FrameMbsOnlyFlag: true, ChromaFormatIDC: 1}
 	pps := &nal.PPS{NumRefIdxL0Active: 1, NumRefIdxL1Active: 1, NumSliceGroups: 2, SliceGroupMapType: 3, SliceGroupChangeRate: 5, DeblockingFilterControl: true}
