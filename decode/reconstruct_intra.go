@@ -318,7 +318,7 @@ func (d *Decoder) reconstruct4x4(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY, q
 			}
 		}
 		if traceRecon {
-			fmt.Fprintf(os.Stderr, "GORECON part=i4x4 frame=%d mb=%04d blk=%d x=%d y=%d mode=%d qp=%d predsum=%d ressum=%d outsum=%d top=%v top_right=%v left=%v top_left=%d right=%v tc=%d\n", d.traceFrameIndex, mbY*d.mbW+mbX, blkIdx, mbX, mbY, mode, qp, predSum, resSum, outSum, top, topRight, left, topLeft, rightEdge, mb.TotalCoeff[blkIdx])
+			fmt.Fprintf(os.Stderr, "GORECON part=i4x4 frame=%d mb=%04d blk=%d x=%d y=%d mode=%d pred_mode=%d mode_a=%d mode_b=%d qp=%d predsum=%d ressum=%d outsum=%d top=%v top_right=%v left=%v top_left=%d right=%v tc=%d\n", d.traceFrameIndex, mbY*d.mbW+mbX, blkIdx, mbX, mbY, mode, predMode, modeA, modeB, qp, predSum, resSum, outSum, top, topRight, left, topLeft, rightEdge, mb.TotalCoeff[blkIdx])
 		}
 	}
 }
