@@ -61,7 +61,7 @@ go-264/
 ├── internal/tables/  Reproducible table generator commands used by go:generate
 └── cmd/
     ├── decode264     Annex B decoder: color PNG, luma PNG, or raw YUV output
-    ├── trace264      CAVLC MB trace tool with P/B syntax tracing; rejects CABAC streams loudly for now
+    ├── trace264      CAVLC syntax tracing plus decoder-backed CABAC MB/event diagnostics
     ├── trace264cmp   Syntax/parity comparison and frame/MB histogram summaries
     └── trace264diff  Trace diff helper
 ```
@@ -79,20 +79,43 @@ go build -o /workspace/tmp/decode264 ./cmd/decode264
 /workspace/tmp/decode264 -i input.h264 -o frames -f yuv     # raw planar YUV420
 ```
 
-### Trace CAVLC macroblock syntax
+### Trace macroblock syntax and CABAC decode events
 
 ```bash
 go build -o /workspace/tmp/trace264 ./cmd/trace264
 /workspace/tmp/trace264 -i input_baseline.h264 -limit 64
 ```
 
-`trace264` is a CAVLC syntax tracer. CABAC streams are rejected explicitly until MB-level CABAC tracing is wired to the decode path; this avoids misleading CAVLC traces for Main/High streams. Its P/B-slice QP, B-intra payload, and MV-prediction bookkeeping is kept aligned with the decoder so CAVLC diagnostic output uses the same wraparound and 4×4 MV/ref cache semantics.
+`trace264` still has a parser-side CAVLC syntax mode for Baseline fixtures, but `-cabac` now routes through the decoder and emits MB-level CABAC events for Main/High debugging. Its QP, B-intra payload, and MV-prediction bookkeeping is kept aligned with the decoder so diagnostic output uses the same wraparound and 4×4 MV/ref cache semantics.
+
+Useful CABAC diagnostics are opt-in environment variables so normal decode remains quiet:
+
+- `GO264_CABAC_FFMPEG_EDGE_CBP=1` — diagnostic-only unavailable-neighbour CBP defaults for FFmpeg edge parity
+- `GO264_CABAC_CBP_TRACE=1` — CBP bin/context/arithmetic-state trace
+- `GO264_CABAC_RESIDUAL_TRACE=1` — residual CBF/significant/last/level trace
+- `GO264_CABAC_ARITH_TRACE=1` — CABAC arithmetic state trace
+- `GO264_CABAC_SYNTAX_TRACE=1` — intra syntax bin trace
 
 ### Compare against FFmpeg-derived frame metadata
 
 ```bash
 go run ./cmd/trace264cmp -i input.h264 -v
 ```
+
+## FFmpeg CABAC parity workflow
+
+The active CABAC/Main/High work uses FFmpeg as the reference implementation and fixes one source-grounded divergence at a time. The canonical fixture order is `testsrc_cabac_p.h264`, then `bbb-frame0`, then broader Main/High samples.
+
+Two scripts support the loop:
+
+```bash
+./scripts/cabac_parity_baseline.sh /workspace/tmp/testsrc_cabac_p.h264 /workspace/tmp/go264-cabac-parity-baseline
+./scripts/cabac_firstdiv.sh /workspace/tmp/testsrc_cabac_p.h264 /workspace/tmp/go264-cabac-firstdiv
+```
+
+`cabac_parity_baseline.sh` regenerates Go YUV/PNG, FFmpeg YUV/showinfo, PSNR, and a summary in one repeatable command. `cabac_firstdiv.sh` patches/builds the local FFmpeg tree under `/workspace/tmp/ffmpeg-7.1.3` when needed, captures FFmpeg CABAC MB traces, captures Go decoder-backed traces, filters Go events to the FFmpeg-decoded frame range, and reports the first mismatching MB-level field.
+
+Current first-divergence status: the first MB-level mismatch on `testsrc_cabac_p.h264` remains a residual/non-zero-count summary mismatch at frame 0 MB 0. Finer syntax diagnostics showed that consuming the High-profile intra `transform_size_8x8_flag` moves early I4x4 CABAC bins closer to FFmpeg, but simply enabling that path lowered the `bbb-frame0` hard gate from 7.81 dB to 7.75 dB, so it remains rejected for normal decode until I8x8 prediction/reconstruction parity is source-grounded.
 
 ## Validation and profiling
 
@@ -160,7 +183,7 @@ Generators live in `internal/tables/` and are marked with `//go:build ignore` so
 ## Known gaps / tracked work
 
 - CABAC P-slice syntax now covers intra-in-P, skip/ref/MVD neighbour contexts, P8x8 sub-MB types and transform-size eligibility, chroma prediction mode contexts, `mb_qp_delta` context state, luma/chroma DC coded-block contexts, chroma DC/AC placement, residual category bounds, FFmpeg-style MVD context-cache clamping, FFmpeg-style 8×8 residual layout/non-zero-context write-back, CABAC I_PCM payload/reset handling, inter transform-size-before-DQP ordering, and byte-aligned arithmetic initialization, but Main/High frame quality remains below the correctness gate. CABAC residual/ref_idx/MVD/arithmetic helper boundaries are guarded against malformed direct use.
-- CABAC I8x8 `transform_size_8x8_flag` decode is intentionally guarded by `enableCABACI8x8Transform=false` because consuming the flag currently lowers BBB CABAC quality; it remains gated on better I8x8 neighbour-mode inference / reconstruction parity.
+- CABAC I8x8 `transform_size_8x8_flag` decode is intentionally guarded by `enableCABACI8x8Transform=false`. A FFmpeg-parity audit showed the flag is consumed before early I4x4 prediction-mode bins and improves the local syntax trace, but enabling it as normal decode currently lowers BBB CABAC quality from 7.81 dB to 7.75 dB; it remains gated on reference-grounded I8x8 neighbour-mode inference / reconstruction parity.
 - SIMD acceleration is in incremental integration: parity/fallback gates are present, an IDCT4x4 batch seam exists, and current work is focused on measured hot paths rather than speculative assembly.
 - Weighted prediction and FMO slice-group reconstruction are not implemented yet; the parser now consumes their syntax, including changing-FMO `slice_group_change_cycle`, plus reference marking/list-modification, POC, SP/SI, and deblocking fields, to keep subsequent fields aligned. B-slice list-use/sub-partition decisions are table-driven from FFmpeg/H.264, B ref_idx syntax uses clamped TE decoding, B skip runs are applied in decode, and B intra/residual payloads are consumed and exposed to trace/decode paths, though B reconstruction remains much less mature than Baseline/P-slice paths.
 - Encoder API, rate control, and full x264-like encode pipeline are planned but not yet implemented.

@@ -30,7 +30,7 @@ decode/           End-to-end decoder pipeline, conformance, benchmarks
 internal/tables/  go:generate commands for checked-in CABAC/CAVLC tables
 cmd/
   decode264       Decode Annex B to color PNG, luma PNG, or raw YUV
-  trace264        CAVLC MB-level P/B syntax tracer; rejects CABAC streams for now
+  trace264        CAVLC syntax tracer plus decoder-backed CABAC MB/event diagnostics
   trace264cmp     FFmpeg/showinfo comparison, frame stats, histograms
   trace264diff    Trace diff helper
 ```
@@ -42,7 +42,7 @@ Historical note: the package formerly named `slice` is now `syntax`, and the old
 ### Completed hard gates
 
 - Baseline CAVLC decode is correct enough to be marked complete.
-- Syntax parity tooling exists (`trace264`, `trace264cmp`).
+- Syntax parity tooling exists (`trace264`, `trace264cmp`, `trace264diff`) plus FFmpeg-backed CABAC first-divergence scripts.
 - Motion-vector parity has been validated on representative P-slice macroblocks.
 - Reconstruction parity has FFmpeg YUV/PSNR regression tests.
 - Chroma dequant now applies `chroma_qp_index_offset` through `frame.ChromaQP`.
@@ -74,10 +74,18 @@ Implemented:
 - I_PCM macroblocks consume aligned raw 8-bit 4:2:0 samples and reconstruct them directly in both CAVLC and CABAC paths; CABAC resets arithmetic state after the raw payload.
 - Chroma intra plane prediction mode is implemented; DC fallback remains only for unavailable plane references.
 
+Current parity tooling and findings:
+
+- `scripts/cabac_parity_baseline.sh` is the repeatable baseline harness for Go output, FFmpeg output, PSNR, snapshots, and logs.
+- `scripts/cabac_firstdiv.sh` patches/builds the local FFmpeg source tree when needed and compares decoder-backed Go CABAC MB traces against FFmpeg traces. It filters Go events to the FFmpeg-decoded frame range so event-count failures do not mask the first real frame-0 divergence.
+- CABAC diagnostics now cover MB summaries, CBP bin decisions with consistent arithmetic state, residual CBF/significant/last/level decisions, and intra syntax bins.
+- Current first MB-level divergence on `testsrc_cabac_p.h264` remains frame 0 MB 0 residual/non-zero-count summary (`tc`).
+- A source-grounded audit confirmed FFmpeg consumes the High-profile intra `transform_size_8x8_flag` before the early I4x4 prediction-mode bins. Enabling that path moves the local syntax trace closer to FFmpeg but lowers the `bbb-frame0` hard gate from 7.81 dB to 7.75 dB, so it is retained only as diagnostic evidence for the next isolated I8x8 parity fix.
+
 Still gated:
 
 - Main/High CABAC frame quality is still below the completion gate despite the P-slice syntax/context fixes above.
-- CABAC I8x8 `transform_size_8x8_flag` remains disabled in the intra path behind `enableCABACI8x8Transform=false` because enabling it currently lowers BBB CABAC quality. This should not be toggled on without a reference-grounded fix and PSNR/syntax parity proof.
+- CABAC I8x8 `transform_size_8x8_flag` remains disabled in the intra path behind `enableCABACI8x8Transform=false`; do not toggle it on without a reference-grounded I8x8 prediction/reconstruction fix and PSNR/syntax parity proof.
 
 ### Current reference metrics
 
@@ -103,6 +111,13 @@ go vet ./...
 go test -v ./decode -run 'TestConformancePSNR|TestConformanceYUV|TestSyntaxParity'
 go test ./decode -run '^$' -bench BenchmarkDecode -benchmem
 GOOS=linux GOARCH=arm64 go build ./...
+```
+
+CABAC parity loop:
+
+```bash
+./scripts/cabac_parity_baseline.sh /workspace/tmp/testsrc_cabac_p.h264 /workspace/tmp/go264-cabac-parity-baseline
+./scripts/cabac_firstdiv.sh /workspace/tmp/testsrc_cabac_p.h264 /workspace/tmp/go264-cabac-firstdiv
 ```
 
 Regenerate checked-in tables:
