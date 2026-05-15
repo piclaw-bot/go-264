@@ -77,6 +77,7 @@ def main() -> int:
     parser.add_argument("--min-pred-delta", type=int, help="only show rows whose absolute prediction delta is at least this value")
     parser.add_argument("--summary-by-mode", action="store_true", help="summarize absolute deltas by Go/FFmpeg predictor mode tuple")
     parser.add_argument("--sort", choices=("out", "pred", "res"), default="out", help="sort rows by absolute output, prediction, or residual delta")
+    parser.add_argument("--summary-spatial", action="store_true", help="summarize largest-delta rows by image-region buckets")
     args = parser.parse_args()
 
     go_blocks = parse_blocks(args.go_log, GO_RE)
@@ -118,6 +119,26 @@ def main() -> int:
     if not rows:
         print("no matching blocks after filters")
         return 1
+
+    if args.summary_spatial:
+        sort_index = {"out": 0, "pred": 3, "res": 4}[args.sort]
+        selected = sorted(rows, reverse=True, key=lambda item: abs(item[sort_index]))[: args.limit]
+        if not selected:
+            return 1
+        bucket_counts: dict[tuple[int, int], int] = {}
+        sum_x = 0
+        sum_y = 0
+        for _abs_out, _key, _out_delta, _pred_delta, _res_delta, _block_delta, g, _f in selected:
+            x = int(g["x"])
+            y = int(g["y"])
+            sum_x += x
+            sum_y += y
+            bucket = (x // 4, y // 4)
+            bucket_counts[bucket] = bucket_counts.get(bucket, 0) + 1
+        print(f"selected={len(selected)} sort={args.sort} avg_x={sum_x/len(selected):.2f} avg_y={sum_y/len(selected):.2f}")
+        for (bucket_x, bucket_y), count in sorted(bucket_counts.items(), key=lambda item: item[1], reverse=True):
+            print(f"bucket_x={bucket_x} bucket_y={bucket_y} count={count}")
+        return 0
 
     if args.summary_by_mode:
         groups: dict[tuple[object, object, object], dict[str, int]] = {}
