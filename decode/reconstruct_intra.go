@@ -347,7 +347,37 @@ func (d *Decoder) reconstruct8x8(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY, q
 			mode = 2
 		}
 		var predicted [64]uint8
-		pred.PredIntra8x8(predicted[:], mode, top, left, topLeft)
+		if mode == pred.Intra4x4DC {
+			topAvail := y0 > 0
+			leftAvail := x0 > 0
+			var dc uint8
+			if topAvail && leftAvail {
+				sum := 0
+				for i := 0; i < 8; i++ {
+					sum += int(top[i]) + int(left[i])
+				}
+				dc = uint8((sum + 8) >> 4)
+			} else if topAvail {
+				sum := 0
+				for i := 0; i < 8; i++ {
+					sum += int(top[i])
+				}
+				dc = uint8((sum + 4) >> 3)
+			} else if leftAvail {
+				sum := 0
+				for i := 0; i < 8; i++ {
+					sum += int(left[i])
+				}
+				dc = uint8((sum + 4) >> 3)
+			} else {
+				dc = 128
+			}
+			for i := range predicted {
+				predicted[i] = dc
+			}
+		} else {
+			pred.PredIntra8x8(predicted[:], mode, top, left, topLeft)
+		}
 
 		block := joinLuma8x8Residual(mb.Coeffs, b8)
 		transform.Dequant8x8(block[:], qp)
