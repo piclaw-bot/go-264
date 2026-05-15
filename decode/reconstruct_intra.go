@@ -407,9 +407,11 @@ func (d *Decoder) reconstruct8x8(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY, q
 		block := joinLuma8x8Residual(mb.Coeffs, b8)
 		traceRecon := os.Getenv("GO264_RECON_TRACE") != ""
 		var rawCoeff [64]int16
+		var ffRawCoeff [64]int16
 		var rawCoeffSum [4]int
 		if traceRecon {
 			rawCoeff = block
+			ffRawCoeff = luma8x8FFmpegStorageFromDirect(block)
 			for y := 0; y < 8; y++ {
 				for x := 0; x < 8; x++ {
 					rawCoeffSum[(y/4)*2+x/4] += int(block[y*8+x])
@@ -464,9 +466,37 @@ func (d *Decoder) reconstruct8x8(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY, q
 			}
 		}
 		if traceRecon {
-			fmt.Fprintf(os.Stderr, "GORECON part=i8x8 mb=%04d b8=%d x=%d y=%d syntax_mode=%d recon_mode=%d qp=%d predsum=%d raw_coeff_sum=%v dequant_coeff_sum=%v ressum=%d outsum=%d first_pred=%d first_res=%d tc=%d block_pred=%v block_res=%v block_out=%v raw_coeff=%v dequant_coeff=%v\n", mbY*d.mbW+mbX, b8, mbX, mbY, mode, reconMode, qp, predSum, rawCoeffSum, coeffSum, resSum, outSum, predicted[0], block[0], mb.TotalCoeff[b8*4], blockPredSum, blockResSum, blockOutSum, rawCoeff, dequantCoeff)
+			fmt.Fprintf(os.Stderr, "GORECON part=i8x8 mb=%04d b8=%d x=%d y=%d syntax_mode=%d recon_mode=%d qp=%d predsum=%d raw_coeff_sum=%v dequant_coeff_sum=%v ressum=%d outsum=%d first_pred=%d first_res=%d tc=%d block_pred=%v block_res=%v block_out=%v raw_coeff=%v ff_raw_coeff=%v dequant_coeff=%v\n", mbY*d.mbW+mbX, b8, mbX, mbY, mode, reconMode, qp, predSum, rawCoeffSum, coeffSum, resSum, outSum, predicted[0], block[0], mb.TotalCoeff[b8*4], blockPredSum, blockResSum, blockOutSum, rawCoeff, ffRawCoeff, dequantCoeff)
 		}
 	}
+}
+
+func luma8x8FFmpegStorageFromDirect(direct [64]int16) [64]int16 {
+	var out [64]int16
+	ffScan := [64]int{
+		0, 8, 1, 2, 9, 16, 24, 17,
+		10, 3, 4, 11, 18, 25, 32, 40,
+		33, 26, 19, 12, 5, 6, 13, 20,
+		27, 34, 41, 48, 56, 49, 42, 35,
+		28, 21, 14, 7, 15, 22, 29, 36,
+		43, 50, 57, 58, 51, 44, 37, 30,
+		23, 31, 38, 45, 52, 59, 60, 53,
+		46, 39, 47, 54, 61, 62, 55, 63,
+	}
+	directScan := [64]int{
+		0, 1, 8, 16, 9, 2, 3, 10,
+		17, 24, 32, 25, 18, 11, 4, 5,
+		12, 19, 26, 33, 40, 48, 41, 34,
+		27, 20, 13, 6, 7, 14, 21, 28,
+		35, 42, 49, 56, 57, 50, 43, 36,
+		29, 22, 15, 23, 30, 37, 44, 51,
+		58, 59, 52, 45, 38, 31, 39, 46,
+		53, 60, 61, 54, 47, 55, 62, 63,
+	}
+	for scanPos := range ffScan {
+		out[ffScan[scanPos]] = direct[directScan[scanPos]]
+	}
+	return out
 }
 
 func filteredI8x8Top(top [16]uint8, topLeft uint8, hasTopLeft, hasTopRight bool) [8]int {
