@@ -19,6 +19,7 @@ func TestBPredictionHelpersHandleMalformedRects(t *testing.T) {
 	ref := frame.NewFrame(16, 16)
 	fillBPredBlock(dst[:], ref, 0, 0, -1, 0, 8, 8, syntax.MotionVector{})
 	fillBPredBlock(dst[:], ref, 0, 0, 0, 0, 17, 1, syntax.MotionVector{})
+	fillBPredBlock(dst[:], &frame.Frame{Width: 16, Height: 16}, 0, 0, 0, 0, 16, 16, syntax.MotionVector{})
 	d.fillBPredByUse(dst[:], ref, 0, 0, 15, 15, 2, 2, 0, 0, syntax.MotionVector{}, syntax.MotionVector{}, true, true)
 	d.fillBPredByUse(dst[:0], ref, 0, 0, 0, 0, 16, 16, 0, 0, syntax.MotionVector{}, syntax.MotionVector{}, true, true)
 }

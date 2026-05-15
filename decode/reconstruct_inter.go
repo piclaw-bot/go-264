@@ -447,7 +447,11 @@ func (d *Decoder) writeInterResidual(f *frame.Frame, mb *syntax.MBInter, predict
 }
 
 func fillBPredBlock(dst []uint8, ref *frame.Frame, srcBaseX, srcBaseY, dstX, dstY, w, h int, mv syntax.MotionVector) {
-	if ref == nil || ref.Width <= 0 || ref.Height <= 0 || len(dst) < 256 || !valid16x16Rect(dstX, dstY, w, h) {
+	if ref == nil || ref.Width <= 0 || ref.Height <= 0 || ref.StrideY <= 0 || ref.Width > ref.StrideY || len(dst) < 256 || !valid16x16Rect(dstX, dstY, w, h) {
+		return
+	}
+	lastPixel := (ref.Height-1)*ref.StrideY + (ref.Width - 1)
+	if lastPixel < 0 || lastPixel >= len(ref.Y) {
 		return
 	}
 	for y := 0; y < h; y++ {
