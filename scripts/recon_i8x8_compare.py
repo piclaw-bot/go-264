@@ -55,6 +55,8 @@ def main() -> int:
     parser.add_argument("--mb", type=int, help="only compare one macroblock address")
     parser.add_argument("--b8", type=int, choices=range(4), metavar="0..3", help="only compare one luma 8x8 block")
     parser.add_argument("--occurrence", type=int, help="only compare one occurrence index for repeated mb/b8 keys")
+    parser.add_argument("--max-pred-delta", type=int, help="only show rows whose absolute prediction delta is at most this value")
+    parser.add_argument("--min-pred-delta", type=int, help="only show rows whose absolute prediction delta is at least this value")
     args = parser.parse_args()
 
     go_blocks = parse_blocks(args.go_log, GO_RE)
@@ -85,6 +87,10 @@ def main() -> int:
         pred_delta = int(g["predsum"]) - int(f["predsum"])
         gb = g["block_out"]
         fb = f["block_out"]
+        if args.max_pred_delta is not None and abs(pred_delta) > args.max_pred_delta:
+            continue
+        if args.min_pred_delta is not None and abs(pred_delta) < args.min_pred_delta:
+            continue
         block_delta = [int(gb[i]) - int(fb[i]) for i in range(min(len(gb), len(fb)))]
         rows.append((abs(out_delta), key, out_delta, pred_delta, block_delta, g, f))
 
