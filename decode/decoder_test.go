@@ -90,3 +90,23 @@ func TestDecodePFrame(t *testing.T) {
 		t.Fatal("expected at least 1 frame")
 	}
 }
+
+func TestDecoderTraceMBReceivesCABACEvents(t *testing.T) {
+	data, err := os.ReadFile("/workspace/tmp/testsrc_cabac_p.h264")
+	if err != nil {
+		t.Skipf("no CABAC fixture: %v", err)
+	}
+	dec := NewDecoder()
+	seenCABAC := false
+	dec.TraceMB = func(ev MBTraceEvent) {
+		if ev.EntropyCABAC {
+			seenCABAC = true
+		}
+	}
+	if _, err := dec.Decode(data); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !seenCABAC {
+		t.Fatal("TraceMB did not receive CABAC macroblock events")
+	}
+}

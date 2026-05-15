@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/rcarmo/go-264/decode"
 	"github.com/rcarmo/go-264/nal"
 	"github.com/rcarmo/go-264/syntax"
 )
@@ -23,10 +24,36 @@ func main() {
 		fmt.Fprintf(os.Stderr, "read: %v\n", err)
 		os.Exit(1)
 	}
+	if *cabac {
+		if err := traceCABACDecode(data, *limit); err != nil {
+			fmt.Fprintf(os.Stderr, "trace: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
 	if err := trace(data, *limit, *cabac); err != nil {
 		fmt.Fprintf(os.Stderr, "trace: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func traceCABACDecode(data []byte, limit int) error {
+	dec := decode.NewDecoder()
+	seen := 0
+	dec.TraceMB = func(ev decode.MBTraceEvent) {
+		if limit > 0 && seen >= limit {
+			return
+		}
+		seen++
+		fmt.Printf("  mb=%04d x=%02d y=%02d cabac=%t slice=%d frame=%d kind=%s type=%d skip=%t cbp=%02x qpd=%d qp=%d 8x8=%t chromaMode=%d ref=%v mv=%v subType=%v subMV0=%v tc=%v ctc=%v\n",
+			ev.MBAddr, ev.MBX, ev.MBY, ev.EntropyCABAC, ev.SliceType, ev.FrameNum, ev.Kind, ev.MBType, ev.Skipped, ev.CBP, ev.QPDelta, ev.QP, ev.Use8x8, ev.ChromaPred, ev.RefIdx, ev.MV, ev.SubMBType, ev.SubMV[0], ev.TotalCoeff, ev.ChromaCoeff)
+	}
+	frames, err := dec.Decode(data)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("decoded_frames=%d traced_mbs=%d\n", len(frames), seen)
+	return nil
 }
 
 func trace(data []byte, limit int, cabacTrace bool) error {

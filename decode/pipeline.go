@@ -11,6 +11,34 @@ import (
 	"github.com/rcarmo/go-264/syntax"
 )
 
+// MBTraceEvent is a compact macroblock syntax snapshot emitted after a
+// macroblock is decoded but before the optional CABAC termination bit is read.
+// It deliberately records decoded syntax, not reconstructed pixels, so trace
+// consumers can compare CABAC decisions against FFmpeg before chasing prediction
+// or transform drift.
+type MBTraceEvent struct {
+	NALType      uint8
+	FrameNum     int
+	SliceType    uint32
+	MBAddr, MBX  int
+	MBY          int
+	EntropyCABAC bool
+	Kind         string
+	MBType       uint32
+	SubMBType    [4]uint32
+	CBP          uint32
+	QPDelta      int32
+	QP           int
+	Skipped      bool
+	Use8x8       bool
+	ChromaPred   int8
+	RefIdx       [4]int8
+	MV           [4]syntax.MotionVector
+	SubMV        [16]syntax.MotionVector
+	TotalCoeff   [16]int
+	ChromaCoeff  [2][4]int
+}
+
 // Decoder is an H.264 Annex B bitstream decoder.
 type Decoder struct {
 	SPS    map[uint32]*nal.SPS
@@ -22,6 +50,9 @@ type Decoder struct {
 	mbW, mbH   int
 	// chromaQPOffset: pps.ChromaQPIndexOffset, set at the start of each slice.
 	chromaQPOffset int
+	// TraceMB is optional diagnostic output for first-divergence tooling. Leave
+	// nil in normal decode paths to avoid overhead and preserve API behaviour.
+	TraceMB func(MBTraceEvent)
 }
 
 // DecodedFrame is an alias for frame.Frame for CLI convenience.
@@ -85,6 +116,12 @@ func (d *Decoder) Decode(data []byte) ([]*frame.Frame, error) {
 
 	d.Frames = append(d.Frames, frames...)
 	return frames, nil
+}
+
+func (d *Decoder) traceMB(ev MBTraceEvent) {
+	if d != nil && d.TraceMB != nil {
+		d.TraceMB(ev)
+	}
 }
 
 func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultErr error) {
@@ -279,6 +316,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 				}
 			}
 			writeBackIntra4x4(ref4Ctx, mv4Stride, mbX, mbY)
+			d.traceMB(MBTraceEvent{NALType: unit.Type, FrameNum: int(hdr.FrameNum), SliceType: hdr.SliceType, MBAddr: mbIdx, MBX: mbX, MBY: mbY, EntropyCABAC: pps.EntropyCodingMode == 1, Kind: "I", MBType: mb.MBType, CBP: mb.CodedBlockPattern, QPDelta: mb.QPDelta, QP: currentQP, Use8x8: mb.Use8x8Transform, ChromaPred: mb.ChromaPredMode, TotalCoeff: mb.TotalCoeff, ChromaCoeff: mb.ChromaTotalCoeff})
 			if pps.EntropyCodingMode == 1 && cabacDec.DecodeTerminate() == 1 {
 				break
 			}
@@ -310,6 +348,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					nonSkipCtx[mbIdx] = false
 					transform8x8Ctx[mbIdx] = false
 					writeBackInter4x4(mv4Ctx, ref4Ctx, mv4Stride, mbX, mbY, mbInter)
+					d.traceMB(MBTraceEvent{NALType: unit.Type, FrameNum: int(hdr.FrameNum), SliceType: hdr.SliceType, MBAddr: mbIdx, MBX: mbX, MBY: mbY, EntropyCABAC: true, Kind: "P_SKIP", MBType: mbInter.MBType, QP: currentQP, Skipped: true, RefIdx: mbInter.RefIdx, MV: mbInter.MV})
 					if cabacDec.DecodeTerminate() == 1 {
 						break
 					}
@@ -327,6 +366,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					transform8x8Ctx[mbIdx] = mbIntra.Use8x8Transform
 					chromaPredModeCtx[mbIdx] = mbIntra.ChromaPredMode
 					writeBackIntra4x4(ref4Ctx, mv4Stride, mbX, mbY)
+					d.traceMB(MBTraceEvent{NALType: unit.Type, FrameNum: int(hdr.FrameNum), SliceType: hdr.SliceType, MBAddr: mbIdx, MBX: mbX, MBY: mbY, EntropyCABAC: true, Kind: "P_INTRA", MBType: mbIntra.MBType, CBP: mbIntra.CodedBlockPattern, QPDelta: mbIntra.QPDelta, QP: currentQP, Use8x8: mbIntra.Use8x8Transform, ChromaPred: mbIntra.ChromaPredMode, TotalCoeff: mbIntra.TotalCoeff, ChromaCoeff: mbIntra.ChromaTotalCoeff})
 					if cabacDec.DecodeTerminate() == 1 {
 						break
 					}
@@ -343,6 +383,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 				nonSkipCtx[mbIdx] = true
 				transform8x8Ctx[mbIdx] = mbInter.Use8x8Transform
 				writeBackInter4x4(mv4Ctx, ref4Ctx, mv4Stride, mbX, mbY, mbInter)
+				d.traceMB(MBTraceEvent{NALType: unit.Type, FrameNum: int(hdr.FrameNum), SliceType: hdr.SliceType, MBAddr: mbIdx, MBX: mbX, MBY: mbY, EntropyCABAC: true, Kind: "P", MBType: mbInter.MBType, SubMBType: mbInter.SubMBType, CBP: mbInter.CBP, QPDelta: mbInter.QPDelta, QP: currentQP, Use8x8: mbInter.Use8x8Transform, RefIdx: mbInter.RefIdx, MV: mbInter.MV, SubMV: mbInter.SubMV, TotalCoeff: mbInter.TotalCoeff, ChromaCoeff: mbInter.ChromaTotalCoeff})
 				if cabacDec.DecodeTerminate() == 1 {
 					break
 				}
