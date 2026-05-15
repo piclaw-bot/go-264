@@ -46,6 +46,7 @@ Historical note: the package formerly named `slice` is now `syntax`, and the old
 - Motion-vector parity has been validated on representative P-slice macroblocks.
 - Reconstruction parity has FFmpeg YUV/PSNR regression tests.
 - Chroma dequant now applies `chroma_qp_index_offset` through `frame.ChromaQP`.
+- Chroma intra DC prediction now matches FFmpeg's quadrant/edge predictors (`pred8x8_dc`, `pred8x8_left_dc`, `pred8x8_top_dc`).
 - I4x4 top-right reference availability was fixed per H.264 §8.3.1.1.
 - Refactoring is complete:
   - `decode/decoder.go` split into focused files.
@@ -68,7 +69,7 @@ Implemented:
 - CABAC coded-block-flag and residual decoding, including FFmpeg high-bit CBP context tracking for I16x16 luma DC and chroma DC.
 - CABAC end-of-slice terminate handling, byte-aligned arithmetic decoder initialization after slice header parsing, and reinitialization after CABAC I_PCM raw sample payloads.
 - H.264 zigzag scan mapping for residual output.
-- I8x8 prediction modes and strong reference-pixel filtering.
+- I8x8 prediction modes, strong reference-pixel filtering, and CABAC intra `transform_size_8x8_flag` consumption.
 - Inter-MB `transform_size_8x8_flag` decode path and 8×8 residual category support.
 - Slice/PPS syntax keeps later fields aligned by consuming POC deltas, non-reference-slice ref-marking absence, SP/SI-only fields, weighted-prediction tables, reference-list modification operands, unsigned deblocking idc/offsets, PPS slice-group-map syntax, and changing-FMO `slice_group_change_cycle` bits even though weighted prediction and FMO reconstruction are still future work. B-slice CAVLC macroblock syntax now consumes FFmpeg/H.264 table-driven list-use, sub-partition MVD counts, TE ref_idx values, direct residual syntax, B intra payloads, and luma/chroma residual coefficients; B skip runs are applied in the decode branch.
 - I_PCM macroblocks consume aligned raw 8-bit 4:2:0 samples and reconstruct them directly in both CAVLC and CABAC paths; CABAC resets arithmetic state after the raw payload.
@@ -79,13 +80,14 @@ Current parity tooling and findings:
 - `scripts/cabac_parity_baseline.sh` is the repeatable baseline harness for Go output, FFmpeg output, PSNR, snapshots, and logs.
 - `scripts/cabac_firstdiv.sh` patches/builds the local FFmpeg source tree when needed and compares decoder-backed Go CABAC MB traces against FFmpeg traces. It filters Go events to the FFmpeg-decoded frame range so event-count failures do not mask the first real frame-0 divergence.
 - CABAC diagnostics now cover MB summaries, CBP bin decisions with consistent arithmetic state, residual CBF/significant/last/level decisions, and intra syntax bins.
-- Current first MB-level divergence on `testsrc_cabac_p.h264` remains frame 0 MB 0 residual/non-zero-count summary (`tc`).
-- A source-grounded audit confirmed FFmpeg consumes the High-profile intra `transform_size_8x8_flag` before the early I4x4 prediction-mode bins. Enabling that path moves the local syntax trace closer to FFmpeg but lowers the `bbb-frame0` hard gate from 7.81 dB to 7.75 dB, so it is retained only as diagnostic evidence for the next isolated I8x8 parity fix.
+- `testsrc_cabac_p.h264` and `bbb_annexb.h264` first-frame MB syntax summaries now report `NO_DIVERGENCE in compared fields`.
+- `GO264_RECON_TRACE=1` now emits luma Intra_8x8 prediction/residual/output checksums and chroma prediction/residual/output plus per-4×4 block checksums, enabling direct FFmpeg reconstruction comparisons.
+- Recent accepted reconstruction fixes include luma Intra_8x8 filtered DC references and FFmpeg chroma DC quadrant/edge predictors. The active gap is remaining Main/High reconstruction quality, especially luma/I8x8-heavy `bbb-frame0`.
 
 Still gated:
 
-- Main/High CABAC frame quality is still below the completion gate despite the P-slice syntax/context fixes above.
-- CABAC I8x8 `transform_size_8x8_flag` remains disabled in the intra path behind `enableCABACI8x8Transform=false`; do not toggle it on without a reference-grounded I8x8 prediction/reconstruction fix and PSNR/syntax parity proof.
+- Main/High CABAC frame quality is still below the completion gate despite first-frame syntax parity and the recent reconstruction fixes.
+- Remaining I8x8 work is reconstruction parity (mode availability/filtered predictors/IDCT/residual placement), not `transform_size_8x8_flag` consumption.
 
 ### Current reference metrics
 
@@ -93,8 +95,10 @@ Still gated:
 |---|---:|
 | `dark64` avg PSNR | 31.23 dB |
 | Baseline CAVLC avg PSNR | 27.65 dB |
-| Baseline YUV PSNR | Y=39.58 U=26.47 V=21.76 dB |
-| `bbb-frame0` CABAC avg PSNR | 7.81 dB |
+| Baseline YUV PSNR | Y=39.58 U=38.13 V=34.03 dB |
+| `testsrc_cabac_p.h264` frame 0 | Y=46.58 U=56.42 V=59.54 dB |
+| `bbb-frame0` CABAC avg PSNR | 12.09 dB |
+| `bbb_annexb.h264` frame 0 | Y=12.11 U=31.42 V=47.25 dB |
 | BBB baseline decode allocations | ~10.9 MB/op, ~1.3k allocs/op |
 | BBB baseline decode sample | ~44-52 ms/op typical recent sample |
 
@@ -144,7 +148,7 @@ Recent completed guardrails and low-level improvements:
 - Inter zero-residual paths copy prediction directly for uncoded luma CBP groups, zero-`TotalCoeff` 4×4 blocks, all-zero 8×8 transform groups, chroma CBP=0, and zero chroma 4×4 residual blocks.
 - Decoder and `trace264` now share the same QP wraparound semantics and 4×4 MV/ref-cache source-of-truth model; B-intra QP deltas are read from parsed intra payloads in both decode/trace flows, stale macroblock-level trace MV context was removed, and MV cache read/fill helpers reject bad strides, short slices, and negative origins.
 - SPS/PPS parsing has defensive scaling-list wraparound, saturated cropped-dimension derivation for malformed crop fields, and continues past PPS slice-group maps before reading ref counts, weighted prediction flags, QP offsets, deblocking flags, and High-profile extensions. Slice parsing now follows FFmpeg ordering for POC type 0/1 deltas, reference marking gated by `nal_ref_idc`, SP/SI fields, unsigned deblocking idc syntax, and changing-FMO `slice_group_change_cycle` consumption.
-- Frame and reconstruction helper boundaries are guarded for direct tests/tools: `SafePixelY`/4×4 block helpers validate malformed frame storage, while intra/inter/B reconstruction uses fixed stack prediction buffers for 16×16 temporaries and guards nil frames, nil macroblocks, invalid references, malformed B prediction rectangles/reference storage, chroma intra plane storage, and out-of-frame macroblock coordinates. B-slice syntax helpers now follow FFmpeg/H.264 table mappings for list use/sub-partition counts, share inter residual CAVLC decoding with P-slices including the 8×8-transform scan path, clamp malformed TE ref_idx values, and pass slice/PPS/neighbour context through `BidiDecodeOpts`.
+- Frame and reconstruction helper boundaries are guarded for direct tests/tools: `SafePixelY`/4×4 block helpers validate malformed frame storage, while intra/inter/B reconstruction uses fixed stack prediction buffers for intra edge/prediction temporaries and guards nil frames, nil macroblocks, invalid references, malformed B prediction rectangles/reference storage, chroma intra plane storage, and out-of-frame macroblock coordinates. B-slice syntax helpers now follow FFmpeg/H.264 table mappings for list use/sub-partition counts, share inter residual CAVLC decoding with P-slices including the 8×8-transform scan path, clamp malformed TE ref_idx values, and pass slice/PPS/neighbour context through `BidiDecodeOpts`.
 - `transform.IDCT4x4BatchMask` skips transform work for known-zero dense residual slots.
 - `transform.Dequant4x4` uses precomputed scale tables; `Dequant4x4Block` handles fixed-size hot decode blocks; public `Quant4x4`/`Dequant4x4` helpers are hardened for short blocks and invalid QP values.
 
