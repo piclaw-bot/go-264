@@ -434,7 +434,9 @@ func decodeCABACIntraMBWithParams(dec *cabac.CABACDecoder, models []cabac.CABACC
 	stateOffset := ctxBase
 	isI16 := false
 	if intraSlice {
-		intraCtx := int(isCABACIntra16orPCM(leftMBType) + 2*isCABACIntra16orPCM(topMBType))
+		// FFmpeg decode_cabac_intra_mb_type() uses the count of I16x16/PCM
+		// neighbours, not a directional left+2*top code: left and top each add one.
+		intraCtx := int(isCABACIntra16orPCM(leftMBType) + isCABACIntra16orPCM(topMBType))
 		if traceBin("intra_mb_type0", ctxBase+intraCtx) == 0 {
 			mb.MBType = 0 // I_NxN
 		} else {
