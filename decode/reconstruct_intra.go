@@ -622,30 +622,64 @@ func (d *Decoder) predictChroma8x8(f *frame.Frame, comp int, mbX, mbY, mode int)
 			}
 		}
 	default: // DC
-		var dc uint8
 		if mbX > 0 && mbY > 0 {
-			sum := 0
-			for i := 0; i < 8; i++ {
-				sum += int(top[i]) + int(left[i])
+			leftTop, leftBottom, topLeft, topRight := 0, 0, 0, 0
+			for i := 0; i < 4; i++ {
+				leftTop += int(left[i])
+				leftBottom += int(left[i+4])
+				topLeft += int(top[i])
+				topRight += int(top[i+4])
 			}
-			dc = uint8((sum + 8) >> 4)
+			dc0 := uint8((leftTop + topLeft + 4) >> 3)
+			dc1 := uint8((topRight + 2) >> 2)
+			dc2 := uint8((leftBottom + 2) >> 2)
+			dc3 := uint8((topRight + leftBottom + 4) >> 3)
+			for y := 0; y < 8; y++ {
+				for x := 0; x < 8; x++ {
+					switch {
+					case y < 4 && x < 4:
+						out[y*8+x] = dc0
+					case y < 4:
+						out[y*8+x] = dc1
+					case x < 4:
+						out[y*8+x] = dc2
+					default:
+						out[y*8+x] = dc3
+					}
+				}
+			}
 		} else if mbY > 0 {
-			sum := 0
-			for i := 0; i < 8; i++ {
-				sum += int(top[i])
+			topLeft, topRight := 0, 0
+			for i := 0; i < 4; i++ {
+				topLeft += int(top[i])
+				topRight += int(top[i+4])
 			}
-			dc = uint8((sum + 4) >> 3)
+			dc0 := uint8((topLeft + 2) >> 2)
+			dc1 := uint8((topRight + 2) >> 2)
+			for y := 0; y < 8; y++ {
+				for x := 0; x < 4; x++ {
+					out[y*8+x] = dc0
+					out[y*8+x+4] = dc1
+				}
+			}
 		} else if mbX > 0 {
-			sum := 0
-			for i := 0; i < 8; i++ {
-				sum += int(left[i])
+			leftTop, leftBottom := 0, 0
+			for i := 0; i < 4; i++ {
+				leftTop += int(left[i])
+				leftBottom += int(left[i+4])
 			}
-			dc = uint8((sum + 4) >> 3)
+			dc0 := uint8((leftTop + 2) >> 2)
+			dc2 := uint8((leftBottom + 2) >> 2)
+			for y := 0; y < 4; y++ {
+				for x := 0; x < 8; x++ {
+					out[y*8+x] = dc0
+					out[(y+4)*8+x] = dc2
+				}
+			}
 		} else {
-			dc = 128
-		}
-		for i := range out {
-			out[i] = dc
+			for i := range out {
+				out[i] = 128
+			}
 		}
 	}
 	return out
