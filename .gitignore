@@ -1,0 +1,8 @@
+# Python validation artifacts from helper scripts.
+__pycache__/
+*.py[cod]
+
+# Local build/profile outputs.
+*.test
+*.prof
+*.out
