@@ -185,8 +185,26 @@ func decodeCABACMVDPair(dec *cabac.CABACDecoder, models []cabac.CABACCtx, mvd4 [
 	amvdY := cabacMVDAMVD(mvd4, stride4, x4, y4, 1)
 	mdy := syntax.DecodeCABACMVD(dec, models, 47, amvdY)
 	mvd := syntax.MotionVector{X: mdx, Y: mdy}
-	fillMVD4(mvd4, stride4, x4, y4, w4, h4, mvd)
+	// FFmpeg's decode_cabac_mb_mvd returns the full signed MVD for motion
+	// reconstruction, but stores min(abs(mvd),70) in mvda for future CABAC
+	// context selection. Keep those roles separate so large legal MVDs don't
+	// poison neighbouring context bins.
+	fillMVD4(mvd4, stride4, x4, y4, w4, h4, cabacMVDContextVector(mvd))
 	return mvd
+}
+
+func cabacMVDContextVector(mv syntax.MotionVector) syntax.MotionVector {
+	return syntax.MotionVector{X: cabacMVDContextComponent(mv.X), Y: cabacMVDContextComponent(mv.Y)}
+}
+
+func cabacMVDContextComponent(v int16) int16 {
+	if v < 0 {
+		v = -v
+	}
+	if v > 70 {
+		return 70
+	}
+	return v
 }
 
 func decodeCABACPSubMBType(dec *cabac.CABACDecoder, models []cabac.CABACCtx) uint32 {

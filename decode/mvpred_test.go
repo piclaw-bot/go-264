@@ -25,6 +25,16 @@ func TestFillMV4HandlesInvalidInputs(t *testing.T) {
 	fillMV4(make([]syntax.MotionVector, 1), make([]int8, 1), 4, -1, -1, 2, 2, syntax.MotionVector{X: 1}, 0)
 }
 
+func TestCABACMVDContextVectorClampsMagnitude(t *testing.T) {
+	got := cabacMVDContextVector(syntax.MotionVector{X: -99, Y: 42})
+	if got.X != 70 || got.Y != 42 {
+		t.Fatalf("context vector got %+v want {X:70 Y:42}", got)
+	}
+	if returned := (syntax.MotionVector{X: -99, Y: 42}); returned.X != -99 {
+		t.Fatalf("test invariant: reconstruction MVD should stay signed/full, got %+v", returned)
+	}
+}
+
 func TestCABACMVContextHelpersHandleInvalidInputs(t *testing.T) {
 	if got := cabacRefIdxCtx([]int8{1}, 0, 0, 0); got != 0 {
 		t.Fatalf("cabacRefIdxCtx zero stride got %d want 0", got)
