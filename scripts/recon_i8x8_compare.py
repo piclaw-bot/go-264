@@ -48,6 +48,9 @@ def main() -> int:
     parser.add_argument("go_log", type=Path)
     parser.add_argument("ffmpeg_log", type=Path)
     parser.add_argument("--limit", type=int, default=20)
+    parser.add_argument("--mb", type=int, help="only compare one macroblock address")
+    parser.add_argument("--b8", type=int, choices=range(4), metavar="0..3", help="only compare one luma 8x8 block")
+    parser.add_argument("--occurrence", type=int, help="only compare one occurrence index for repeated mb/b8 keys")
     args = parser.parse_args()
 
     go_blocks = parse_blocks(args.go_log, GO_RE)
@@ -61,6 +64,13 @@ def main() -> int:
 
     rows = []
     for key in common:
+        (mb, b8), occurrence = key
+        if args.mb is not None and mb != args.mb:
+            continue
+        if args.b8 is not None and b8 != args.b8:
+            continue
+        if args.occurrence is not None and occurrence != args.occurrence:
+            continue
         g = go[key]
         f = ff[key]
         out_delta = int(g["outsum"]) - int(f["outsum"])
@@ -69,6 +79,10 @@ def main() -> int:
         fb = f["block_out"]
         block_delta = [int(gb[i]) - int(fb[i]) for i in range(min(len(gb), len(fb)))]
         rows.append((abs(out_delta), key, out_delta, pred_delta, block_delta, g, f))
+
+    if not rows:
+        print("no matching blocks after filters")
+        return 1
 
     rows.sort(reverse=True, key=lambda item: item[0])
     for _, ((mb, b8), occurrence), out_delta, pred_delta, block_delta, g, f in rows[: args.limit]:
