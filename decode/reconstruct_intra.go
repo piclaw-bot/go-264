@@ -355,16 +355,7 @@ func (d *Decoder) reconstruct8x8(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY, q
 			// with LEFT_DC_PRED even though the stored syntax mode is horizontal.
 			// Keep the CABAC prediction-mode state unchanged, but mirror the
 			// reconstruction predictor selected by FFmpeg's checked mode cache.
-			filteredLeft := func() [8]int {
-				var l [8]int
-				l[0] = (int(left[0]) + 2*int(left[0]) + int(left[1]) + 2) >> 2
-				for i := 1; i <= 6; i++ {
-					l[i] = (int(left[i-1]) + 2*int(left[i]) + int(left[i+1]) + 2) >> 2
-				}
-				l[7] = (int(left[6]) + 3*int(left[7]) + 2) >> 2
-				return l
-			}
-			l := filteredLeft()
+			l := filteredI8x8Left(left, topLeft, false)
 			sum := 0
 			for i := 0; i < 8; i++ {
 				sum += l[i]
@@ -378,53 +369,24 @@ func (d *Decoder) reconstruct8x8(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY, q
 			leftAvail := x0 > 0
 			hasTopLeft := x0 > 0 && y0 > 0
 			hasTopRight := y0 > 0 && x0+8 < f.Width
-			filteredTop := func() [8]int {
-				var t [8]int
-				leftRef := int(top[0])
-				if hasTopLeft {
-					leftRef = int(topLeft)
-				}
-				t[0] = (leftRef + 2*int(top[0]) + int(top[1]) + 2) >> 2
-				for i := 1; i <= 6; i++ {
-					t[i] = (int(top[i-1]) + 2*int(top[i]) + int(top[i+1]) + 2) >> 2
-				}
-				rightRef := int(top[7])
-				if hasTopRight {
-					rightRef = int(top[8])
-				}
-				t[7] = (rightRef + 2*int(top[7]) + int(top[6]) + 2) >> 2
-				return t
-			}
-			filteredLeft := func() [8]int {
-				var l [8]int
-				topRef := int(left[0])
-				if hasTopLeft {
-					topRef = int(topLeft)
-				}
-				l[0] = (topRef + 2*int(left[0]) + int(left[1]) + 2) >> 2
-				for i := 1; i <= 6; i++ {
-					l[i] = (int(left[i-1]) + 2*int(left[i]) + int(left[i+1]) + 2) >> 2
-				}
-				l[7] = (int(left[6]) + 3*int(left[7]) + 2) >> 2
-				return l
-			}
 			var dc uint8
 			if topAvail && leftAvail {
-				t, l := filteredTop(), filteredLeft()
+				t := filteredI8x8Top(top, topLeft, hasTopLeft, hasTopRight)
+				l := filteredI8x8Left(left, topLeft, hasTopLeft)
 				sum := 0
 				for i := 0; i < 8; i++ {
 					sum += t[i] + l[i]
 				}
 				dc = uint8((sum + 8) >> 4)
 			} else if topAvail {
-				t := filteredTop()
+				t := filteredI8x8Top(top, topLeft, hasTopLeft, hasTopRight)
 				sum := 0
 				for i := 0; i < 8; i++ {
 					sum += t[i]
 				}
 				dc = uint8((sum + 4) >> 3)
 			} else if leftAvail {
-				l := filteredLeft()
+				l := filteredI8x8Left(left, topLeft, hasTopLeft)
 				sum := 0
 				for i := 0; i < 8; i++ {
 					sum += l[i]
@@ -491,6 +453,38 @@ func (d *Decoder) reconstruct8x8(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY, q
 			fmt.Fprintf(os.Stderr, "GORECON part=i8x8 mb=%04d b8=%d x=%d y=%d mode=%d qp=%d predsum=%d coeff_sum=%v ressum=%d outsum=%d first_pred=%d first_res=%d tc=%d block_pred=%v block_res=%v block_out=%v\n", mbY*d.mbW+mbX, b8, mbX, mbY, mode, qp, predSum, coeffSum, resSum, outSum, predicted[0], block[0], mb.TotalCoeff[b8*4], blockPredSum, blockResSum, blockOutSum)
 		}
 	}
+}
+
+func filteredI8x8Top(top [16]uint8, topLeft uint8, hasTopLeft, hasTopRight bool) [8]int {
+	var t [8]int
+	leftRef := int(top[0])
+	if hasTopLeft {
+		leftRef = int(topLeft)
+	}
+	t[0] = (leftRef + 2*int(top[0]) + int(top[1]) + 2) >> 2
+	for i := 1; i <= 6; i++ {
+		t[i] = (int(top[i-1]) + 2*int(top[i]) + int(top[i+1]) + 2) >> 2
+	}
+	rightRef := int(top[7])
+	if hasTopRight {
+		rightRef = int(top[8])
+	}
+	t[7] = (rightRef + 2*int(top[7]) + int(top[6]) + 2) >> 2
+	return t
+}
+
+func filteredI8x8Left(left [8]uint8, topLeft uint8, hasTopLeft bool) [8]int {
+	var l [8]int
+	topRef := int(left[0])
+	if hasTopLeft {
+		topRef = int(topLeft)
+	}
+	l[0] = (topRef + 2*int(left[0]) + int(left[1]) + 2) >> 2
+	for i := 1; i <= 6; i++ {
+		l[i] = (int(left[i-1]) + 2*int(left[i]) + int(left[i+1]) + 2) >> 2
+	}
+	l[7] = (int(left[6]) + 3*int(left[7]) + 2) >> 2
+	return l
 }
 
 func (d *Decoder) reconstructChromaIntra(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY, qp int) {
