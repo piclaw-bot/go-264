@@ -69,6 +69,7 @@ def main() -> int:
     parser.add_argument("--mb", type=int)
     parser.add_argument("--limit", type=int, default=50)
     parser.add_argument("--mismatches-only", action="store_true")
+    parser.add_argument("--mode-mismatches-only", action="store_true", help="only show rows where decoded/checked mode differs")
     args = parser.parse_args()
 
     go = parse_go(args.go_trace)
@@ -84,6 +85,8 @@ def main() -> int:
         pred_delta = g["pred"] - f["pred"]
         mode_delta = g["mode"] - f["mode"]
         if args.mismatches_only and pred_delta == 0 and mode_delta == 0:
+            continue
+        if args.mode_mismatches_only and mode_delta == 0:
             continue
         edge = ""
         if g.get("left") is not None or g.get("top") is not None:
