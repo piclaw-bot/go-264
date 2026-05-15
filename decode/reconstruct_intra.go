@@ -406,8 +406,10 @@ func (d *Decoder) reconstruct8x8(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY, q
 
 		block := joinLuma8x8Residual(mb.Coeffs, b8)
 		traceRecon := os.Getenv("GO264_RECON_TRACE") != ""
+		var rawCoeff [64]int16
 		var rawCoeffSum [4]int
 		if traceRecon {
+			rawCoeff = block
 			for y := 0; y < 8; y++ {
 				for x := 0; x < 8; x++ {
 					rawCoeffSum[(y/4)*2+x/4] += int(block[y*8+x])
@@ -415,8 +417,10 @@ func (d *Decoder) reconstruct8x8(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY, q
 			}
 		}
 		transform.Dequant8x8(block[:], qp)
+		var dequantCoeff [64]int16
 		var coeffSum [4]int
 		if traceRecon {
+			dequantCoeff = block
 			for y := 0; y < 8; y++ {
 				for x := 0; x < 8; x++ {
 					coeffSum[(y/4)*2+x/4] += int(block[y*8+x])
@@ -460,7 +464,7 @@ func (d *Decoder) reconstruct8x8(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY, q
 			}
 		}
 		if traceRecon {
-			fmt.Fprintf(os.Stderr, "GORECON part=i8x8 mb=%04d b8=%d x=%d y=%d syntax_mode=%d recon_mode=%d qp=%d predsum=%d raw_coeff_sum=%v dequant_coeff_sum=%v ressum=%d outsum=%d first_pred=%d first_res=%d tc=%d block_pred=%v block_res=%v block_out=%v\n", mbY*d.mbW+mbX, b8, mbX, mbY, mode, reconMode, qp, predSum, rawCoeffSum, coeffSum, resSum, outSum, predicted[0], block[0], mb.TotalCoeff[b8*4], blockPredSum, blockResSum, blockOutSum)
+			fmt.Fprintf(os.Stderr, "GORECON part=i8x8 mb=%04d b8=%d x=%d y=%d syntax_mode=%d recon_mode=%d qp=%d predsum=%d raw_coeff_sum=%v dequant_coeff_sum=%v ressum=%d outsum=%d first_pred=%d first_res=%d tc=%d block_pred=%v block_res=%v block_out=%v raw_coeff=%v dequant_coeff=%v\n", mbY*d.mbW+mbX, b8, mbX, mbY, mode, reconMode, qp, predSum, rawCoeffSum, coeffSum, resSum, outSum, predicted[0], block[0], mb.TotalCoeff[b8*4], blockPredSum, blockResSum, blockOutSum, rawCoeff, dequantCoeff)
 		}
 	}
 }
