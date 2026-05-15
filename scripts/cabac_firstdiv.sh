@@ -66,6 +66,10 @@ def load(path):
     return out
 
 go=load(sys.argv[1]); ff=load(sys.argv[2])
+if ff:
+    min_ff_frame = min(e['frame'] for e in ff)
+    max_ff_frame = max(e['frame'] for e in ff)
+    go = [e for e in go if min_ff_frame <= e['frame'] <= max_ff_frame]
 print(f'go_events={len(go)} ffmpeg_events={len(ff)}')
 fields=['frame','mb','skip','cbp','qpd','qp','t8','chroma','tc']
 for i,(g,f) in enumerate(zip(go,ff)):
