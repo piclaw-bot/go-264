@@ -447,7 +447,7 @@ func (d *Decoder) writeInterResidual(f *frame.Frame, mb *syntax.MBInter, predict
 }
 
 func fillBPredBlock(dst []uint8, ref *frame.Frame, srcBaseX, srcBaseY, dstX, dstY, w, h int, mv syntax.MotionVector) {
-	if ref == nil || ref.Width <= 0 || ref.Height <= 0 || len(dst) < 256 {
+	if ref == nil || ref.Width <= 0 || ref.Height <= 0 || len(dst) < 256 || !valid16x16Rect(dstX, dstY, w, h) {
 		return
 	}
 	for y := 0; y < h; y++ {
@@ -457,6 +457,10 @@ func fillBPredBlock(dst []uint8, ref *frame.Frame, srcBaseX, srcBaseY, dstX, dst
 			dst[(dstY+y)*16+dstX+x] = ref.PixelY(sx, sy)
 		}
 	}
+}
+
+func valid16x16Rect(x, y, w, h int) bool {
+	return w > 0 && h > 0 && x >= 0 && y >= 0 && x+w <= 16 && y+h <= 16
 }
 
 func bMacroblockPartCount(mbType uint32) int {
@@ -500,6 +504,9 @@ func (d *Decoder) fillBSubPrediction(dst []uint8, mb *syntax.MBBidi, fallback *f
 }
 
 func (d *Decoder) fillBPredByUse(dst []uint8, fallback *frame.Frame, mbX, mbY, dstX, dstY, w, h int, refIdxL0, refIdxL1 int8, mvL0, mvL1 syntax.MotionVector, useL0, useL1 bool) {
+	if len(dst) < 256 || !valid16x16Rect(dstX, dstY, w, h) {
+		return
+	}
 	var predL0, predL1 [256]uint8
 	if useL0 {
 		ref := d.refL0(refIdxL0)

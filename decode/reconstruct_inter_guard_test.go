@@ -13,6 +13,16 @@ func TestReconstructChromaInterHandlesNilInputs(t *testing.T) {
 	d.reconstructChromaInter(frame.NewFrame(16, 16), nil, nil, 0, 0, 26)
 }
 
+func TestBPredictionHelpersHandleMalformedRects(t *testing.T) {
+	d := &Decoder{}
+	var dst [256]uint8
+	ref := frame.NewFrame(16, 16)
+	fillBPredBlock(dst[:], ref, 0, 0, -1, 0, 8, 8, syntax.MotionVector{})
+	fillBPredBlock(dst[:], ref, 0, 0, 0, 0, 17, 1, syntax.MotionVector{})
+	d.fillBPredByUse(dst[:], ref, 0, 0, 15, 15, 2, 2, 0, 0, syntax.MotionVector{}, syntax.MotionVector{}, true, true)
+	d.fillBPredByUse(dst[:0], ref, 0, 0, 0, 0, 16, 16, 0, 0, syntax.MotionVector{}, syntax.MotionVector{}, true, true)
+}
+
 func TestReconstructMBBidiHandlesInvalidInputs(t *testing.T) {
 	var nilDecoder *Decoder
 	nilDecoder.reconstructMBBidi(frame.NewFrame(16, 16), &syntax.MBBidi{}, 0, 0, 26)
