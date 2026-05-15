@@ -53,6 +53,10 @@ type Decoder struct {
 	// TraceMB is optional diagnostic output for first-divergence tooling. Leave
 	// nil in normal decode paths to avoid overhead and preserve API behaviour.
 	TraceMB func(MBTraceEvent)
+	// traceFrameIndex is the output-frame index currently being decoded. Decode
+	// appends to d.Frames only after processing all NAL units in the input buffer,
+	// so reconstruction trace code cannot derive this from len(d.Frames).
+	traceFrameIndex int
 }
 
 // DecodedFrame is an alias for frame.Frame for CLI convenience.
@@ -109,6 +113,7 @@ func (d *Decoder) Decode(data []byte) ([]*frame.Frame, error) {
 			if unit.Type == nal.TypeSliceIDR {
 				d.DPB.Flush()
 			}
+			d.traceFrameIndex = len(d.Frames) + len(frames)
 			f, err := d.decodeSlice(unit)
 			if err != nil {
 				return nil, fmt.Errorf("slice: %w", err)
