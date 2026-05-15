@@ -241,10 +241,15 @@ decode_levels:
 
 	// ---- Step 2: coefficient levels in reverse scan order ----
 	nodeCtx := 0
-	var decodedLevels [64]int16
-	var decodedScanPos [64]int
-	var decodedMatrixPos [64]int
+	var decodedLevels *[64]int16
+	var decodedScanPos *[64]int
+	var decodedMatrixPos *[64]int
 	decodedCount := 0
+	if traceResidual {
+		decodedLevels = &[64]int16{}
+		decodedScanPos = &[64]int{}
+		decodedMatrixPos = &[64]int{}
+	}
 	for i := coeffCount - 1; i >= 0; i-- {
 		scanPos := index[i]
 		matrixPos := scanTable[scanPos] // convert to matrix order
