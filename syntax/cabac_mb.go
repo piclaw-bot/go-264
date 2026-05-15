@@ -5,7 +5,12 @@ package syntax
 // frame reconstruction; they belong in the slice package alongside the
 // CAVLC equivalents in macroblock.go and pslice.go.
 
-import cabac "github.com/rcarmo/go-264/entropy/cabac"
+import (
+	"fmt"
+	"os"
+
+	cabac "github.com/rcarmo/go-264/entropy/cabac"
+)
 
 // DecodeCABACCBP decodes the CABAC coded_block_pattern for one macroblock.
 // H.264 §9.3.2.6 / FFmpeg h264_cabac.c decode_cabac_mb_cbp_luma/chroma.
@@ -15,14 +20,31 @@ func DecodeCABACCBP(dec *cabac.CABACDecoder, models []cabac.CABACCtx, leftCBP, t
 	}
 	cbpA, cbpB := int(leftCBP), int(topCBP)
 	cbp := uint32(0)
+	traceCBP := os.Getenv("GO264_CABAC_CBP_TRACE") != ""
 	ctx := boolInt(cbpA&0x02 == 0) + 2*boolInt(cbpB&0x04 == 0)
-	cbp |= dec.DecodeBin(&models[73+ctx])
+	bin := dec.DecodeBin(&models[73+ctx])
+	if traceCBP {
+		fmt.Fprintf(os.Stderr, "GOCBP part=luma0 ctx=%d idx=%d bin=%d left=%03x top=%03x cbp_before=%02x\n", ctx, 73+ctx, bin, leftCBP, topCBP, cbp)
+	}
+	cbp |= bin
 	ctx = boolInt(cbp&0x01 == 0) + 2*boolInt(cbpB&0x08 == 0)
-	cbp |= dec.DecodeBin(&models[73+ctx]) << 1
+	bin = dec.DecodeBin(&models[73+ctx])
+	if traceCBP {
+		fmt.Fprintf(os.Stderr, "GOCBP part=luma1 ctx=%d idx=%d bin=%d left=%03x top=%03x cbp_before=%02x\n", ctx, 73+ctx, bin, leftCBP, topCBP, cbp)
+	}
+	cbp |= bin << 1
 	ctx = boolInt(cbpA&0x08 == 0) + 2*boolInt(cbp&0x01 == 0)
-	cbp |= dec.DecodeBin(&models[73+ctx]) << 2
+	bin = dec.DecodeBin(&models[73+ctx])
+	if traceCBP {
+		fmt.Fprintf(os.Stderr, "GOCBP part=luma2 ctx=%d idx=%d bin=%d left=%03x top=%03x cbp_before=%02x\n", ctx, 73+ctx, bin, leftCBP, topCBP, cbp)
+	}
+	cbp |= bin << 2
 	ctx = boolInt(cbp&0x04 == 0) + 2*boolInt(cbp&0x02 == 0)
-	cbp |= dec.DecodeBin(&models[73+ctx]) << 3
+	bin = dec.DecodeBin(&models[73+ctx])
+	if traceCBP {
+		fmt.Fprintf(os.Stderr, "GOCBP part=luma3 ctx=%d idx=%d bin=%d left=%03x top=%03x cbp_before=%02x\n", ctx, 73+ctx, bin, leftCBP, topCBP, cbp)
+	}
+	cbp |= bin << 3
 
 	ctx = 0
 	if (leftCBP>>4)&0x03 > 0 {
@@ -31,7 +53,11 @@ func DecodeCABACCBP(dec *cabac.CABACDecoder, models []cabac.CABACCtx, leftCBP, t
 	if (topCBP>>4)&0x03 > 0 {
 		ctx += 2
 	}
-	if dec.DecodeBin(&models[77+ctx]) != 0 {
+	bin = dec.DecodeBin(&models[77+ctx])
+	if traceCBP {
+		fmt.Fprintf(os.Stderr, "GOCBP part=chroma0 ctx=%d idx=%d bin=%d left=%03x top=%03x cbp_before=%02x\n", ctx, 77+ctx, bin, leftCBP, topCBP, cbp)
+	}
+	if bin != 0 {
 		ctx = 4
 		if (leftCBP>>4)&0x03 == 2 {
 			ctx++
@@ -39,7 +65,11 @@ func DecodeCABACCBP(dec *cabac.CABACDecoder, models []cabac.CABACCtx, leftCBP, t
 		if (topCBP>>4)&0x03 == 2 {
 			ctx += 2
 		}
-		cbp |= (1 + dec.DecodeBin(&models[77+ctx])) << 4
+		bin = dec.DecodeBin(&models[77+ctx])
+		if traceCBP {
+			fmt.Fprintf(os.Stderr, "GOCBP part=chroma1 ctx=%d idx=%d bin=%d left=%03x top=%03x cbp_before=%02x\n", ctx, 77+ctx, bin, leftCBP, topCBP, cbp)
+		}
+		cbp |= (1 + bin) << 4
 	}
 	return cbp
 }

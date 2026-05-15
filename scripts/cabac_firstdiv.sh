@@ -56,9 +56,10 @@ def load(path):
         m=pat.search(line)
         if not m: continue
         mb, frame, kind, typ, skip, cbp, qpd, qp, t8, chroma, tc = m.groups()
+        cbp_val = int(cbp,16)
         out.append({
             'line': line, 'mb': int(mb), 'frame': int(frame), 'kind': kind, 'type': typ,
-            'skip': skip in ('true','1'), 'cbp': int(cbp,16), 'qpd': int(qpd),
+            'skip': skip in ('true','1'), 'cbp': cbp_val & 0x3f, 'cbp_raw': cbp_val, 'qpd': int(qpd),
             'qp': int(qp), 't8': t8 in ('true','1'), 'chroma': int(chroma),
             'tc': [int(x) for x in tc.split()] if tc.strip() else [],
         })
