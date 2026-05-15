@@ -446,10 +446,21 @@ func (d *Decoder) reconstruct8x8(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY, q
 
 		traceRecon := os.Getenv("GO264_RECON_TRACE") != ""
 		predSum, resSum, outSum := 0, 0, 0
+		var blockPredSum [4]int
+		var blockResSum [4]int
+		var blockOutSum [4]int
 		if traceRecon {
-			for i := 0; i < 64; i++ {
-				predSum += int(predicted[i])
-				resSum += int(block[i])
+			for y := 0; y < 8; y++ {
+				for x := 0; x < 8; x++ {
+					idx := y*8 + x
+					quad := (y/4)*2 + x/4
+					p := int(predicted[idx])
+					r := int(block[idx])
+					predSum += p
+					resSum += r
+					blockPredSum[quad] += p
+					blockResSum[quad] += r
+				}
 			}
 		}
 		for py := 0; py < 8; py++ {
@@ -464,11 +475,12 @@ func (d *Decoder) reconstruct8x8(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY, q
 				f.SetPixelY(x0+px, y0+py, uint8(v))
 				if traceRecon {
 					outSum += v
+					blockOutSum[(py/4)*2+px/4] += v
 				}
 			}
 		}
 		if traceRecon {
-			fmt.Fprintf(os.Stderr, "GORECON part=i8x8 mb=%04d b8=%d x=%d y=%d mode=%d qp=%d predsum=%d ressum=%d outsum=%d first_pred=%d first_res=%d tc=%d\n", mbY*d.mbW+mbX, b8, mbX, mbY, mode, qp, predSum, resSum, outSum, predicted[0], block[0], mb.TotalCoeff[b8*4])
+			fmt.Fprintf(os.Stderr, "GORECON part=i8x8 mb=%04d b8=%d x=%d y=%d mode=%d qp=%d predsum=%d ressum=%d outsum=%d first_pred=%d first_res=%d tc=%d block_pred=%v block_res=%v block_out=%v\n", mbY*d.mbW+mbX, b8, mbX, mbY, mode, qp, predSum, resSum, outSum, predicted[0], block[0], mb.TotalCoeff[b8*4], blockPredSum, blockResSum, blockOutSum)
 		}
 	}
 }
