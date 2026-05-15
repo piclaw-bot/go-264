@@ -125,11 +125,12 @@ func ParseSPS(payload []byte) (*SPS, error) {
 	return s, nil
 }
 
-func skipSliceGroupMap(r *Reader, numSliceGroups uint32) {
+func parseSliceGroupMap(r *Reader, numSliceGroups uint32) (uint32, uint32) {
 	if r == nil || numSliceGroups <= 1 {
-		return
+		return 0, 0
 	}
 	sliceGroupMapType := r.ReadUE()
+	sliceGroupChangeRate := uint32(0)
 	switch sliceGroupMapType {
 	case 0:
 		for i := uint32(0); i < numSliceGroups; i++ {
@@ -142,7 +143,7 @@ func skipSliceGroupMap(r *Reader, numSliceGroups uint32) {
 		}
 	case 3, 4, 5:
 		r.ReadBit() // slice_group_change_direction_flag
-		r.ReadUE()  // slice_group_change_rate_minus1
+		sliceGroupChangeRate = r.ReadUE() + 1
 	case 6:
 		picSizeInMapUnits := r.ReadUE() + 1
 		bitsPerID := 0
@@ -153,6 +154,7 @@ func skipSliceGroupMap(r *Reader, numSliceGroups uint32) {
 			r.ReadBits(bitsPerID) // slice_group_id[i]
 		}
 	}
+	return sliceGroupMapType, sliceGroupChangeRate
 }
 
 func wrapScale256(v int32) int32 {
@@ -190,6 +192,8 @@ type PPS struct {
 	EntropyCodingMode          uint32 // 0=CAVLC, 1=CABAC
 	BottomFieldPicOrderInFrame bool
 	NumSliceGroups             uint32
+	SliceGroupMapType          uint32
+	SliceGroupChangeRate       uint32
 	NumRefIdxL0Active          uint32
 	NumRefIdxL1Active          uint32
 	WeightedPred               bool
@@ -218,7 +222,7 @@ func ParsePPS(payload []byte) (*PPS, error) {
 	p.NumSliceGroups = r.ReadUE() + 1
 
 	if p.NumSliceGroups > 1 {
-		skipSliceGroupMap(r, p.NumSliceGroups)
+		p.SliceGroupMapType, p.SliceGroupChangeRate = parseSliceGroupMap(r, p.NumSliceGroups)
 	}
 
 	p.NumRefIdxL0Active = r.ReadUE() + 1

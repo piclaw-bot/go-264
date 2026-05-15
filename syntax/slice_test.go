@@ -48,6 +48,27 @@ func (w *testBitWriter) bytes() []byte {
 	return out
 }
 
+func TestParseHeaderConsumesSliceGroupChangeCycle(t *testing.T) {
+	var w testBitWriter
+	w.ue(0)                             // first_mb_in_slice
+	w.ue(SliceTypeP)                    // slice_type
+	w.ue(0)                             // pic_parameter_set_id
+	w.bits = append(w.bits, 0, 0, 0, 0) // frame_num
+	w.bit(0)                            // num_ref_idx_active_override_flag
+	w.bit(0)                            // ref_pic_list_modification_flag_l0
+	w.bit(0)                            // adaptive_ref_pic_marking_mode_flag
+	w.se(0)                             // slice_qp_delta
+	w.ue(1)                             // disable_deblocking_filter_idc
+	w.bits = append(w.bits, 1, 0, 1)    // slice_group_change_cycle (3 bits)
+	w.bit(1)                            // sentinel after slice_group_change_cycle
+	sps := &nal.SPS{Log2MaxFrameNum: 4, PicWidthInMbs: 4, PicHeightInMapUnits: 4, FrameMbsOnlyFlag: true, ChromaFormatIDC: 1}
+	pps := &nal.PPS{NumRefIdxL0Active: 1, NumRefIdxL1Active: 1, NumSliceGroups: 2, SliceGroupMapType: 3, SliceGroupChangeRate: 5, DeblockingFilterControl: true}
+	_, r := ParseHeaderWithRefIDC(w.bytes(), nal.TypeSliceNonIDR, 1, sps, pps)
+	if got := r.ReadBit(); got != 1 {
+		t.Fatalf("sentinel after slice_group_change_cycle got %d want 1", got)
+	}
+}
+
 func TestSkipRefPicListModificationConsumesOperands(t *testing.T) {
 	var w testBitWriter
 	w.bit(1) // ref_pic_list_modification_flag_l0

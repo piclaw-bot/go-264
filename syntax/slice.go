@@ -221,7 +221,27 @@ func ParseHeaderWithRefIDC(payload []byte, nalType uint8, nalRefIDC uint8, sps *
 		}
 	}
 
+	if pps.NumSliceGroups > 1 && pps.SliceGroupMapType >= 3 && pps.SliceGroupMapType <= 5 {
+		r.ReadBits(sliceGroupChangeCycleBits(sps, pps))
+	}
+
 	return h, r
+}
+
+func sliceGroupChangeCycleBits(sps *nal.SPS, pps *nal.PPS) int {
+	if sps == nil || pps == nil || pps.SliceGroupChangeRate == 0 {
+		return 0
+	}
+	picSizeInMapUnits := sps.PicWidthInMbs * sps.PicHeightInMapUnits
+	if picSizeInMapUnits == 0 {
+		return 0
+	}
+	v := picSizeInMapUnits/pps.SliceGroupChangeRate + 1
+	bits := 0
+	for limit := uint32(1); limit < v; limit <<= 1 {
+		bits++
+	}
+	return bits
 }
 
 func (h *Header) IsIntra() bool        { return h.SliceType == SliceTypeI || h.SliceType == SliceTypeSI }

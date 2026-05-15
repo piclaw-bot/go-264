@@ -63,6 +63,37 @@ func TestWrapScale256NormalizesArbitraryDeltas(t *testing.T) {
 	}
 }
 
+func TestParsePPSStoresChangingSliceGroupParameters(t *testing.T) {
+	var w ppsBitWriter
+	w.ue(0)  // pic_parameter_set_id
+	w.ue(0)  // seq_parameter_set_id
+	w.bit(0) // entropy_coding_mode_flag
+	w.bit(0) // bottom_field_pic_order_in_frame_present_flag
+	w.ue(1)  // num_slice_groups_minus1 -> two groups
+	w.ue(3)  // slice_group_map_type
+	w.bit(1) // slice_group_change_direction_flag
+	w.ue(4)  // slice_group_change_rate_minus1 -> 5
+	w.ue(0)  // num_ref_idx_l0_default_active_minus1
+	w.ue(0)  // num_ref_idx_l1_default_active_minus1
+	w.bit(0) // weighted_pred_flag
+	w.bit(0)
+	w.bit(0) // weighted_bipred_idc
+	w.se(0)
+	w.se(0)
+	w.se(0)
+	w.bit(0) // deblocking_filter_control_present_flag
+	w.bit(0) // constrained_intra_pred_flag
+	w.bit(0) // redundant_pic_cnt_present_flag
+	w.rbspTrailingBits()
+	pps, err := ParsePPS(w.bytes())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pps.SliceGroupMapType != 3 || pps.SliceGroupChangeRate != 5 {
+		t.Fatalf("slice group params got type=%d rate=%d want 3/5", pps.SliceGroupMapType, pps.SliceGroupChangeRate)
+	}
+}
+
 func TestParsePPSSkipsSliceGroupMapAndContinues(t *testing.T) {
 	var w ppsBitWriter
 	w.ue(0)  // pic_parameter_set_id
