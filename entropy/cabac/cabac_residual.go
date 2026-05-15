@@ -178,17 +178,23 @@ func (d *CABACDecoder) DecodeCABACResidual(models []CABACCtx, cat, maxCoeff int,
 		// Scan positions 0..maxCoeff-2 via sig_ctx / last_ctx.
 		for last := 0; last < maxCoeff-1; last++ {
 			sigCtxIdx := sigBase + last
+			preLow, preRange, _ := d.DebugState()
+			preState := models[sigCtxIdx].DebugPackedState()
 			sigBin := d.DecodeBin(&models[sigCtxIdx])
+			postLow, postRange, _ := d.DebugState()
 			if traceResidual {
-				fmt.Fprintf(os.Stderr, "GORES event=sigbin cat=%d max=%d pos=%d ctx=%d bin=%d\n", cat, maxCoeff, last, sigCtxIdx, sigBin)
+				fmt.Fprintf(os.Stderr, "GORES event=sigbin cat=%d max=%d pos=%d ctx=%d state=%d low=%d range=%d bin=%d post_state=%d post_low=%d post_range=%d\n", cat, maxCoeff, last, sigCtxIdx, preState, preLow, preRange, sigBin, models[sigCtxIdx].DebugPackedState(), postLow, postRange)
 			}
 			if sigBin == 1 {
 				index[coeffCount] = last
 				coeffCount++
 				lastCtxIdx := lastBase + last
+				preLow, preRange, _ = d.DebugState()
+				preState = models[lastCtxIdx].DebugPackedState()
 				lastBin := d.DecodeBin(&models[lastCtxIdx])
+				postLow, postRange, _ = d.DebugState()
 				if traceResidual {
-					fmt.Fprintf(os.Stderr, "GORES event=lastbin cat=%d max=%d pos=%d ctx=%d bin=%d\n", cat, maxCoeff, last, lastCtxIdx, lastBin)
+					fmt.Fprintf(os.Stderr, "GORES event=lastbin cat=%d max=%d pos=%d ctx=%d state=%d low=%d range=%d bin=%d post_state=%d post_low=%d post_range=%d\n", cat, maxCoeff, last, lastCtxIdx, preState, preLow, preRange, lastBin, models[lastCtxIdx].DebugPackedState(), postLow, postRange)
 				}
 				if lastBin == 1 {
 					goto decode_levels
