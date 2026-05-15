@@ -291,9 +291,17 @@ func (d *Decoder) reconstruct4x4(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY, q
 			transform.Dequant4x4(block[:], qp)
 			transform.IDCT4x4(block[:])
 		}
+		traceRecon := os.Getenv("GO264_RECON_TRACE") != ""
+		predSum, resSum, outSum := 0, 0, 0
+		var rightEdge [4]uint8
 		for py := 0; py < 4; py++ {
 			for px := 0; px < 4; px++ {
-				v := int(predicted[py*4+px]) + int(block[py*4+px])
+				idx := py*4 + px
+				v := int(predicted[idx]) + int(block[idx])
+				if traceRecon {
+					predSum += int(predicted[idx])
+					resSum += int(block[idx])
+				}
 				if v < 0 {
 					v = 0
 				}
@@ -301,7 +309,16 @@ func (d *Decoder) reconstruct4x4(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY, q
 					v = 255
 				}
 				f.SetPixelY(x0+px, y0+py, uint8(v))
+				if traceRecon {
+					outSum += v
+					if px == 3 {
+						rightEdge[py] = uint8(v)
+					}
+				}
 			}
+		}
+		if traceRecon {
+			fmt.Fprintf(os.Stderr, "GORECON part=i4x4 frame=%d mb=%04d blk=%d x=%d y=%d mode=%d qp=%d predsum=%d ressum=%d outsum=%d top=%v top_right=%v left=%v top_left=%d right=%v tc=%d\n", d.traceFrameIndex, mbY*d.mbW+mbX, blkIdx, mbX, mbY, mode, qp, predSum, resSum, outSum, top, topRight, left, topLeft, rightEdge, mb.TotalCoeff[blkIdx])
 		}
 	}
 }
