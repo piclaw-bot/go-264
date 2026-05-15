@@ -81,13 +81,13 @@ Current parity tooling and findings:
 - `scripts/cabac_firstdiv.sh` patches/builds the local FFmpeg source tree when needed and compares decoder-backed Go CABAC MB traces against FFmpeg traces. It filters Go events to the FFmpeg-decoded frame range so event-count failures do not mask the first real frame-0 divergence.
 - CABAC diagnostics now cover MB summaries, CBP bin decisions with consistent arithmetic state, residual CBF/significant/last/level decisions, and intra syntax bins.
 - `testsrc_cabac_p.h264` and `bbb_annexb.h264` first-frame MB syntax summaries now report `NO_DIVERGENCE in compared fields`.
-- `GO264_RECON_TRACE=1` now emits luma Intra_8x8 prediction/residual/output and pre-IDCT coefficient checksums, plus chroma prediction/residual/output and per-4×4 block checksums, enabling direct FFmpeg reconstruction comparisons.
+- `GO264_RECON_TRACE=1` now emits luma Intra_8x8 syntax vs reconstruction mode, raw row-major coefficients, FFmpeg-storage raw coefficient view, dequantized coefficients, prediction/residual/output and pre/post-IDCT checksums, plus chroma prediction/residual/output and per-4×4 block checksums, enabling direct FFmpeg reconstruction comparisons.
 - Recent accepted reconstruction fixes include luma Intra_8x8 filtered DC references, the top-edge Intra_8x8 `LEFT_DC_PRED` reconstruction case, and FFmpeg chroma DC quadrant/edge predictors. The active gap is remaining Main/High reconstruction quality, especially luma/I8x8-heavy `bbb-frame0`.
 
 Still gated:
 
 - Main/High CABAC frame quality is still below the completion gate despite first-frame syntax parity and the recent reconstruction fixes.
-- Remaining I8x8 work is reconstruction parity (scan-position/matrix-placement/qmul handoff, filtered predictors, IDCT/residual placement), not `transform_size_8x8_flag` consumption. Raw CABAC 8×8 residual `levelseq` diagnostics match FFmpeg for the compared prefix, ruling out level/sign decoding for the current first mismatch.
+- Remaining I8x8 work is reconstruction parity (dequant/IDCT scaling, prediction class interactions, filtered predictors, and residual placement), not `transform_size_8x8_flag` consumption. Raw CABAC 8×8 residual `levelseq` diagnostics match FFmpeg for the compared prefix, and `ff_raw_coeff` confirms Go raw coefficients convert exactly to FFmpeg raw storage for the first residual-focused mismatch; level/sign decoding and raw scan placement are ruled out there.
 
 ### Current reference metrics
 
