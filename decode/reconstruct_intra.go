@@ -4,6 +4,9 @@ package decode
 // Covers I_NxN (4x4 and 8x8), I_16x16, and chroma intra prediction.
 
 import (
+	"fmt"
+	"os"
+
 	"github.com/rcarmo/go-264/frame"
 	"github.com/rcarmo/go-264/nal"
 	"github.com/rcarmo/go-264/pred"
@@ -383,6 +386,14 @@ func (d *Decoder) reconstruct8x8(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY, q
 		transform.Dequant8x8(block[:], qp)
 		transform.IDCT8x8(block[:])
 
+		traceRecon := os.Getenv("GO264_RECON_TRACE") != ""
+		predSum, resSum, outSum := 0, 0, 0
+		if traceRecon {
+			for i := 0; i < 64; i++ {
+				predSum += int(predicted[i])
+				resSum += int(block[i])
+			}
+		}
 		for py := 0; py < 8; py++ {
 			for px := 0; px < 8; px++ {
 				v := int(predicted[py*8+px]) + int(block[py*8+px])
@@ -393,7 +404,13 @@ func (d *Decoder) reconstruct8x8(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY, q
 					v = 255
 				}
 				f.SetPixelY(x0+px, y0+py, uint8(v))
+				if traceRecon {
+					outSum += v
+				}
 			}
+		}
+		if traceRecon {
+			fmt.Fprintf(os.Stderr, "GORECON part=i8x8 mb=%04d b8=%d x=%d y=%d mode=%d qp=%d predsum=%d ressum=%d outsum=%d first_pred=%d first_res=%d tc=%d\n", mbY*d.mbW+mbX, b8, mbX, mbY, mode, qp, predSum, resSum, outSum, predicted[0], block[0], mb.TotalCoeff[b8*4])
 		}
 	}
 }
