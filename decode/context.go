@@ -135,6 +135,31 @@ func cabacTraceEdgeNZ(mbX, mbY int, leftNZ, topNZ *[16]int) (*[16]int, *[16]int)
 	return leftNZ, topNZ
 }
 
+func cabacTraceEdgeChromaNZ(mbX, mbY int, leftNZ, topNZ *[2][4]int) (*[2][4]int, *[2][4]int) {
+	if !cabacTraceFFmpegEdgeCBP() {
+		return leftNZ, topNZ
+	}
+	if mbX == 0 {
+		var nz [2][4]int
+		for comp := range nz {
+			for blk := range nz[comp] {
+				nz[comp][blk] = 1
+			}
+		}
+		leftNZ = &nz
+	}
+	if mbY == 0 {
+		var nz [2][4]int
+		for comp := range nz {
+			for blk := range nz[comp] {
+				nz[comp][blk] = 1
+			}
+		}
+		topNZ = &nz
+	}
+	return leftNZ, topNZ
+}
+
 func clampInt(v, lo, hi int) int {
 	if v < lo {
 		return lo
