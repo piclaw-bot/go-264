@@ -98,6 +98,8 @@ func isCABACIntra16orPCM(f uint32) uint32 { return f }
 
 func cabacTraceFFmpegEdgeCBP() bool { return os.Getenv("GO264_CABAC_FFMPEG_EDGE_CBP") != "" }
 
+func cabacTraceIntraI8x8Transform() bool { return os.Getenv("GO264_CABAC_TRACE_INTRA_I8X8") != "" }
+
 func cabacUnavailableCBP(leftCBP, topCBP uint32, mbX, mbY int, intra bool) (uint32, uint32) {
 	defaultCBP := uint32(0x00F)
 	if intra {

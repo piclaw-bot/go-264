@@ -42,7 +42,9 @@ export GOTMPDIR="${GOTMPDIR:-/workspace/tmp}"
 build_ffmpeg
 
 cd "$ROOT"
-GO264_CABAC_FFMPEG_EDGE_CBP="${GO264_CABAC_FFMPEG_EDGE_CBP:-1}" go run ./cmd/trace264 -i "$INPUT" -cabac -limit "$LIMIT" >"$OUTDIR/go.trace" 2>"$OUTDIR/go.stderr"
+GO264_CABAC_FFMPEG_EDGE_CBP="${GO264_CABAC_FFMPEG_EDGE_CBP:-1}" \
+GO264_CABAC_TRACE_INTRA_I8X8="${GO264_CABAC_TRACE_INTRA_I8X8:-1}" \
+go run ./cmd/trace264 -i "$INPUT" -cabac -limit "$LIMIT" >"$OUTDIR/go.trace" 2>"$OUTDIR/go.stderr"
 GO264_FFMPEG_CABAC_TRACE=1 "$FFMPEG" -hide_banner -i "$INPUT" -frames:v 1 -pix_fmt yuv420p -f rawvideo /dev/null >"$OUTDIR/ffmpeg.stdout" 2>"$OUTDIR/ffmpeg.trace" || true
 
 python3 - "$OUTDIR/go.trace" "$OUTDIR/ffmpeg.trace" <<'PY'

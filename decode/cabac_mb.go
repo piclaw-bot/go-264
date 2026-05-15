@@ -264,7 +264,17 @@ func cabacInter8x8TransformAllowed(mb *syntax.MBInter) bool {
 
 func decodeCABACTransform8x8Flag(dec *cabac.CABACDecoder, models []cabac.CABACCtx, ctx int) bool {
 	idx := 399 + cabacTransform8x8Ctx(ctx)
-	return dec != nil && idx >= 0 && idx < len(models) && dec.DecodeBin(&models[idx]) == 1
+	if dec == nil || idx < 0 || idx >= len(models) {
+		return false
+	}
+	preLow, preRange, _ := dec.DebugState()
+	preState := models[idx].DebugPackedState()
+	bin := dec.DecodeBin(&models[idx])
+	postLow, postRange, _ := dec.DebugState()
+	if os.Getenv("GO264_CABAC_SYNTAX_TRACE") != "" {
+		fmt.Fprintf(os.Stderr, "GOSYN part=transform_size_8x8_flag idx=%d state=%d low=%d range=%d bin=%d post_state=%d post_low=%d post_range=%d ctx=%d\n", idx, preState, preLow, preRange, bin, models[idx].DebugPackedState(), postLow, postRange, cabacTransform8x8Ctx(ctx))
+	}
+	return bin == 1
 }
 
 func cabacTransform8x8Ctx(ctx int) int {
@@ -467,7 +477,7 @@ func decodeCABACIntraMBWithParams(dec *cabac.CABACDecoder, models []cabac.CABACC
 
 	// Intra 4x4 / 8x8 prediction modes (I_NxN only)
 	if mb.MBType == 0 {
-		if enableCABACI8x8Transform && transform8x8Mode && decodeCABACTransform8x8Flag(dec, models, transform8x8Ctx) {
+		if (enableCABACI8x8Transform || cabacTraceIntraI8x8Transform()) && transform8x8Mode && decodeCABACTransform8x8Flag(dec, models, transform8x8Ctx) {
 			mb.Use8x8Transform = true
 			var localModes [4]int8
 			for i := 0; i < 4; i++ {
