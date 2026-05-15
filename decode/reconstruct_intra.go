@@ -623,14 +623,14 @@ func (d *Decoder) predictChroma8x8(f *frame.Frame, comp int, mbX, mbY, mode int)
 		}
 	default: // DC
 		if mbX > 0 && mbY > 0 {
-			leftTop, leftBottom, topLeft, topRight := 0, 0, 0, 0
+			leftTop, leftBottom, topTopLeft, topRight := 0, 0, 0, 0
 			for i := 0; i < 4; i++ {
 				leftTop += int(left[i])
 				leftBottom += int(left[i+4])
-				topLeft += int(top[i])
+				topTopLeft += int(top[i])
 				topRight += int(top[i+4])
 			}
-			dc0 := uint8((leftTop + topLeft + 4) >> 3)
+			dc0 := uint8((leftTop + topTopLeft + 4) >> 3)
 			dc1 := uint8((topRight + 2) >> 2)
 			dc2 := uint8((leftBottom + 2) >> 2)
 			dc3 := uint8((topRight + leftBottom + 4) >> 3)
