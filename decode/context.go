@@ -3,11 +3,7 @@ package decode
 // decode/context.go — per-MB context helpers, block-index lookup tables,
 // and CABAC context utility functions.
 
-import (
-	"os"
-
-	"github.com/rcarmo/go-264/syntax"
-)
+import "github.com/rcarmo/go-264/syntax"
 
 // blk4x4X/Y: pixel offset of each luma 4x4 block within the 16×16 macroblock.
 // Derived from syntax.Blk4x4Col/Row (column/row index 0-3) multiplied by 4.
@@ -96,9 +92,7 @@ func cabacMBTypeFlag(mbType uint32) uint32 {
 // I_PCM, 0 = other). Used for the CABAC intra mb_type context calculation.
 func isCABACIntra16orPCM(f uint32) uint32 { return f }
 
-func cabacTraceFFmpegEdgeCBP() bool { return os.Getenv("GO264_CABAC_FFMPEG_EDGE_CBP") != "" }
-
-func cabacTraceIntraI8x8Transform() bool { return os.Getenv("GO264_CABAC_TRACE_INTRA_I8X8") != "" }
+func cabacUseFFmpegEdgeContexts() bool { return true }
 
 func cabacUnavailableCBP(leftCBP, topCBP uint32, mbX, mbY int, intra bool) (uint32, uint32) {
 	defaultCBP := uint32(0x00F)
@@ -115,7 +109,7 @@ func cabacUnavailableCBP(leftCBP, topCBP uint32, mbX, mbY int, intra bool) (uint
 }
 
 func cabacTraceEdgeNZ(mbX, mbY int, leftNZ, topNZ *[16]int) (*[16]int, *[16]int) {
-	if !cabacTraceFFmpegEdgeCBP() {
+	if !cabacUseFFmpegEdgeContexts() {
 		return leftNZ, topNZ
 	}
 	if mbX == 0 {
@@ -136,7 +130,7 @@ func cabacTraceEdgeNZ(mbX, mbY int, leftNZ, topNZ *[16]int) (*[16]int, *[16]int)
 }
 
 func cabacTraceEdgeChromaNZ(mbX, mbY int, leftNZ, topNZ *[2][4]int) (*[2][4]int, *[2][4]int) {
-	if !cabacTraceFFmpegEdgeCBP() {
+	if !cabacUseFFmpegEdgeContexts() {
 		return leftNZ, topNZ
 	}
 	if mbX == 0 {

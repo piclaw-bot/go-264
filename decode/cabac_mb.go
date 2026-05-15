@@ -12,11 +12,10 @@ import (
 	"github.com/rcarmo/go-264/syntax"
 )
 
-// enableCABACI8x8Transform gates CABAC intra 8x8 transform decoding until the
-// remaining neighbour-mode inference issue is fixed. Consuming the flag today
-// makes the current CABAC fixtures worse, so the decoder deliberately keeps the
-// legacy I4x4 reconstruction path rather than hiding a known correctness gap.
-const enableCABACI8x8Transform = false
+// enableCABACI8x8Transform enables High-profile CABAC I_NxN 8x8 transform
+// flag consumption. FFmpeg consumes this flag before intra prediction-mode bins;
+// skipping it desynchronizes all following CABAC syntax on High-profile streams.
+const enableCABACI8x8Transform = true
 
 // cabacMinMacroblockContexts covers the highest macroblock-level context this
 // file may index directly (transform_size_8x8_flag at ctxIdx 399+n). Residual
@@ -51,7 +50,7 @@ func decodeCABACPInterMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, numRe
 		}
 	} else {
 		// FFmpeg h264_cabac.c decodes intra-in-P via decode_cabac_intra_mb_type(ctx_base=17, intra_slice=0).
-		if cabacTraceFFmpegEdgeCBP() {
+		if cabacUseFFmpegEdgeContexts() {
 			leftCBP, topCBP = cabacUnavailableCBP(leftCBP, topCBP, mbX, mbY, true)
 			leftNZ, topNZ = cabacTraceEdgeNZ(mbX, mbY, leftNZ, topNZ)
 			leftChromaNZ, topChromaNZ = cabacTraceEdgeChromaNZ(mbX, mbY, leftChromaNZ, topChromaNZ)
@@ -59,7 +58,7 @@ func decodeCABACPInterMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, numRe
 		intra := decodeCABACIntraMBWithParams(dec, models, lastQScaleDiff, leftNZ, topNZ, leftChromaNZ, topChromaNZ, leftCBP, topCBP, leftMBType, topMBType, leftChromaPred, topChromaPred, transform8x8Mode, transform8x8Ctx, leftEdge8x8, topEdge8x8, 17, false)
 		return nil, intra, false
 	}
-	if cabacTraceFFmpegEdgeCBP() {
+	if cabacUseFFmpegEdgeContexts() {
 		leftCBP, topCBP = cabacUnavailableCBP(leftCBP, topCBP, mbX, mbY, false)
 	}
 	parts := 1
@@ -480,7 +479,7 @@ func decodeCABACIntraMBWithParams(dec *cabac.CABACDecoder, models []cabac.CABACC
 
 	// Intra 4x4 / 8x8 prediction modes (I_NxN only)
 	if mb.MBType == 0 {
-		if (enableCABACI8x8Transform || cabacTraceIntraI8x8Transform()) && transform8x8Mode && decodeCABACTransform8x8Flag(dec, models, transform8x8Ctx) {
+		if enableCABACI8x8Transform && transform8x8Mode && decodeCABACTransform8x8Flag(dec, models, transform8x8Ctx) {
 			mb.Use8x8Transform = true
 			var localModes [4]int8
 			for i := 0; i < 4; i++ {

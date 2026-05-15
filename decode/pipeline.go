@@ -252,7 +252,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 		}
 
 		if isIntra {
-			if pps.EntropyCodingMode == 1 && cabacTraceFFmpegEdgeCBP() {
+			if pps.EntropyCodingMode == 1 && cabacUseFFmpegEdgeContexts() {
 				leftCBP, topCBP = cabacUnavailableCBP(leftCBP, topCBP, mbX, mbY, true)
 				leftNZ, topNZ = cabacTraceEdgeNZ(mbX, mbY, leftNZ, topNZ)
 				leftChromaNZ, topChromaNZ = cabacTraceEdgeChromaNZ(mbX, mbY, leftChromaNZ, topChromaNZ)
