@@ -21,35 +21,27 @@ func DecodeCABACCBP(dec *cabac.CABACDecoder, models []cabac.CABACCtx, leftCBP, t
 	cbpA, cbpB := int(leftCBP), int(topCBP)
 	cbp := uint32(0)
 	traceCBP := os.Getenv("GO264_CABAC_CBP_TRACE") != ""
-	ctx := boolInt(cbpA&0x02 == 0) + 2*boolInt(cbpB&0x04 == 0)
-	preLow, preRange, _ := dec.DebugState()
-	preState := models[73+ctx].DebugPackedState()
-	bin := dec.DecodeBin(&models[73+ctx])
-	postLow, postRange, _ := dec.DebugState()
-	if traceCBP {
-		fmt.Fprintf(os.Stderr, "GOCBP part=luma0 ctx=%d idx=%d state=%d low=%d range=%d bin=%d post_state=%d post_low=%d post_range=%d left=%03x top=%03x cbp_before=%02x\n", ctx, 73+ctx, preState, preLow, preRange, bin, models[73+ctx].DebugPackedState(), postLow, postRange, leftCBP, topCBP, cbp)
+	traceBin := func(part string, idx, ctx int, cbpBefore uint32) uint32 {
+		preLow, preRange, _ := dec.DebugState()
+		preState := models[idx].DebugPackedState()
+		bin := dec.DecodeBin(&models[idx])
+		postLow, postRange, _ := dec.DebugState()
+		if traceCBP {
+			fmt.Fprintf(os.Stderr, "GOCBP part=%s ctx=%d idx=%d state=%d low=%d range=%d bin=%d post_state=%d post_low=%d post_range=%d left=%03x top=%03x cbp_before=%02x\n", part, ctx, idx, preState, preLow, preRange, bin, models[idx].DebugPackedState(), postLow, postRange, leftCBP, topCBP, cbpBefore)
+		}
+		return bin
 	}
+	ctx := boolInt(cbpA&0x02 == 0) + 2*boolInt(cbpB&0x04 == 0)
+	bin := traceBin("luma0", 73+ctx, ctx, cbp)
 	cbp |= bin
 	ctx = boolInt(cbp&0x01 == 0) + 2*boolInt(cbpB&0x08 == 0)
-	preLow, preRange, _ = dec.DebugState()
-	preState = models[73+ctx].DebugPackedState()
-	bin = dec.DecodeBin(&models[73+ctx])
-	postLow, postRange, _ = dec.DebugState()
-	if traceCBP {
-		fmt.Fprintf(os.Stderr, "GOCBP part=luma1 ctx=%d idx=%d state=%d low=%d range=%d bin=%d post_state=%d post_low=%d post_range=%d left=%03x top=%03x cbp_before=%02x\n", ctx, 73+ctx, preState, preLow, preRange, bin, models[73+ctx].DebugPackedState(), postLow, postRange, leftCBP, topCBP, cbp)
-	}
+	bin = traceBin("luma1", 73+ctx, ctx, cbp)
 	cbp |= bin << 1
 	ctx = boolInt(cbpA&0x08 == 0) + 2*boolInt(cbp&0x01 == 0)
-	bin = dec.DecodeBin(&models[73+ctx])
-	if traceCBP {
-		fmt.Fprintf(os.Stderr, "GOCBP part=luma2 ctx=%d idx=%d bin=%d left=%03x top=%03x cbp_before=%02x\n", ctx, 73+ctx, bin, leftCBP, topCBP, cbp)
-	}
+	bin = traceBin("luma2", 73+ctx, ctx, cbp)
 	cbp |= bin << 2
 	ctx = boolInt(cbp&0x04 == 0) + 2*boolInt(cbp&0x02 == 0)
-	bin = dec.DecodeBin(&models[73+ctx])
-	if traceCBP {
-		fmt.Fprintf(os.Stderr, "GOCBP part=luma3 ctx=%d idx=%d bin=%d left=%03x top=%03x cbp_before=%02x\n", ctx, 73+ctx, bin, leftCBP, topCBP, cbp)
-	}
+	bin = traceBin("luma3", 73+ctx, ctx, cbp)
 	cbp |= bin << 3
 
 	ctx = 0
@@ -59,10 +51,7 @@ func DecodeCABACCBP(dec *cabac.CABACDecoder, models []cabac.CABACCtx, leftCBP, t
 	if (topCBP>>4)&0x03 > 0 {
 		ctx += 2
 	}
-	bin = dec.DecodeBin(&models[77+ctx])
-	if traceCBP {
-		fmt.Fprintf(os.Stderr, "GOCBP part=chroma0 ctx=%d idx=%d bin=%d left=%03x top=%03x cbp_before=%02x\n", ctx, 77+ctx, bin, leftCBP, topCBP, cbp)
-	}
+	bin = traceBin("chroma0", 77+ctx, ctx, cbp)
 	if bin != 0 {
 		ctx = 4
 		if (leftCBP>>4)&0x03 == 2 {
@@ -71,10 +60,7 @@ func DecodeCABACCBP(dec *cabac.CABACDecoder, models []cabac.CABACCtx, leftCBP, t
 		if (topCBP>>4)&0x03 == 2 {
 			ctx += 2
 		}
-		bin = dec.DecodeBin(&models[77+ctx])
-		if traceCBP {
-			fmt.Fprintf(os.Stderr, "GOCBP part=chroma1 ctx=%d idx=%d bin=%d left=%03x top=%03x cbp_before=%02x\n", ctx, 77+ctx, bin, leftCBP, topCBP, cbp)
-		}
+		bin = traceBin("chroma1", 77+ctx, ctx, cbp)
 		cbp |= (1 + bin) << 4
 	}
 	return cbp
