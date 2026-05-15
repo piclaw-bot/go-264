@@ -7,7 +7,12 @@ package cabac
 // It uses an arithmetic coder with context models that adapt based on
 // previously decoded syntax elements.
 
-import "github.com/rcarmo/go-264/nal"
+import (
+	"fmt"
+	"os"
+
+	"github.com/rcarmo/go-264/nal"
+)
 
 // CABACDecoder is a context-adaptive binary arithmetic coding engine.
 type CABACDecoder struct {
@@ -83,6 +88,9 @@ func (d *CABACDecoder) Reset() {
 	d.codIRange = 510
 	d.codILow = uint32(d.r.ReadBits(9))
 	d.count = 9
+	if os.Getenv("GO264_CABAC_ARITH_TRACE") != "" {
+		fmt.Fprintf(os.Stderr, "GOARITH event=reset low=%d range=%d count=%d\n", d.codILow, d.codIRange, d.count)
+	}
 }
 
 // DecodeBin decodes one binary decision using the given context.
