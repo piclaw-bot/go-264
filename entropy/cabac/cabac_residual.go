@@ -241,6 +241,9 @@ decode_levels:
 
 	// ---- Step 2: coefficient levels in reverse scan order ----
 	nodeCtx := 0
+	var decodedLevels [64]int16
+	var decodedScanPos [64]int
+	decodedCount := 0
 	for i := coeffCount - 1; i >= 0; i-- {
 		scanPos := index[i]
 		matrixPos := scanTable[scanPos] // convert to matrix order
@@ -279,8 +282,19 @@ decode_levels:
 				out[matrixPos] = int16(coeffAbs)
 			}
 		}
+		decodedScanPos[decodedCount] = scanPos
+		decodedLevels[decodedCount] = out[matrixPos]
+		decodedCount++
 	}
 	if traceResidual {
+		fmt.Fprintf(os.Stderr, "GORES event=levelseq cat=%d max=%d count=%d seq=[", cat, maxCoeff, decodedCount)
+		for i := 0; i < decodedCount; i++ {
+			if i > 0 {
+				fmt.Fprint(os.Stderr, " ")
+			}
+			fmt.Fprintf(os.Stderr, "%d:%d", decodedScanPos[i], decodedLevels[i])
+		}
+		fmt.Fprintln(os.Stderr, "]")
 		fmt.Fprintf(os.Stderr, "GORES event=levels cat=%d max=%d count=%d out=%v\n", cat, maxCoeff, coeffCount, out[:maxCoeff])
 	}
 	return coeffCount
