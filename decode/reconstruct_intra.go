@@ -482,10 +482,14 @@ func (d *Decoder) reconstructChromaIntra(f *frame.Frame, mb *syntax.MBIntra, mbX
 		}
 		transform.IDCT4x4Batch(residual[:])
 		resSum, outSum := 0, 0
+		var blockOutSum [4]int
+		var blockResSum [4]int
 		if traceRecon {
 			for blk := 0; blk < 4; blk++ {
 				for i := 0; i < 16; i++ {
-					resSum += int(residual[blk][i])
+					v := int(residual[blk][i])
+					resSum += v
+					blockResSum[blk] += v
 				}
 			}
 		}
@@ -509,12 +513,13 @@ func (d *Decoder) reconstructChromaIntra(f *frame.Frame, mb *syntax.MBIntra, mbX
 					}
 					if traceRecon {
 						outSum += v
+						blockOutSum[blk] += v
 					}
 				}
 			}
 		}
 		if traceRecon {
-			fmt.Fprintf(os.Stderr, "GORECON part=chroma mb=%04d comp=%d x=%d y=%d mode=%d qp=%d predsum=%d ressum=%d outsum=%d first_pred=%d first_res=%d ctc=%v\n", mbY*d.mbW+mbX, comp, mbX, mbY, mb.ChromaPredMode, chromaQP, predSum, resSum, outSum, predicted[0], residual[0][0], mb.ChromaTotalCoeff[comp])
+			fmt.Fprintf(os.Stderr, "GORECON part=chroma mb=%04d comp=%d x=%d y=%d mode=%d qp=%d predsum=%d ressum=%d outsum=%d first_pred=%d first_res=%d ctc=%v block_res=%v block_out=%v\n", mbY*d.mbW+mbX, comp, mbX, mbY, mb.ChromaPredMode, chromaQP, predSum, resSum, outSum, predicted[0], residual[0][0], mb.ChromaTotalCoeff[comp], blockResSum, blockOutSum)
 		}
 	}
 }
