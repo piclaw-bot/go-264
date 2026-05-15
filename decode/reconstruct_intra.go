@@ -70,8 +70,8 @@ func (d *Decoder) reconstruct16x16(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY,
 		return
 	}
 	mode := int(mb.Intra16x16PredMode)
-	top := make([]uint8, 16)
-	left := make([]uint8, 16)
+	var top [16]uint8
+	var left [16]uint8
 	topLeft := uint8(128)
 	if mbY > 0 {
 		for x := 0; x < 16; x++ {
@@ -123,7 +123,7 @@ func (d *Decoder) reconstruct16x16(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY,
 			predicted[i] = dc
 		}
 	} else {
-		pred.PredIntra16x16(predicted[:], mode, top, left, topLeft)
+		pred.PredIntra16x16(predicted[:], mode, top[:], left[:], topLeft)
 	}
 
 	// Hadamard DC transform. Intra16x16 DC is a 4x4 matrix in raster position
@@ -178,9 +178,9 @@ func (d *Decoder) reconstruct4x4(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY, q
 	for blkIdx := 0; blkIdx < 16; blkIdx++ {
 		bx := blk4x4X[blkIdx]
 		by := blk4x4Y[blkIdx]
-		top := make([]uint8, 4)
-		topRight := make([]uint8, 4)
-		left := make([]uint8, 4)
+		var top [4]uint8
+		var topRight [4]uint8
+		var left [4]uint8
 		topLeft := uint8(128)
 
 		x0 := mbX*16 + bx
@@ -252,7 +252,7 @@ func (d *Decoder) reconstruct4x4(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY, q
 			d.intraModes[blkY*d.mbW*4+blkX] = int8(mode)
 		}
 
-		predicted := make([]uint8, 16)
+		var predicted [16]uint8
 		if mode == pred.Intra4x4DC {
 			topAvail := y0 > 0
 			leftAvail := x0 > 0
@@ -278,11 +278,11 @@ func (d *Decoder) reconstruct4x4(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY, q
 			} else {
 				dc = 128
 			}
-			for i := range predicted[:16] {
+			for i := range predicted {
 				predicted[i] = dc
 			}
 		} else {
-			pred.PredIntra4x4(predicted, mode, top, topRight, left, topLeft)
+			pred.PredIntra4x4(predicted[:], mode, top[:], topRight[:], left[:], topLeft)
 		}
 
 		block := mb.Coeffs[blkIdx]
@@ -319,8 +319,8 @@ func (d *Decoder) reconstruct8x8(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY, q
 		x0 := mbX*16 + bx
 		y0 := mbY*16 + by
 
-		top := make([]uint8, 16)
-		left := make([]uint8, 8)
+		var top [16]uint8
+		var left [8]uint8
 		topLeft := uint8(128)
 		for i := 0; i < 8; i++ {
 			if y0 > 0 {
@@ -414,7 +414,7 @@ func (d *Decoder) reconstruct8x8(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY, q
 				predicted[i] = dc
 			}
 		} else {
-			pred.PredIntra8x8(predicted[:], mode, top, left, topLeft)
+			pred.PredIntra8x8(predicted[:], mode, top[:], left[:], topLeft)
 		}
 
 		block := joinLuma8x8Residual(mb.Coeffs, b8)
