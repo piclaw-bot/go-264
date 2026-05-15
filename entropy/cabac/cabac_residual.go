@@ -243,6 +243,7 @@ decode_levels:
 	nodeCtx := 0
 	var decodedLevels [64]int16
 	var decodedScanPos [64]int
+	var decodedMatrixPos [64]int
 	decodedCount := 0
 	for i := coeffCount - 1; i >= 0; i-- {
 		scanPos := index[i]
@@ -283,6 +284,7 @@ decode_levels:
 			}
 		}
 		decodedScanPos[decodedCount] = scanPos
+		decodedMatrixPos[decodedCount] = matrixPos
 		decodedLevels[decodedCount] = out[matrixPos]
 		decodedCount++
 	}
@@ -293,6 +295,14 @@ decode_levels:
 				fmt.Fprint(os.Stderr, " ")
 			}
 			fmt.Fprintf(os.Stderr, "%d:%d", decodedScanPos[i], decodedLevels[i])
+		}
+		fmt.Fprintln(os.Stderr, "]")
+		fmt.Fprintf(os.Stderr, "GORES event=matrixseq cat=%d max=%d count=%d seq=[", cat, maxCoeff, decodedCount)
+		for i := 0; i < decodedCount; i++ {
+			if i > 0 {
+				fmt.Fprint(os.Stderr, " ")
+			}
+			fmt.Fprintf(os.Stderr, "%d:%d", decodedScanPos[i], decodedMatrixPos[i])
 		}
 		fmt.Fprintln(os.Stderr, "]")
 		fmt.Fprintf(os.Stderr, "GORES event=levels cat=%d max=%d count=%d out=%v\n", cat, maxCoeff, coeffCount, out[:maxCoeff])
