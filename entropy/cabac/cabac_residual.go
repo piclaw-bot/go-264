@@ -178,11 +178,19 @@ func (d *CABACDecoder) DecodeCABACResidual(models []CABACCtx, cat, maxCoeff int,
 		// Scan positions 0..maxCoeff-2 via sig_ctx / last_ctx.
 		for last := 0; last < maxCoeff-1; last++ {
 			sigCtxIdx := sigBase + last
-			if d.DecodeBin(&models[sigCtxIdx]) == 1 {
+			sigBin := d.DecodeBin(&models[sigCtxIdx])
+			if traceResidual {
+				fmt.Fprintf(os.Stderr, "GORES event=sigbin cat=%d max=%d pos=%d ctx=%d bin=%d\n", cat, maxCoeff, last, sigCtxIdx, sigBin)
+			}
+			if sigBin == 1 {
 				index[coeffCount] = last
 				coeffCount++
 				lastCtxIdx := lastBase + last
-				if d.DecodeBin(&models[lastCtxIdx]) == 1 {
+				lastBin := d.DecodeBin(&models[lastCtxIdx])
+				if traceResidual {
+					fmt.Fprintf(os.Stderr, "GORES event=lastbin cat=%d max=%d pos=%d ctx=%d bin=%d\n", cat, maxCoeff, last, lastCtxIdx, lastBin)
+				}
+				if lastBin == 1 {
 					goto decode_levels
 				}
 			}
