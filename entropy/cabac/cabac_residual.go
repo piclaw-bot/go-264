@@ -25,6 +25,8 @@ var cabacScan8x8 = [64]int{
 	53, 60, 61, 54, 47, 55, 62, 63,
 }
 
+var cabacScanChromaDC = [4]int{0, 1, 2, 3}
+
 // Context base offsets for significant coeff flags per category (non-field mode).
 // Source: FFmpeg libavcodec/h264_cabac.c significant_coeff_flag_offset[0][cat]
 var cabacSigCoeffFlagOffset = [14]int{
@@ -200,7 +202,7 @@ decode_levels:
 	case 1, 4: // luma AC and chroma AC: skip DC slot, start from scan pos 1
 		scanTable = cabacScan4x4[1 : 1+maxCoeff]
 	case 3: // chroma DC: raster (identity)
-		scanTable = []int{0, 1, 2, 3}
+		scanTable = cabacScanChromaDC[:]
 	case 5: // luma 8x8: full 8x8 scan
 		scanTable = cabacScan8x8[:]
 	default:

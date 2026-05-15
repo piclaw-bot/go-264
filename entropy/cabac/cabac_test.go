@@ -87,6 +87,12 @@ func TestCABACDecoderPublicMethodsHandleInvalidInputs(t *testing.T) {
 	}
 }
 
+func TestCABACChromaDCScanIsStaticIdentity(t *testing.T) {
+	if cabacScanChromaDC != [4]int{0, 1, 2, 3} {
+		t.Fatalf("chroma DC scan got %v want identity", cabacScanChromaDC)
+	}
+}
+
 func TestValidResidualCoeffCount(t *testing.T) {
 	cases := []struct {
 		cat, maxCoeff int
