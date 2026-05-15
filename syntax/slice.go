@@ -232,6 +232,9 @@ func sliceGroupChangeCycleBits(sps *nal.SPS, pps *nal.PPS) int {
 	if sps == nil || pps == nil || pps.SliceGroupChangeRate == 0 {
 		return 0
 	}
+	if sps.PicWidthInMbs != 0 && sps.PicHeightInMapUnits > ^uint32(0)/sps.PicWidthInMbs {
+		return 0
+	}
 	picSizeInMapUnits := sps.PicWidthInMbs * sps.PicHeightInMapUnits
 	if picSizeInMapUnits == 0 {
 		return 0
