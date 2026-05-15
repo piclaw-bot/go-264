@@ -283,10 +283,12 @@ decode_levels:
 				out[matrixPos] = int16(coeffAbs)
 			}
 		}
-		decodedScanPos[decodedCount] = scanPos
-		decodedMatrixPos[decodedCount] = matrixPos
-		decodedLevels[decodedCount] = out[matrixPos]
-		decodedCount++
+		if traceResidual {
+			decodedScanPos[decodedCount] = scanPos
+			decodedMatrixPos[decodedCount] = matrixPos
+			decodedLevels[decodedCount] = out[matrixPos]
+			decodedCount++
+		}
 	}
 	if traceResidual {
 		fmt.Fprintf(os.Stderr, "GORES event=levelseq cat=%d max=%d count=%d seq=[", cat, maxCoeff, decodedCount)
