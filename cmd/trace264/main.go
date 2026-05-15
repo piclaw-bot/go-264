@@ -13,7 +13,7 @@ import (
 func main() {
 	input := flag.String("i", "", "input Annex B H.264 bitstream")
 	limit := flag.Int("limit", 64, "maximum macroblocks to trace per slice")
-	cabac := flag.Bool("cabac", false, "enable CABAC-mode tracing (currently rejects CABAC streams instead of mis-tracing them)")
+	cabac := flag.Bool("cabac", false, "enable decoder-backed CABAC macroblock tracing")
 	flag.Parse()
 	if *input == "" {
 		fmt.Fprintln(os.Stderr, "usage: trace264 -i input.h264 [-limit N] [-cabac]")

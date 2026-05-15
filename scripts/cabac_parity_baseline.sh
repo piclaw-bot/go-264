@@ -7,10 +7,14 @@ OUTDIR="${2:-/workspace/tmp/go264-cabac-parity-baseline}"
 FFSRC="${FFMPEG_SRC:-/workspace/tmp/ffmpeg-7.1.3}"
 FFMPEG="${FFMPEG:-}"
 
+has_rawvideo_encoder() {
+  "$1" -hide_banner -encoders 2>/dev/null | grep -q '^ V..... rawvideo'
+}
+
 if [[ -z "$FFMPEG" ]]; then
-  if command -v ffmpeg >/dev/null 2>&1; then
+  if command -v ffmpeg >/dev/null 2>&1 && has_rawvideo_encoder "$(command -v ffmpeg)"; then
     FFMPEG="$(command -v ffmpeg)"
-  elif [[ -x "$FFSRC/ffmpeg" ]] && "$FFSRC/ffmpeg" -hide_banner -encoders 2>/dev/null | grep -q '^ V..... rawvideo'; then
+  elif [[ -x "$FFSRC/ffmpeg" ]] && has_rawvideo_encoder "$FFSRC/ffmpeg"; then
     FFMPEG="$FFSRC/ffmpeg"
   else
     echo "ffmpeg not found with rawvideo encoder; building a minimal local binary in $FFSRC" >&2
