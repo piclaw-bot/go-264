@@ -60,6 +60,8 @@ func TestPredictChroma8x8HandlesInvalidFrames(t *testing.T) {
 		{"nil", nil, 1, 1},
 		{"negative", frame.NewFrame(16, 16), -1, 0},
 		{"outside", frame.NewFrame(16, 16), 2, 0},
+		{"short-chroma-plane", &frame.Frame{Width: 16, Height: 16, StrideC: 8, U: make([]uint8, 1), V: make([]uint8, 1)}, 0, 0},
+		{"bad-chroma-stride", &frame.Frame{Width: 16, Height: 16, StrideC: 4, U: make([]uint8, 64), V: make([]uint8, 64)}, 0, 0},
 	}
 	for _, tc := range cases {
 		got := d.predictChroma8x8(tc.f, 0, tc.mbX, tc.mbY, 0)
