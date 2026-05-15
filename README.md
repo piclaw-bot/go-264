@@ -121,7 +121,7 @@ Recent performance/safety work:
 
 - `nal.Reader` caches whether a payload contains emulation-prevention bytes; no-EPB `ReadBits` and `PeekBits` use raw backing-byte fast paths, while EPB-bearing/short-tail reads keep the safe path. `ReadBits`, `BitsLeft`, raw-position `Seek`, and `ByteAlign` have defensive bounds/EPB handling.
 - CAVLC `coeff_token`, `total_zeros`, and `run_before` now have prefix lookup tables with exhaustive scan-vs-lookup invariant tests; `level_prefix` has a 16-bit leading-zero fast path with capped fallback.
-- CAVLC residual decode uses fixed stack arrays for trailing-one signs and level storage; inter 8×8-transform residuals use FFmpeg's dedicated CAVLC scan chunks before splitting the result back into the decoder's four 4×4 coefficient slots.
+- CAVLC residual decode uses fixed stack arrays for trailing-one signs and level storage, including chroma DC; public residual/VLC helpers return zero values for nil direct-reader use and clamp malformed coefficient counts before fixed-buffer indexing. Inter 8×8-transform residuals use FFmpeg's dedicated CAVLC scan chunks before splitting the result back into the decoder's four 4×4 coefficient slots.
 - `pred.InterPred16x16At` has an unclipped interior fractional-MV fast path plus horizontal-only/vertical-only fractional specializations; edge/negative coordinates still use the clipped scalar path.
 - `decode.copyInterSubRect` copies integer-MV P8x8 sub-rectangles directly instead of predicting a full 16×16 block.
 - `decode.fillChromaInterPred` has an interior 8×8 row-copy fast path with malformed-input guards.

@@ -121,7 +121,7 @@ Recent completed guardrails and low-level improvements:
 - `transform.IDCT4x4Batch` is wired into residual paths as the integration seam for future batched AVX2/NEON kernels.
 - `nal.Reader` caches EPB presence; no-EPB `ReadBits`/`PeekBits` use raw backing-byte fast paths, and `ReadBits`, `BitsLeft`, raw-position `Seek`, and `ByteAlign` are defensively clamped/EPB-aware.
 - CAVLC `coeff_token`, `total_zeros`, and `run_before` have prefix lookups with exhaustive scan-vs-lookup invariant coverage; `level_prefix` has a 16-bit leading-zero fast path with capped fallback.
-- CAVLC residual decode uses fixed stack arrays for trailing-one signs and levels; inter 8×8-transform residuals follow FFmpeg's `zigzag_scan8x8_cavlc` chunk ordering before coefficients are split back into the decoder's four 4×4 storage slots.
+- CAVLC residual decode uses fixed stack arrays for trailing-one signs and levels, including chroma DC, and public residual/VLC helpers guard nil direct-reader use while clamping malformed coefficient counts before fixed-buffer indexing; inter 8×8-transform residuals follow FFmpeg's `zigzag_scan8x8_cavlc` chunk ordering before coefficients are split back into the decoder's four 4×4 storage slots.
 - `pred.InterPred16x16At` has fast paths for interior fractional-MV bilinear interpolation plus horizontal-only/vertical-only fractional interpolation while preserving the clipped edge path.
 - `decode.copyInterSubRect` copies integer-MV P8x8 sub-rectangles directly, preserving fractional fallback semantics.
 - `decode.fillChromaInterPred` has an interior 8×8 row-copy fast path plus malformed-input guards; inter chroma prediction now respects P16x8/P8x16/P8x8 partition boundaries and P8x8 8×4/4×8/4×4 sub-partition MVs at 4:2:0 scale.
