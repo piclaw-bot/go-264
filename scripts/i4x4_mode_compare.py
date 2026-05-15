@@ -7,7 +7,7 @@ import argparse
 import re
 from pathlib import Path
 
-GO_RE = re.compile(r"mb=(\d+) x=(\d+) y=(\d+) .*?8x8=false .*?i4mode=\[([^\]]+)\] i4final=\[([^\]]+)\]")
+GO_RE = re.compile(r"mb=(\d+) x=(\d+) y=(\d+) .*?8x8=false .*?i4mode=\[([^\]]+)\](?: i4pred=\[([^\]]+)\])? i4final=\[([^\]]+)\]")
 FF_I4_RE = re.compile(r"FFMODE part=i4x4 mb=(\d+) blk=(\d+) x=(\d+) y=(\d+) pred=(-?\d+) mode=(-?\d+)")
 FF_WRITE_RE = re.compile(r"FFMODE part=i4write mb=(\d+) x=(\d+) y=(\d+) stored=\[([^\]]+)\]")
 
@@ -27,7 +27,8 @@ def parse_go(path: Path) -> dict[int, dict[str, object]]:
             "x": int(match.group(2)),
             "y": int(match.group(3)),
             "raw": ints(match.group(4)),
-            "final": ints(match.group(5)),
+            "pred": ints(match.group(5)) if match.group(5) else [],
+            "final": ints(match.group(6)),
         }
     return rows
 
@@ -68,6 +69,7 @@ def main() -> int:
             continue
         g = go[mb]
         raw = g["raw"]
+        pred = g["pred"]
         final = g["final"]
         ff = ff_modes.get(mb, {})
         write = ff_writes.get(mb)
@@ -79,9 +81,13 @@ def main() -> int:
         for blk in sorted(ff):
             if blk < len(final) and final[blk] != ff[blk]["mode"]:
                 mismatch = True
+            if pred and blk < len(pred) and pred[blk] != ff[blk]["pred"]:
+                mismatch = True
         if args.mismatches_only and not mismatch:
             continue
         parts.append(f"go_raw={raw}")
+        if pred:
+            parts.append(f"go_pred={pred}")
         parts.append(f"go_final={final}")
         if ff:
             parts.append("ff_modes=" + str([(blk, row["pred"], row["mode"]) for blk, row in sorted(ff.items())]))

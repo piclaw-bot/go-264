@@ -62,7 +62,7 @@ func intraMBInFrame(f *frame.Frame, mbX, mbY int) bool {
 		return false
 	}
 	baseX, baseY := mbX*16, mbY*16
-	return baseX >= 0 && baseY >= 0 && baseX+16 <= f.Width && baseY+16 <= f.Height && (baseY+15)*f.StrideY+baseX+16 <= len(f.Y)
+	return baseX >= 0 && baseY >= 0 && baseX+16 <= f.StrideY && (baseY+15)*f.StrideY+baseX+16 <= len(f.Y)
 }
 
 func (d *Decoder) reconstruct16x16(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY, qp int) {
@@ -172,6 +172,9 @@ func (d *Decoder) reconstruct16x16(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY,
 }
 
 func (d *Decoder) reconstruct4x4(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY, qp int) {
+	for i := range d.traceIntra4x4PredMode {
+		d.traceIntra4x4PredMode[i] = -1
+	}
 	if mb == nil || !intraMBInFrame(f, mbX, mbY) {
 		return
 	}
@@ -236,6 +239,7 @@ func (d *Decoder) reconstruct4x4(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY, q
 			}
 		}
 
+		d.traceIntra4x4PredMode[blkIdx] = predMode
 		mode := int(predMode)
 		rawMode := mb.IntraPredMode[blkIdx]
 		if rawMode == -1 {
