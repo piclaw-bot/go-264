@@ -72,6 +72,7 @@ def main() -> int:
     parser.add_argument("--max-pred-delta", type=int, help="only show rows whose absolute prediction delta is at most this value")
     parser.add_argument("--min-pred-delta", type=int, help="only show rows whose absolute prediction delta is at least this value")
     parser.add_argument("--summary-by-mode", action="store_true", help="summarize absolute deltas by Go/FFmpeg predictor mode tuple")
+    parser.add_argument("--sort", choices=("out", "pred", "res"), default="out", help="sort rows by absolute output, prediction, or residual delta")
     args = parser.parse_args()
 
     go_blocks = parse_blocks(args.go_log, GO_RE)
@@ -134,7 +135,8 @@ def main() -> int:
             )
         return 0
 
-    rows.sort(reverse=True, key=lambda item: item[0])
+    sort_index = {"out": 0, "pred": 3, "res": 4}[args.sort]
+    rows.sort(reverse=True, key=lambda item: abs(item[sort_index]))
     for _, (frame_key, (mb, b8), _occurrence), out_delta, pred_delta, res_delta, block_delta, g, f in rows[: args.limit]:
         occurrence = int(g["occurrence"])
         frame = g["frame"]
