@@ -223,8 +223,10 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 	chromaPredModeCtx := make([]int8, maxMBs)
 	intra8x8Stride := mbWidth * 2
 	intra8x8ModeCtx := make([]int8, intra8x8Stride*mbHeight*2)
+	intra8x8BottomCtx := make([]int8, intra8x8Stride*mbHeight*2)
 	for i := range intra8x8ModeCtx {
 		intra8x8ModeCtx[i] = -1
+		intra8x8BottomCtx[i] = -1
 	}
 	mv4Stride := mbWidth * 4
 	mv4Ctx := make([]syntax.MotionVector, mv4Stride*mbHeight*4)
@@ -304,7 +306,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 				}
 				for bc := 0; bc < 2; bc++ {
 					if mbY > 0 {
-						topEdge8x8[bc] = intra8x8ModeCtx[(mbY*2-1)*intra8x8Stride+(mbX*2+bc)]
+						topEdge8x8[bc] = intra8x8BottomCtx[(mbY*2-1)*intra8x8Stride+(mbX*2+bc)]
 					} else {
 						topEdge8x8[bc] = -1
 					}
@@ -351,7 +353,9 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 				for b := 0; b < 4; b++ {
 					bc, br := b%2, b/2
 					mode := mb.I8x8PredMode[b]
-					intra8x8ModeCtx[(mbY*2+br)*intra8x8Stride+(mbX*2+bc)] = mode
+					idx8 := (mbY*2+br)*intra8x8Stride + (mbX*2 + bc)
+					intra8x8ModeCtx[idx8] = mode
+					intra8x8BottomCtx[idx8] = mode
 					for dr := 0; dr < 2; dr++ {
 						for dc := 0; dc < 2; dc++ {
 							bX := mbX*4 + bc*2 + dc
@@ -381,7 +385,14 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					if minMode > 8 {
 						minMode = 2
 					}
-					intra8x8ModeCtx[(mbY*2+br)*intra8x8Stride+(mbX*2+bc)] = minMode
+					idx8 := (mbY*2+br)*intra8x8Stride + (mbX*2 + bc)
+					intra8x8ModeCtx[idx8] = minMode
+					bottomMode := minMode
+					bottomIdx := (mbY*4+br*2+1)*d.mbW*4 + mbX*4 + bc*2
+					if bottomIdx >= 0 && bottomIdx < len(d.intraModes) && d.intraModes[bottomIdx] >= 0 {
+						bottomMode = d.intraModes[bottomIdx]
+					}
+					intra8x8BottomCtx[idx8] = bottomMode
 				}
 			}
 			writeBackIntra4x4(ref4Ctx, mv4Stride, mbX, mbY)
@@ -402,7 +413,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 				}
 				for bc := 0; bc < 2; bc++ {
 					if mbY > 0 {
-						topEdge8x8[bc] = intra8x8ModeCtx[(mbY*2-1)*intra8x8Stride+(mbX*2+bc)]
+						topEdge8x8[bc] = intra8x8BottomCtx[(mbY*2-1)*intra8x8Stride+(mbX*2+bc)]
 					} else {
 						topEdge8x8[bc] = -1
 					}
