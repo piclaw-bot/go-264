@@ -106,8 +106,9 @@ def main() -> int:
             continue
         if args.min_pred_delta is not None and abs(pred_delta) < args.min_pred_delta:
             continue
+        res_delta = out_delta - pred_delta
         block_delta = [int(gb[i]) - int(fb[i]) for i in range(min(len(gb), len(fb)))]
-        rows.append((abs(out_delta), key, out_delta, pred_delta, block_delta, g, f))
+        rows.append((abs(out_delta), key, out_delta, pred_delta, res_delta, block_delta, g, f))
 
     if not rows:
         print("no matching blocks after filters")
@@ -115,30 +116,33 @@ def main() -> int:
 
     if args.summary_by_mode:
         groups: dict[tuple[object, object, object], dict[str, int]] = {}
-        for _, _key, out_delta, pred_delta, _block_delta, g, f in rows:
+        for _, _key, out_delta, pred_delta, res_delta, _block_delta, g, f in rows:
             mode_key = (g["syntax_mode"], g["recon_mode"], f["ff_mode"])
-            group = groups.setdefault(mode_key, {"count": 0, "abs_out": 0, "abs_pred": 0, "signed_out": 0})
+            group = groups.setdefault(mode_key, {"count": 0, "abs_out": 0, "abs_pred": 0, "abs_res": 0, "signed_out": 0, "signed_res": 0})
             group["count"] += 1
             group["abs_out"] += abs(out_delta)
             group["abs_pred"] += abs(pred_delta)
+            group["abs_res"] += abs(res_delta)
             group["signed_out"] += out_delta
+            group["signed_res"] += res_delta
         for (syntax_mode, recon_mode, ff_mode), group in sorted(groups.items(), key=lambda item: item[1]["abs_out"], reverse=True)[: args.limit]:
             print(
                 f"go_mode={syntax_mode}/{recon_mode} ff_mode={ff_mode} "
                 f"count={group['count']} abs_out={group['abs_out']} "
-                f"abs_pred={group['abs_pred']} signed_out={group['signed_out']}"
+                f"abs_pred={group['abs_pred']} abs_res={group['abs_res']} "
+                f"signed_out={group['signed_out']} signed_res={group['signed_res']}"
             )
         return 0
 
     rows.sort(reverse=True, key=lambda item: item[0])
-    for _, (frame_key, (mb, b8), _occurrence), out_delta, pred_delta, block_delta, g, f in rows[: args.limit]:
+    for _, (frame_key, (mb, b8), _occurrence), out_delta, pred_delta, res_delta, block_delta, g, f in rows[: args.limit]:
         occurrence = int(g["occurrence"])
         frame = g["frame"]
         frame_label = f"frame={frame}" if frame is not None else f"occ={occurrence}"
         print(
             f"{frame_label} occ={occurrence} mb={mb:04d} b8={b8} "
             f"go_mode={g['syntax_mode']}/{g['recon_mode']} ff_mode={f['ff_mode']} "
-            f"out_delta={out_delta:+d} pred_delta={pred_delta:+d} "
+            f"out_delta={out_delta:+d} pred_delta={pred_delta:+d} res_delta={res_delta:+d} "
             f"block_delta={block_delta} go_out={g['outsum']} ff_out={f['outsum']}"
         )
     return 0
