@@ -75,6 +75,17 @@ func TestStoreInter8x8ResidualSplitsQuadrants(t *testing.T) {
 	}
 }
 
+func TestDecodeInterResidualMasksMalformedChromaCBP(t *testing.T) {
+	var coeffs [16][16]int16
+	var coeffsChroma [2][4][16]int16
+	var totalCoeff [16]int
+	var chromaTotalCoeff [2][4]int
+	decodeInterResidualCAVLC(nal.NewReader(nil), 0xF0, false, &coeffs, &coeffsChroma, &totalCoeff, &chromaTotalCoeff, nil, nil, nil, nil)
+	if coeffsChroma != [2][4][16]int16{} || chromaTotalCoeff != [2][4]int{} {
+		t.Fatalf("masked-out malformed chroma bits should not consume/store residuals")
+	}
+}
+
 func TestDecodeMBInterConsumesTransform8x8Flag(t *testing.T) {
 	var w testBitWriter
 	w.ue(PMBTypeP16x16)

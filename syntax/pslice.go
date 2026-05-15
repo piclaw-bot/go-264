@@ -189,7 +189,7 @@ func decodeInterResidualCAVLC(r *nal.Reader, cbp uint32, use8x8 bool, coeffs *[1
 			totalCoeff[blk] = tc
 		}
 	}
-	cbpChroma := cbp >> 4
+	cbpChroma := (cbp >> 4) & 0x3
 	if cbpChroma == 0 {
 		return
 	}
