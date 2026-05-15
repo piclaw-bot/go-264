@@ -71,6 +71,7 @@ def main() -> int:
     parser.add_argument("--occurrence", type=int, help="only compare one occurrence index for repeated mb/b8 keys")
     parser.add_argument("--max-pred-delta", type=int, help="only show rows whose absolute prediction delta is at most this value")
     parser.add_argument("--min-pred-delta", type=int, help="only show rows whose absolute prediction delta is at least this value")
+    parser.add_argument("--summary-by-mode", action="store_true", help="summarize absolute deltas by Go/FFmpeg predictor mode tuple")
     args = parser.parse_args()
 
     go_blocks = parse_blocks(args.go_log, GO_RE)
@@ -111,6 +112,23 @@ def main() -> int:
     if not rows:
         print("no matching blocks after filters")
         return 1
+
+    if args.summary_by_mode:
+        groups: dict[tuple[object, object, object], dict[str, int]] = {}
+        for _, _key, out_delta, pred_delta, _block_delta, g, f in rows:
+            mode_key = (g["syntax_mode"], g["recon_mode"], f["ff_mode"])
+            group = groups.setdefault(mode_key, {"count": 0, "abs_out": 0, "abs_pred": 0, "signed_out": 0})
+            group["count"] += 1
+            group["abs_out"] += abs(out_delta)
+            group["abs_pred"] += abs(pred_delta)
+            group["signed_out"] += out_delta
+        for (syntax_mode, recon_mode, ff_mode), group in sorted(groups.items(), key=lambda item: item[1]["abs_out"], reverse=True)[: args.limit]:
+            print(
+                f"go_mode={syntax_mode}/{recon_mode} ff_mode={ff_mode} "
+                f"count={group['count']} abs_out={group['abs_out']} "
+                f"abs_pred={group['abs_pred']} signed_out={group['signed_out']}"
+            )
+        return 0
 
     rows.sort(reverse=True, key=lambda item: item[0])
     for _, (frame_key, (mb, b8), _occurrence), out_delta, pred_delta, block_delta, g, f in rows[: args.limit]:
