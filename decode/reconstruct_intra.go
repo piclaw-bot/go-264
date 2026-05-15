@@ -460,8 +460,15 @@ func (d *Decoder) reconstructChromaIntra(f *frame.Frame, mb *syntax.MBIntra, mbX
 		return
 	}
 	chromaQP := frame.ChromaQP(qp, d.chromaQPOffset)
+	traceRecon := os.Getenv("GO264_RECON_TRACE") != ""
 	for comp := 0; comp < 2; comp++ {
 		predicted := d.predictChroma8x8(f, comp, mbX, mbY, int(mb.ChromaPredMode))
+		predSum := 0
+		if traceRecon {
+			for i := 0; i < 64; i++ {
+				predSum += int(predicted[i])
+			}
+		}
 		var dc [4]int16
 		for i := 0; i < 4; i++ {
 			dc[i] = mb.CoeffsChroma[comp][i][0]
@@ -474,6 +481,14 @@ func (d *Decoder) reconstructChromaIntra(f *frame.Frame, mb *syntax.MBIntra, mbX
 			transform.Dequant4x4AC(residual[blk][:], chromaQP)
 		}
 		transform.IDCT4x4Batch(residual[:])
+		resSum, outSum := 0, 0
+		if traceRecon {
+			for blk := 0; blk < 4; blk++ {
+				for i := 0; i < 16; i++ {
+					resSum += int(residual[blk][i])
+				}
+			}
+		}
 		for blk := 0; blk < 4; blk++ {
 			bx := (blk & 1) * 4
 			by := (blk >> 1) * 4
@@ -492,8 +507,14 @@ func (d *Decoder) reconstructChromaIntra(f *frame.Frame, mb *syntax.MBIntra, mbX
 					} else {
 						f.SetPixelV(cx, cy, uint8(v))
 					}
+					if traceRecon {
+						outSum += v
+					}
 				}
 			}
+		}
+		if traceRecon {
+			fmt.Fprintf(os.Stderr, "GORECON part=chroma mb=%04d comp=%d x=%d y=%d mode=%d qp=%d predsum=%d ressum=%d outsum=%d first_pred=%d first_res=%d ctc=%v\n", mbY*d.mbW+mbX, comp, mbX, mbY, mb.ChromaPredMode, chromaQP, predSum, resSum, outSum, predicted[0], residual[0][0], mb.ChromaTotalCoeff[comp])
 		}
 	}
 }
