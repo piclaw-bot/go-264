@@ -47,6 +47,19 @@ func (w *ppsBitWriter) bytes() []byte {
 	return out
 }
 
+func TestDeriveSPSDimensionsClampsMalformedCropping(t *testing.T) {
+	s := &SPS{PicWidthInMbs: 1, PicHeightInMapUnits: 1, FrameMbsOnlyFlag: true, ChromaFormatIDC: 1, FrameCropping: true, CropLeft: 100, CropRight: 100, CropTop: 100, CropBottom: 100}
+	deriveSPSDimensions(s)
+	if s.Width != 0 || s.Height != 0 {
+		t.Fatalf("malformed crop dimensions got %dx%d want 0x0", s.Width, s.Height)
+	}
+	s = &SPS{PicWidthInMbs: 2, PicHeightInMapUnits: 2, FrameMbsOnlyFlag: true, ChromaFormatIDC: 1, FrameCropping: true, CropLeft: 1, CropRight: 1, CropTop: 1, CropBottom: 1}
+	deriveSPSDimensions(s)
+	if s.Width != 28 || s.Height != 28 {
+		t.Fatalf("valid crop dimensions got %dx%d want 28x28", s.Width, s.Height)
+	}
+}
+
 func TestWrapScale256NormalizesArbitraryDeltas(t *testing.T) {
 	cases := []struct {
 		in, want int32

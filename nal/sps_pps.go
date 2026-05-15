@@ -101,28 +101,52 @@ func ParseSPS(payload []byte) (*SPS, error) {
 		s.CropBottom = r.ReadUE()
 	}
 
-	// Derived dimensions
-	s.Width = int(s.PicWidthInMbs) * 16
-	s.Height = int(s.PicHeightInMapUnits) * 16
-	if s.FrameMbsOnlyFlag {
-		// already correct
-	} else {
-		s.Height *= 2
+	deriveSPSDimensions(s)
+
+	return s, nil
+}
+
+func deriveSPSDimensions(s *SPS) {
+	if s == nil {
+		return
+	}
+	width := uint64(s.PicWidthInMbs) * 16
+	height := uint64(s.PicHeightInMapUnits) * 16
+	if !s.FrameMbsOnlyFlag {
+		height *= 2
 	}
 	if s.FrameCropping {
-		cropUnitX := uint32(1)
-		cropUnitY := uint32(1)
+		cropUnitX := uint64(1)
+		cropUnitY := uint64(1)
 		if s.ChromaFormatIDC == 1 {
 			cropUnitX = 2
 			cropUnitY = 2
 		} else if s.ChromaFormatIDC == 2 {
 			cropUnitX = 2
 		}
-		s.Width -= int((s.CropLeft + s.CropRight) * cropUnitX)
-		s.Height -= int((s.CropTop + s.CropBottom) * cropUnitY)
+		cropX := (uint64(s.CropLeft) + uint64(s.CropRight)) * cropUnitX
+		cropY := (uint64(s.CropTop) + uint64(s.CropBottom)) * cropUnitY
+		if cropX >= width {
+			width = 0
+		} else {
+			width -= cropX
+		}
+		if cropY >= height {
+			height = 0
+		} else {
+			height -= cropY
+		}
 	}
+	s.Width = clampUint64ToInt(width)
+	s.Height = clampUint64ToInt(height)
+}
 
-	return s, nil
+func clampUint64ToInt(v uint64) int {
+	maxInt := uint64(^uint(0) >> 1)
+	if v > maxInt {
+		return int(maxInt)
+	}
+	return int(v)
 }
 
 func parseSliceGroupMap(r *Reader, numSliceGroups uint32) (uint32, uint32) {
