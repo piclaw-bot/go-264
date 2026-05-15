@@ -78,6 +78,10 @@ def main() -> int:
     parser.add_argument("--summary-by-mode", action="store_true", help="summarize absolute deltas by Go/FFmpeg predictor mode tuple")
     parser.add_argument("--sort", choices=("out", "pred", "res"), default="out", help="sort rows by absolute output, prediction, or residual delta")
     parser.add_argument("--summary-spatial", action="store_true", help="summarize largest-delta rows by image-region buckets")
+    parser.add_argument("--go-yuv", type=Path, help="optional Go frame-0 YUV420P file for neighbour-edge sampling")
+    parser.add_argument("--ffmpeg-yuv", type=Path, help="optional FFmpeg frame-0 YUV420P file for neighbour-edge sampling")
+    parser.add_argument("--width", type=int, help="Y plane width for --go-yuv/--ffmpeg-yuv")
+    parser.add_argument("--height", type=int, help="Y plane height for --go-yuv/--ffmpeg-yuv")
     args = parser.parse_args()
 
     go_blocks = parse_blocks(args.go_log, GO_RE)
@@ -162,16 +166,34 @@ def main() -> int:
 
     sort_index = {"out": 0, "pred": 3, "res": 4}[args.sort]
     rows.sort(reverse=True, key=lambda item: abs(item[sort_index]))
+    yuv_samples = None
+    if args.go_yuv or args.ffmpeg_yuv:
+        if not (args.go_yuv and args.ffmpeg_yuv and args.width and args.height):
+            parser.error("--go-yuv/--ffmpeg-yuv require --width and --height")
+        yuv_samples = (
+            args.go_yuv.read_bytes()[: args.width * args.height],
+            args.ffmpeg_yuv.read_bytes()[: args.width * args.height],
+        )
+
     for _, (frame_key, (mb, b8), _occurrence), out_delta, pred_delta, res_delta, block_delta, g, f in rows[: args.limit]:
         occurrence = int(g["occurrence"])
         frame = g["frame"]
         frame_label = f"frame={frame}" if frame is not None else f"occ={occurrence}"
-        print(
+        line = (
             f"{frame_label} occ={occurrence} mb={mb:04d} b8={b8} x={g['x']} y={g['y']} "
             f"go_mode={g['syntax_mode']}/{g['recon_mode']} ff_mode={f['ff_mode']} "
             f"out_delta={out_delta:+d} pred_delta={pred_delta:+d} res_delta={res_delta:+d} "
             f"block_delta={block_delta} go_out={g['outsum']} ff_out={f['outsum']}"
         )
+        if yuv_samples is not None:
+            sx = int(g["x"]) * 16 + (int(b8) & 1) * 8
+            sy = int(g["y"]) * 16 + (int(b8) >> 1) * 8
+            if sx > 0 and 0 <= sy < args.height - 7:
+                go_y, ff_y = yuv_samples
+                left_go = [go_y[(sy + i) * args.width + sx - 1] for i in range(8)]
+                left_ff = [ff_y[(sy + i) * args.width + sx - 1] for i in range(8)]
+                line += f" left_go={left_go} left_ff={left_ff}"
+        print(line)
     return 0
 
 
