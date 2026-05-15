@@ -5,6 +5,9 @@ package decode
 // residual coefficients are decoded via cabac.CABACDecoder.DecodeCABACResidual.
 
 import (
+	"fmt"
+	"os"
+
 	cabac "github.com/rcarmo/go-264/entropy/cabac"
 	"github.com/rcarmo/go-264/syntax"
 )
@@ -404,18 +407,30 @@ func decodeCABACIntraMBWithParams(dec *cabac.CABACDecoder, models []cabac.CABACC
 		return mb
 	}
 
+	traceSyntax := os.Getenv("GO264_CABAC_SYNTAX_TRACE") != ""
+	traceBin := func(label string, idx int) uint32 {
+		preLow, preRange, _ := dec.DebugState()
+		preState := models[idx].DebugPackedState()
+		bin := dec.DecodeBin(&models[idx])
+		postLow, postRange, _ := dec.DebugState()
+		if traceSyntax {
+			fmt.Fprintf(os.Stderr, "GOSYN part=%s idx=%d state=%d low=%d range=%d bin=%d post_state=%d post_low=%d post_range=%d\n", label, idx, preState, preLow, preRange, bin, models[idx].DebugPackedState(), postLow, postRange)
+		}
+		return bin
+	}
+
 	// mb_type: FFmpeg decode_cabac_intra_mb_type(ctx_base, intra_slice).
 	stateOffset := ctxBase
 	isI16 := false
 	if intraSlice {
 		intraCtx := int(isCABACIntra16orPCM(leftMBType) + 2*isCABACIntra16orPCM(topMBType))
-		if dec.DecodeBin(&models[ctxBase+intraCtx]) == 0 {
+		if traceBin("intra_mb_type0", ctxBase+intraCtx) == 0 {
 			mb.MBType = 0 // I_NxN
 		} else {
 			stateOffset += 2
 			isI16 = true
 		}
-	} else if dec.DecodeBin(&models[ctxBase]) == 0 {
+	} else if traceBin("intra_mb_type0", ctxBase) == 0 {
 		mb.MBType = 0 // I_NxN
 	} else {
 		stateOffset = ctxBase
@@ -429,15 +444,15 @@ func decodeCABACIntraMBWithParams(dec *cabac.CABACDecoder, models []cabac.CABACC
 		}
 		// I_16x16: binarize cbp_luma / cbp_chroma / pred_mode.
 		mbType := uint32(1)
-		if dec.DecodeBin(&models[stateOffset+1]) == 1 {
+		if traceBin("i16_cbp_luma", stateOffset+1) == 1 {
 			mbType += 12
 		}
-		if dec.DecodeBin(&models[stateOffset+2]) == 1 {
+		if traceBin("i16_cbp_chroma0", stateOffset+2) == 1 {
 			chromaExtraCtx := stateOffset + 2
 			if intraSlice {
 				chromaExtraCtx++
 			}
-			mbType += 4 + 4*dec.DecodeBin(&models[chromaExtraCtx])
+			mbType += 4 + 4*traceBin("i16_cbp_chroma1", chromaExtraCtx)
 		}
 		predCtx0 := stateOffset + 3
 		predCtx1 := stateOffset + 3
@@ -445,8 +460,8 @@ func decodeCABACIntraMBWithParams(dec *cabac.CABACDecoder, models []cabac.CABACC
 			predCtx0++
 			predCtx1 += 2
 		}
-		mbType += 2 * dec.DecodeBin(&models[predCtx0])
-		mbType += 1 * dec.DecodeBin(&models[predCtx1])
+		mbType += 2 * traceBin("i16_pred0", predCtx0)
+		mbType += 1 * traceBin("i16_pred1", predCtx1)
 		mb.MBType = mbType
 	}
 
@@ -480,13 +495,13 @@ func decodeCABACIntraMBWithParams(dec *cabac.CABACDecoder, models []cabac.CABACC
 				if topMode < predMode {
 					predMode = topMode
 				}
-				if dec.DecodeBin(&models[68]) == 1 {
+				if traceBin("i8x8_prev", 68) == 1 {
 					mb.I8x8PredMode[i] = predMode
 				} else {
 					mode := int8(0)
-					mode |= int8(dec.DecodeBin(&models[69]))
-					mode |= int8(dec.DecodeBin(&models[69])) << 1
-					mode |= int8(dec.DecodeBin(&models[69])) << 2
+					mode |= int8(traceBin("i8x8_rem0", 69))
+					mode |= int8(traceBin("i8x8_rem1", 69)) << 1
+					mode |= int8(traceBin("i8x8_rem2", 69)) << 2
 					if mode >= predMode {
 						mode++
 					}
@@ -497,13 +512,13 @@ func decodeCABACIntraMBWithParams(dec *cabac.CABACDecoder, models []cabac.CABACC
 		} else {
 			// I4x4: one pred mode per 4x4 block (16 total)
 			for i := 0; i < 16; i++ {
-				if dec.DecodeBin(&models[68]) == 1 {
+				if traceBin("i4x4_prev", 68) == 1 {
 					mb.IntraPredMode[i] = -1
 				} else {
 					mode := int8(0)
-					mode |= int8(dec.DecodeBin(&models[69]))
-					mode |= int8(dec.DecodeBin(&models[69])) << 1
-					mode |= int8(dec.DecodeBin(&models[69])) << 2
+					mode |= int8(traceBin("i4x4_rem0", 69))
+					mode |= int8(traceBin("i4x4_rem1", 69)) << 1
+					mode |= int8(traceBin("i4x4_rem2", 69)) << 2
 					mb.IntraPredMode[i] = mode
 				}
 			}
@@ -521,11 +536,11 @@ func decodeCABACIntraMBWithParams(dec *cabac.CABACDecoder, models []cabac.CABACC
 
 	// Chroma prediction mode (ctx 64-67)
 	chromaPredCtx := cabacChromaPredModeCtx(leftChromaPred, topChromaPred)
-	if dec.DecodeBin(&models[64+chromaPredCtx]) == 0 {
+	if traceBin("chroma_pred0", 64+chromaPredCtx) == 0 {
 		mb.ChromaPredMode = 0
-	} else if dec.DecodeBin(&models[67]) == 0 {
+	} else if traceBin("chroma_pred1", 67) == 0 {
 		mb.ChromaPredMode = 1
-	} else if dec.DecodeBin(&models[67]) == 0 {
+	} else if traceBin("chroma_pred2", 67) == 0 {
 		mb.ChromaPredMode = 2
 	} else {
 		mb.ChromaPredMode = 3
