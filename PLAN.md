@@ -88,6 +88,7 @@ Still gated:
 
 - Main/High CABAC frame quality is still below the completion gate despite first-frame syntax parity and the recent reconstruction fixes.
 - Remaining I8x8 work is reconstruction parity (dequant/IDCT scaling, prediction class interactions, filtered predictors, and residual placement), not `transform_size_8x8_flag` consumption. Raw CABAC 8×8 residual `levelseq` diagnostics match FFmpeg for the compared prefix, and `ff_raw_coeff` confirms Go raw coefficients convert exactly to FFmpeg raw storage for the first residual-focused mismatch; level/sign decoding and raw scan placement are ruled out there.
+- `scripts/recon_i8x8_compare.py` now compares by `(frame,mb,b8,occurrence)` and can filter/sort by prediction or residual delta (`--max-pred-delta`, `--min-pred-delta`, `--sort out|pred|res`) plus summarize by predictor mode or spatial bucket. Current summaries show the largest `bbb` I8x8 errors are mostly prediction-dominated and clustered in lower/right regions across several modes; residual-only edge/¼-scaling wins are real but too small/mixed to apply globally.
 
 ### Current reference metrics
 
