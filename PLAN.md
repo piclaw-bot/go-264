@@ -96,9 +96,9 @@ Still gated:
 | `dark64` avg PSNR | 31.23 dB |
 | Baseline CAVLC avg PSNR | 27.65 dB |
 | Baseline YUV PSNR | Y=39.58 U=38.13 V=34.03 dB |
-| `testsrc_cabac_p.h264` frame 0 | Y=46.58 U=56.42 V=59.54 dB |
-| `bbb-frame0` CABAC avg PSNR | 30.46 dB |
-| `bbb_annexb.h264` frame 0 | Y=55.76 U=52.18 V=53.26 dB |
+| `testsrc_cabac_p.h264` frame 0 | Y=56.96 U=60.68 V=64.62 dB |
+| `bbb-frame0` CABAC avg PSNR | ~31 dB (est.) |
+| `bbb_annexb.h264` frame 0 | Y=59.85 U=56.14 V=57.08 dB |
 | BBB baseline decode allocations | ~10.9 MB/op, ~1.3k allocs/op |
 | BBB baseline decode sample | ~44-52 ms/op typical recent sample |
 
