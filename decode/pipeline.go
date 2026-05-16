@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	cabac "github.com/rcarmo/go-264/entropy/cabac"
+	"github.com/rcarmo/go-264/filter"
 	"github.com/rcarmo/go-264/frame"
 	"github.com/rcarmo/go-264/nal"
 	"github.com/rcarmo/go-264/syntax"
@@ -223,6 +224,8 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 	nonSkipCtx := make([]bool, maxMBs)
 	transform8x8Ctx := make([]bool, maxMBs)
 	chromaPredModeCtx := make([]int8, maxMBs)
+	mbQPCtx := make([]int, maxMBs)
+	mbIsIntraCtx := make([]bool, maxMBs)
 	intra8x8Stride := mbWidth * 2
 	intra8x8ModeCtx := make([]int8, intra8x8Stride*mbHeight*2)
 	intra8x8RightCtx := make([]int8, intra8x8Stride*mbHeight*2)
@@ -326,6 +329,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 				currentQP = updateQP(currentQP, int(mb.QPDelta))
 			}
 			d.reconstructMB(f, mb, mbX, mbY, currentQP, sps)
+			mbIsIntraCtx[mbIdx] = true
 			nzCtx[mbIdx] = mb.TotalCoeff
 			chromaNZCtx[mbIdx] = mb.ChromaTotalCoeff
 			cbpCtx[mbIdx] = mb.CodedBlockPattern
@@ -449,6 +453,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					cabacLastQScaleDiff = int(mbIntra.QPDelta)
 					currentQP = updateQP(currentQP, int(mbIntra.QPDelta))
 					d.reconstructMB(f, mbIntra, mbX, mbY, currentQP, sps)
+					mbIsIntraCtx[mbIdx] = true
 					nzCtx[mbIdx] = mbIntra.TotalCoeff
 					chromaNZCtx[mbIdx] = mbIntra.ChromaTotalCoeff
 					cbpCtx[mbIdx] = mbIntra.CodedBlockPattern
@@ -512,6 +517,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 				})
 				currentQP = updateQP(currentQP, int(mb.QPDelta))
 				d.reconstructMB(f, mb, mbX, mbY, currentQP, sps)
+				mbIsIntraCtx[mbIdx] = true
 				nzCtx[mbIdx] = mb.TotalCoeff
 				chromaNZCtx[mbIdx] = mb.ChromaTotalCoeff
 				writeBackIntra4x4(ref4Ctx, mv4Stride, mbX, mbY)
@@ -549,6 +555,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 				}
 				currentQP = updateQP(currentQP, int(mb.QPDelta))
 				d.reconstructMB(f, mb, mbX, mbY, currentQP, sps)
+				mbIsIntraCtx[mbIdx] = true
 				nzCtx[mbIdx] = mb.TotalCoeff
 				chromaNZCtx[mbIdx] = mb.ChromaTotalCoeff
 				writeBackIntra4x4(ref4Ctx, mv4Stride, mbX, mbY)
@@ -558,6 +565,52 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 				nzCtx[mbIdx] = mbBidi.TotalCoeff
 				chromaNZCtx[mbIdx] = mbBidi.ChromaTotalCoeff
 			}
+		}
+		// Per-MB QP always updated here so deblocking can average neighbours.
+		mbQPCtx[mbIdx] = currentQP
+	}
+
+	// In-loop deblocking filter (H.264 §8.7), applied in a second pass over all
+	// MBs so that each filtered MB uses fully reconstructed (but not yet filtered)
+	// neighbour pixels — FFmpeg applies inline but we use a post-pass for clarity.
+	// DisableIDC==1: skip entirely. DisableIDC==2: no cross-slice filtering; we
+	// treat as fully enabled because we decode single-slice frames here.
+	if hdr.DisableDeblocking != 1 {
+		dbCtx := filter.DeblockMBContext{
+			DisableIDC:  int(hdr.DisableDeblocking),
+			AlphaOffset: int(hdr.SliceAlphaC0Offset),
+			BetaOffset:  int(hdr.SliceBetaOffset),
+		}
+		for mbIdx := 0; mbIdx < maxMBs; mbIdx++ {
+			mbX := mbIdx % mbWidth
+			mbY := mbIdx / mbWidth
+			cur := filter.MBDeblockInfo{
+				QP:      mbQPCtx[mbIdx],
+				IsIntra: mbIsIntraCtx[mbIdx],
+				NZC:     nzCtx[mbIdx],
+			}
+			var left, top *filter.MBDeblockInfo
+			if mbX > 0 {
+				l := filter.MBDeblockInfo{
+					QP:      mbQPCtx[mbIdx-1],
+					IsIntra: mbIsIntraCtx[mbIdx-1],
+					NZC:     nzCtx[mbIdx-1],
+				}
+				left = &l
+			}
+			if mbY > 0 {
+				t := filter.MBDeblockInfo{
+					QP:      mbQPCtx[mbIdx-mbWidth],
+					IsIntra: mbIsIntraCtx[mbIdx-mbWidth],
+					NZC:     nzCtx[mbIdx-mbWidth],
+				}
+				top = &t
+			}
+			filter.DeblockMBFrame(
+				f.Y, f.StrideY,
+				f.U, f.V, f.StrideC,
+				mbX, mbY, cur, left, top, dbCtx,
+			)
 		}
 	}
 
