@@ -594,7 +594,7 @@ func (d *Decoder) reconstructChromaIntra(f *frame.Frame, mb *syntax.MBIntra, mbX
 	}
 	dstBaseX := mbX * 8
 	dstBaseY := mbY * 8
-	if dstBaseX < 0 || dstBaseY < 0 || dstBaseX+8 > f.Width/2 || dstBaseY+8 > f.Height/2 || (dstBaseY+7)*f.StrideC+dstBaseX+8 > len(f.U) || (dstBaseY+7)*f.StrideC+dstBaseX+8 > len(f.V) {
+	if dstBaseX < 0 || dstBaseY < 0 || dstBaseX+8 > f.StrideC || (dstBaseY+7)*f.StrideC+dstBaseX+8 > len(f.U) || (dstBaseY+7)*f.StrideC+dstBaseX+8 > len(f.V) {
 		return
 	}
 	chromaQP := frame.ChromaQP(qp, d.chromaQPOffset)
@@ -657,7 +657,7 @@ func (d *Decoder) reconstructChromaIntra(f *frame.Frame, mb *syntax.MBIntra, mbX
 			}
 		}
 		if traceRecon {
-			fmt.Fprintf(os.Stderr, "GORECON part=chroma mb=%04d comp=%d x=%d y=%d mode=%d qp=%d predsum=%d ressum=%d outsum=%d first_pred=%d first_res=%d ctc=%v block_res=%v block_out=%v\n", mbY*d.mbW+mbX, comp, mbX, mbY, mb.ChromaPredMode, chromaQP, predSum, resSum, outSum, predicted[0], residual[0][0], mb.ChromaTotalCoeff[comp], blockResSum, blockOutSum)
+			fmt.Fprintf(os.Stderr, "GORECON part=chroma frame=%d mb=%04d comp=%d x=%d y=%d mode=%d qp=%d predsum=%d ressum=%d outsum=%d first_pred=%d first_res=%d ctc=%v block_res=%v block_out=%v\n", d.traceFrameIndex, mbY*d.mbW+mbX, comp, mbX, mbY, mb.ChromaPredMode, chromaQP, predSum, resSum, outSum, predicted[0], residual[0][0], mb.ChromaTotalCoeff[comp], blockResSum, blockOutSum)
 		}
 	}
 }
@@ -682,7 +682,7 @@ func clip8(v int) uint8 {
 
 func (d *Decoder) predictChroma8x8(f *frame.Frame, comp int, mbX, mbY, mode int) [64]uint8 {
 	var out [64]uint8
-	if f == nil || f.StrideC <= 0 || f.Width < 2 || f.Height < 2 || f.Width/2 > f.StrideC || mbX < 0 || mbY < 0 || mbX*8+8 > f.Width/2 || mbY*8+8 > f.Height/2 || !chromaPlanesCoverFrame(f) {
+	if f == nil || f.StrideC <= 0 || f.Width < 2 || f.Height < 2 || f.Width/2 > f.StrideC || mbX < 0 || mbY < 0 || mbX*8+8 > f.StrideC || (mbY*8+7)*f.StrideC+mbX*8+8 > len(f.U) || (mbY*8+7)*f.StrideC+mbX*8+8 > len(f.V) {
 		for i := range out {
 			out[i] = 128
 		}
