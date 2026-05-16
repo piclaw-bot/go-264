@@ -202,12 +202,11 @@ func (d *Decoder) reconstruct4x4(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY, q
 			}
 		}
 		for i := 0; i < 4; i++ {
-			// H.264 §8.3.1.1: top-right samples are NOT available for
-			// luma4x4BlkIdx 3, 7, 11, 15 (rightmost-top block of each 8×8 group).
-			// Those positions decode later in the luma4x4BlkIdx scan order, so
-			// their frame pixels are still zero-initialised at this point.
+			// H.264/FFmpeg top-right availability is stricter than frame bounds:
+			// right-edge 4×4 blocks and blk13 must extend top[3] instead of reading
+			// samples that are unavailable or not yet reconstructed in decode order.
 			topRightAvail := y0 > 0 && x0+4+i < f.Width &&
-				blkIdx != 3 && blkIdx != 7 && blkIdx != 11 && blkIdx != 15
+				blkIdx != 3 && blkIdx != 7 && blkIdx != 11 && blkIdx != 13 && blkIdx != 15
 			if topRightAvail {
 				topRight[i] = f.PixelY(x0+4+i, y0-1)
 			} else {
