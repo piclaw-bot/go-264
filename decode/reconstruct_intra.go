@@ -329,6 +329,18 @@ func (d *Decoder) reconstruct4x4(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY, q
 
 // reconstruct8x8 handles I_NxN macroblocks using 8×8 DCT (High profile
 // transform_size_8x8_flag=1).
+func i8x8DCEdgeReconMode(mode int, topAvailable, leftAvailable bool) int {
+	if mode == pred.Intra4x4DC {
+		if !topAvailable && leftAvailable {
+			return 9 // LEFT_DC_PRED
+		}
+		if topAvailable && !leftAvailable {
+			return 10 // TOP_DC_PRED
+		}
+	}
+	return mode
+}
+
 func (d *Decoder) reconstruct8x8(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY, qp int) {
 	if mb == nil || !intraMBInFrame(f, mbX, mbY) {
 		return
@@ -375,8 +387,30 @@ func (d *Decoder) reconstruct8x8(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY, q
 			mode = 2
 		}
 		var predicted [64]uint8
-		reconMode := mode
-		if mode == pred.Intra4x4Horizontal && y0 == 0 && x0 > 0 {
+		reconMode := i8x8DCEdgeReconMode(mode, y0 > 0, x0 > 0)
+		if reconMode == 9 {
+			reconMode = 9 // FFmpeg LEFT_DC_PRED when DC lacks top samples.
+			l := filteredI8x8Left(left, topLeft, false)
+			sum := 0
+			for i := 0; i < 8; i++ {
+				sum += l[i]
+			}
+			dc := uint8((sum + 4) >> 3)
+			for i := range predicted {
+				predicted[i] = dc
+			}
+		} else if reconMode == 10 {
+			reconMode = 10 // FFmpeg TOP_DC_PRED when DC lacks left samples.
+			t := filteredI8x8Top(top, topLeft, false, true)
+			sum := 0
+			for i := 0; i < 8; i++ {
+				sum += t[i]
+			}
+			dc := uint8((sum + 4) >> 3)
+			for i := range predicted {
+				predicted[i] = dc
+			}
+		} else if mode == pred.Intra4x4Horizontal && y0 == 0 && x0 > 0 {
 			reconMode = 9 // FFmpeg LEFT_DC_PRED checked mode for this top-edge case.
 			// FFmpeg's pred8x8l table can reconstruct this top-edge I8x8 case
 			// with LEFT_DC_PRED even though the stored syntax mode is horizontal.
