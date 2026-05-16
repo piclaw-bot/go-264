@@ -99,7 +99,7 @@ Still gated:
 | Baseline YUV PSNR | Y=39.58 U=38.13 V=34.03 dB |
 | `testsrc_cabac_p.h264` frame 0 | Y=46.58 U=56.42 V=59.54 dB |
 | `bbb-frame0` CABAC avg PSNR | 30.26 dB |
-| `bbb_annexb.h264` frame 0 | Y=42.56 U=31.42 V=47.25 dB |
+| `bbb_annexb.h264` frame 0 | Y=46.64 U=31.42 V=47.25 dB |
 | BBB baseline decode allocations | ~10.9 MB/op, ~1.3k allocs/op |
 | BBB baseline decode sample | ~44-52 ms/op typical recent sample |
 
