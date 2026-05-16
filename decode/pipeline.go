@@ -531,6 +531,61 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 			}
 		} else {
 			// B-slice
+			if pps.EntropyCodingMode == 1 {
+				// CABAC B-slice: dedicated decoder, avoids CAVLC desynchronization.
+				var leftE8B, topE8B [2]int8
+				for br := 0; br < 2; br++ {
+					if mbX > 0 {
+						leftE8B[br] = intra8x8RightCtx[(mbY*2+br)*intra8x8Stride+(mbX*2-1)]
+					} else {
+						leftE8B[br] = -1
+					}
+				}
+				for bc := 0; bc < 2; bc++ {
+					if mbY > 0 {
+						topE8B[bc] = intra8x8BottomCtx[(mbY*2-1)*intra8x8Stride+(mbX*2+bc)]
+					} else {
+						topE8B[bc] = -1
+					}
+				}
+				refIdxCtxsB := cabacRefIdxCtxsForMB(ref4Ctx, mv4Stride, mbX, mbY)
+				mbBidi, mbIntra, skipped := decodeCABACBidiMB(
+					cabacDec, cabacModels,
+					hdr.NumRefIdxL0Active, hdr.NumRefIdxL1Active,
+					cabacLastQScaleDiff,
+					leftNZ, topNZ, leftChromaNZ, topChromaNZ,
+					leftCBP, topCBP,
+					leftNonSkip, topNonSkip,
+					false, false,
+					refIdxCtxsB, mvd4Ctx, mv4Stride, mbX, mbY,
+					pps.Transform8x8Mode, transform8x8CABACCtx,
+					leftMBType, topMBType,
+					leftChromaPred, topChromaPred,
+					leftE8B, topE8B,
+				)
+				_ = skipped
+				if mbIntra != nil {
+					cabacLastQScaleDiff = int(mbIntra.QPDelta)
+					currentQP = updateQP(currentQP, int(mbIntra.QPDelta))
+					d.reconstructMB(f, mbIntra, mbX, mbY, currentQP, sps)
+					mbIsIntraCtx[mbIdx] = true
+					nzCtx[mbIdx] = mbIntra.TotalCoeff
+					chromaNZCtx[mbIdx] = mbIntra.ChromaTotalCoeff
+					writeBackIntra4x4(ref4Ctx, mv4Stride, mbX, mbY)
+				} else {
+					cabacLastQScaleDiff = int(mbBidi.QPDelta)
+					currentQP = updateQP(currentQP, int(mbBidi.QPDelta))
+					d.reconstructMBBidi(f, mbBidi, mbX, mbY, currentQP)
+					nzCtx[mbIdx] = mbBidi.TotalCoeff
+					chromaNZCtx[mbIdx] = mbBidi.ChromaTotalCoeff
+				}
+				mbQPCtx[mbIdx] = currentQP
+				if cabacDec.DecodeTerminate() == 1 {
+					break
+				}
+				continue
+			}
+			// CAVLC B-slice path.
 			if pps.EntropyCodingMode == 0 {
 				if skipRun == 0 && !decodeAfterSkipRun {
 					skipRun = int(r.ReadUE())

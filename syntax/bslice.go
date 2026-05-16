@@ -32,6 +32,8 @@ type MBBidi struct {
 	MVL0             [4]MotionVector
 	MVL1             [4]MotionVector
 	SubMBType        [4]uint32
+	SubMVL0          [16]MotionVector // sub-partition L0 MVs for B_8x8
+	SubMVL1          [16]MotionVector // sub-partition L1 MVs for B_8x8
 	CBP              uint32
 	Use8x8Transform  bool
 	QPDelta          int32
@@ -284,5 +286,44 @@ func BiPredBlend(out, predL0, predL1 []uint8, n int) {
 	}
 	for i := 0; i < n; i++ {
 		out[i] = uint8((uint16(predL0[i]) + uint16(predL1[i]) + 1) >> 1)
+	}
+}
+
+// B-slice sub-MB type indices (Table 7-17).
+// 0=B_Direct_8x8, 1=B_L0_8x8, 2=B_L1_8x8, 3=B_Bi_8x8,
+// 4=B_L0_8x4, 5=B_L0_4x8, 6=B_L1_8x4, 7=B_L1_4x8,
+// 8=B_Bi_8x4, 9=B_Bi_4x8, 10=B_L0_4x4, 11=B_L1_4x4, 12=B_Bi_4x4.
+
+// BMBSubUsesL0 reports whether the B sub-MB type uses the L0 list.
+func BMBSubUsesL0(t uint32) bool {
+	switch t {
+	case 1, 4, 5, 8, 9, 10: // B_L0_8x8, B_L0_8x4, B_L0_4x8, B_Bi_8x4, B_Bi_4x8, B_L0_4x4
+		return true
+	case 3, 12: // B_Bi_8x8, B_Bi_4x4
+		return true
+	}
+	return false
+}
+
+// BMBSubUsesL1 reports whether the B sub-MB type uses the L1 list.
+func BMBSubUsesL1(t uint32) bool {
+	switch t {
+	case 2, 6, 7, 8, 9, 11: // B_L1_8x8, B_L1_8x4, B_L1_4x8, B_Bi_8x4, B_Bi_4x8, B_L1_4x4
+		return true
+	case 3, 12: // B_Bi_8x8, B_Bi_4x4
+		return true
+	}
+	return false
+}
+
+// BMBSubPartCount returns the number of motion-estimation partitions in a B sub-MB type.
+func BMBSubPartCount(t uint32) int {
+	switch t {
+	case 0, 1, 2, 3: // 8x8 variants
+		return 1
+	case 4, 5, 6, 7, 8, 9: // 8x4 / 4x8 variants
+		return 2
+	default: // 4x4
+		return 4
 	}
 }

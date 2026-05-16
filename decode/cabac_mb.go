@@ -657,3 +657,323 @@ func decodeCABACIntraMBWithParams(dec *cabac.CABACDecoder, models []cabac.CABACC
 
 	return mb
 }
+
+// decodeCABACBidiMB decodes one CABAC-coded B-slice macroblock.
+// Returns (bidi, nil, true) for B-skip/Direct, (nil, intra, false) for intra-in-B.
+// Implements H.264 §9.3.2.1 / FFmpeg h264_cabac.c ff_h264_decode_mb_cabac B-slice path.
+//
+// B-slice differences from P-slice:
+//   - Skip flag context is 24+ctx (B-slice: ctx adds 13 vs P base 11, but FFmpeg
+//     uses decode_cabac_mb_skip which adds 13 for B → effectively base 24 with
+//     neighbor corrections).
+//   - MB type binarized at ctx 27+{0..5} with B-specific table.
+//   - Sub-MB types for B_8x8 use ctx 36-39.
+//   - Both L0 and L1 ref-idx / MVD fields present where applicable.
+func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
+	numRefL0, numRefL1 uint32, lastQScaleDiff int,
+	leftNZ, topNZ *[16]int, leftChromaNZ, topChromaNZ *[2][4]int,
+	leftCBP, topCBP uint32,
+	leftNonSkip, topNonSkip bool,
+	leftIsDirect, topIsDirect bool,
+	refCtxs [4]int,
+	mvd4 []syntax.MotionVector, stride4, mbX, mbY int,
+	transform8x8Mode bool, transform8x8Ctx int,
+	leftMBType, topMBType uint32,
+	leftChromaPred, topChromaPred int8,
+	leftEdge8x8, topEdge8x8 [2]int8,
+) (*syntax.MBBidi, *syntax.MBIntra, bool) {
+	mb := &syntax.MBBidi{}
+	if dec == nil || len(models) < cabacMinMacroblockContexts {
+		// Safe fallback: treat as B_Direct_16x16 skip.
+		return mb, nil, true
+	}
+
+	// B-slice skip flag: ctxIdx = 24 + availability of non-direct left/top MBs.
+	// FFmpeg: decode_cabac_mb_skip adds 13 to the P base (11 + ctx) for B-slices.
+	skipCtx := 24
+	if leftNonSkip {
+		skipCtx++
+	}
+	if topNonSkip {
+		skipCtx++
+	}
+	if dec.DecodeBin(&models[skipCtx]) == 1 {
+		// B_Direct_16x16 skip.
+		mb.MBType = syntax.BMBTypeDirect16x16
+		return mb, nil, true
+	}
+
+	// B-slice MB type binarization: ctx base = 27.
+	// First bin: if 0 → B_Direct_16x16 (0).
+	// If 1: second bin at ctx 27+3: if 0 → B_L0_16x16 (1) or B_L1_16x16 (2)
+	//   based on ctx 27+5. Else: bits at ctx 27+4/5/5/5 for remaining types.
+	if dec.DecodeBin(&models[27]) == 0 {
+		mb.MBType = syntax.BMBTypeDirect16x16
+	} else if dec.DecodeBin(&models[27+3]) == 0 {
+		// B_L0_16x16 or B_L1_16x16.
+		mb.MBType = uint32(1) + dec.DecodeBin(&models[27+5])
+	} else {
+		bits := dec.DecodeBin(&models[27+4]) << 3
+		bits |= dec.DecodeBin(&models[27+5]) << 2
+		bits |= dec.DecodeBin(&models[27+5]) << 1
+		bits |= dec.DecodeBin(&models[27+5])
+		switch {
+		case bits < 8:
+			mb.MBType = 3 + bits // B_Bi_16x16 through B_L1_L0_16x8
+		case bits == 13:
+			// Intra-in-B.
+			if cabacUseFFmpegEdgeContexts() {
+				leftCBP, topCBP = cabacUnavailableCBP(leftCBP, topCBP, mbX, mbY, true)
+				leftNZ, topNZ = cabacTraceEdgeNZ(mbX, mbY, leftNZ, topNZ)
+				leftChromaNZ, topChromaNZ = cabacTraceEdgeChromaNZ(mbX, mbY, leftChromaNZ, topChromaNZ)
+			}
+			intra := decodeCABACIntraMBWithParams(dec, models, lastQScaleDiff,
+				leftNZ, topNZ, leftChromaNZ, topChromaNZ,
+				leftCBP, topCBP, leftMBType, topMBType,
+				leftChromaPred, topChromaPred,
+				transform8x8Mode, transform8x8Ctx,
+				leftEdge8x8, topEdge8x8,
+				32, false)
+			return nil, intra, false
+		case bits == 14:
+			mb.MBType = 11 // B_L1_L0_8x16
+		case bits == 15:
+			mb.MBType = syntax.BMBTypeB8x8
+		default:
+			// bits in {8..12, 16+}: read one more bin.
+			bits = (bits << 1) | dec.DecodeBin(&models[27+5])
+			if bits >= 4 && bits <= 12 {
+				mb.MBType = bits - 4 // B_L0_Bi_* through B_Bi_Bi_*
+			} else {
+				// Fallback: treat as Direct to avoid desync.
+				mb.MBType = syntax.BMBTypeDirect16x16
+			}
+		}
+	}
+
+	if cabacUseFFmpegEdgeContexts() {
+		leftCBP, topCBP = cabacUnavailableCBP(leftCBP, topCBP, mbX, mbY, false)
+	}
+
+	bMBType := mb.MBType
+
+	// B_Direct_16x16: no ref/MV to decode.
+	if bMBType == syntax.BMBTypeDirect16x16 {
+		goto decodeCBP
+	}
+
+	// B_8x8: decode sub-MB types then ref/MV per sub-partition.
+	if bMBType == syntax.BMBTypeB8x8 {
+		for i := 0; i < 4; i++ {
+			mb.SubMBType[i] = decodeCABACBSubMBType(dec, models)
+		}
+		// Ref idx and MVD for each sub-partition per list.
+		// Only decode L0 ref if any sub-MB uses L0; similar for L1.
+		// For simplicity decode L0 then L1 refs, then MVDs in raster order.
+		x4, y4 := mbX*4, mbY*4
+		if numRefL0 > 1 {
+			for i := 0; i < 4; i++ {
+				t := mb.SubMBType[i]
+				if syntax.BMBSubUsesL0(t) {
+					bx, by := x4+(i&1)*2, y4+(i>>1)*2
+					mb.RefIdxL0[i] = int8(syntax.DecodeCABACRef(dec, models, refCtxs[i]))
+					_ = bx
+					_ = by
+				}
+			}
+		}
+		if numRefL1 > 1 {
+			for i := 0; i < 4; i++ {
+				t := mb.SubMBType[i]
+				if syntax.BMBSubUsesL1(t) {
+					mb.RefIdxL1[i] = int8(syntax.DecodeCABACRef(dec, models, refCtxs[i]))
+				}
+			}
+		}
+		for i := 0; i < 4; i++ {
+			t := mb.SubMBType[i]
+			bx, by := x4+(i&1)*2, y4+(i>>1)*2
+			sc := syntax.BMBSubPartCount(t)
+			for j := 0; j < sc; j++ {
+				sx := bx + (j & 1)
+				sy := by + (j >> 1)
+				if syntax.BMBSubUsesL0(t) {
+					mb.SubMVL0[i*4+j] = decodeCABACMVDPair(dec, models, mvd4, stride4, sx, sy, 1, 1)
+				}
+				if syntax.BMBSubUsesL1(t) {
+					mb.SubMVL1[i*4+j] = decodeCABACMVDPair(dec, models, mvd4, stride4, sx, sy, 1, 1)
+				}
+			}
+		}
+		goto decodeCBP
+	}
+
+	// 16x16 / 16x8 / 8x16 partitions: determine how many partitions and which lists.
+	{
+		parts := cabacBPartsForType(bMBType)
+		usesL0, usesL1 := cabacBListsForType(bMBType)
+		x4, y4 := mbX*4, mbY*4
+		if numRefL0 > 1 && usesL0 {
+			for i := 0; i < parts; i++ {
+				mb.RefIdxL0[i] = int8(syntax.DecodeCABACRef(dec, models, refCtxs[i]))
+			}
+		}
+		if numRefL1 > 1 && usesL1 {
+			for i := 0; i < parts; i++ {
+				mb.RefIdxL1[i] = int8(syntax.DecodeCABACRef(dec, models, refCtxs[i]))
+			}
+		}
+		// MVD for L0.
+		if usesL0 {
+			for i := 0; i < parts; i++ {
+				pw, ph := cabacBPartDims(bMBType, i)
+				bx, by := x4+cabacBPartX(bMBType, i, parts), y4+cabacBPartY(bMBType, i, parts)
+				mb.MVL0[i] = decodeCABACMVDPair(dec, models, mvd4, stride4, bx, by, pw, ph)
+			}
+		}
+		// MVD for L1.
+		if usesL1 {
+			for i := 0; i < parts; i++ {
+				pw, ph := cabacBPartDims(bMBType, i)
+				bx, by := x4+cabacBPartX(bMBType, i, parts), y4+cabacBPartY(bMBType, i, parts)
+				mb.MVL1[i] = decodeCABACMVDPair(dec, models, mvd4, stride4, bx, by, pw, ph)
+			}
+		}
+	}
+
+decodeCBP:
+	mb.CBP = syntax.DecodeCABACCBP(dec, models, leftCBP, topCBP)
+	if mb.CBP != 0 {
+		mb.QPDelta = int32(syntax.DecodeCABACDQP(dec, models, lastQScaleDiff))
+		// Decode luma residual.
+		var nzMB [16]int
+		for blkIdx := 0; blkIdx < 16; blkIdx++ {
+			group := blkIdx / 4
+			if mb.CBP&(1<<uint(group)) != 0 {
+				nza, nzb := nzCBFCtxLuma(blkIdx, &nzMB, leftNZ, topNZ)
+				var block [16]int16
+				tc := dec.DecodeCABACResidual(models, 2, 16, block[:], nza, nzb)
+				mb.Coeffs[blkIdx] = block
+				mb.TotalCoeff[blkIdx] = tc
+				nzMB[blkIdx] = tc
+			}
+		}
+		// Decode chroma residual.
+		chromaCBP := (mb.CBP >> 4) & 0x3
+		var nzMBChroma [2][4]int
+		if chromaCBP > 0 {
+			for comp := 0; comp < 2; comp++ {
+				var dc [4]int16
+				var dcBlock [4]int16
+				nzaDC, nzbDC := cabacChromaDCCtx(comp, leftCBP, topCBP)
+				dec.DecodeCABACResidual(models, 3, 4, dcBlock[:], nzaDC, nzbDC)
+				dc[0] = dcBlock[0]
+				for i := 1; i < 4; i++ {
+					nzaDC2, nzbDC2 := nzCBFCtxChroma(comp, i, &nzMBChroma, leftChromaNZ, topChromaNZ)
+					dec.DecodeCABACResidual(models, 3, 4, dcBlock[:], nzaDC2, nzbDC2)
+					dc[i] = dcBlock[0]
+				}
+				_ = dc
+			}
+		}
+		if chromaCBP > 1 {
+			for comp := 0; comp < 2; comp++ {
+				for blk := 0; blk < 4; blk++ {
+					nzaCBF, nzbCBF := nzCBFCtxChroma(comp, blk, &nzMBChroma, leftChromaNZ, topChromaNZ)
+					var ac [16]int16
+					tc := dec.DecodeCABACResidual(models, 4, 15, ac[:], nzaCBF, nzbCBF)
+					mb.CoeffsChroma[comp][blk] = ac
+					mb.ChromaTotalCoeff[comp][blk] = tc
+					nzMBChroma[comp][blk] = tc
+				}
+			}
+		}
+	}
+
+	return mb, nil, false
+}
+
+// decodeCABACBSubMBType decodes one CABAC B-slice sub-MB type.
+// §9.3.2.5 / FFmpeg decode_cabac_b_mb_sub_type.
+func decodeCABACBSubMBType(dec *cabac.CABACDecoder, models []cabac.CABACCtx) uint32 {
+	if len(models) <= 39 {
+		return 0
+	}
+	if dec.DecodeBin(&models[36]) == 0 {
+		return 0 // B_Direct_8x8
+	}
+	if dec.DecodeBin(&models[37]) == 0 {
+		return 1 + dec.DecodeBin(&models[39]) // B_L0_8x8 or B_L1_8x8
+	}
+	t := uint32(3)
+	if dec.DecodeBin(&models[38]) == 1 {
+		if dec.DecodeBin(&models[39]) == 1 {
+			return 11 + dec.DecodeBin(&models[39]) // B_L1_4x4 or B_Bi_4x4
+		}
+		t += 4
+	}
+	t += 2 * dec.DecodeBin(&models[39])
+	t += dec.DecodeBin(&models[39])
+	return t
+}
+
+// cabacBPartsForType returns the number of motion-vector partitions for a B MB type.
+func cabacBPartsForType(t uint32) int {
+	switch t {
+	case syntax.BMBTypeL016x16, syntax.BMBTypeL116x16, syntax.BMBTypeBi16x16:
+		return 1
+	case syntax.BMBTypeL016x8, syntax.BMBTypeL116x8, syntax.BMBTypeBi16x8,
+		syntax.BMBTypeL016x8b, syntax.BMBTypeL116x8b, syntax.BMBTypeBi16x8b,
+		syntax.BMBTypeL08x16, syntax.BMBTypeL18x16, syntax.BMBTypeBi8x16:
+		return 2
+	}
+	return 1
+}
+
+// cabacBListsForType returns whether L0 and L1 are used for the given B MB type.
+func cabacBListsForType(t uint32) (usesL0, usesL1 bool) {
+	switch t {
+	case syntax.BMBTypeL016x16, syntax.BMBTypeL016x8, syntax.BMBTypeL016x8b, syntax.BMBTypeL08x16:
+		return true, false
+	case syntax.BMBTypeL116x16, syntax.BMBTypeL116x8, syntax.BMBTypeL116x8b, syntax.BMBTypeL18x16:
+		return false, true
+	default:
+		// Bi types, L0_L1, L1_L0 — use both.
+		return true, true
+	}
+}
+
+func cabacBPartDims(t uint32, part int) (w, h int) {
+	switch t {
+	case syntax.BMBTypeL016x16, syntax.BMBTypeL116x16, syntax.BMBTypeBi16x16:
+		return 4, 4
+	case syntax.BMBTypeL016x8, syntax.BMBTypeL116x8, syntax.BMBTypeBi16x8,
+		syntax.BMBTypeL016x8b, syntax.BMBTypeL116x8b, syntax.BMBTypeBi16x8b:
+		return 4, 2 // 16x8 partitions
+	case syntax.BMBTypeL08x16, syntax.BMBTypeL18x16, syntax.BMBTypeBi8x16:
+		return 2, 4 // 8x16 partitions
+	}
+	return 2, 2
+}
+
+func cabacBPartX(t uint32, part, nParts int) int {
+	if nParts == 2 {
+		switch t {
+		case syntax.BMBTypeL08x16, syntax.BMBTypeL18x16, syntax.BMBTypeBi8x16:
+			return part * 2 // 8x16 left/right
+		}
+	}
+	return 0
+}
+
+func cabacBPartY(t uint32, part, nParts int) int {
+	if nParts == 2 {
+		switch t {
+		case syntax.BMBTypeL08x16, syntax.BMBTypeL18x16, syntax.BMBTypeBi8x16:
+			return 0
+		default:
+			return part * 2 // 16x8 top/bottom
+		}
+	}
+	return 0
+}

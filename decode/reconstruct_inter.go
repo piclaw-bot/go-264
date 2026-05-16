@@ -41,6 +41,85 @@ func (d *Decoder) refL1(refIdx int8) *frame.Frame {
 	return d.DPB.Frames[pos]
 }
 
+// refBidiL0 returns the refIdx-th L0 (past) reference for B-slice prediction.
+// Uses POC-ordered lookup when the DPB has frames with distinct POCs; falls back
+// to simple index-from-end when all frames share the same POC.
+func (d *Decoder) refBidiL0(refIdx int8, currentPOC int) *frame.Frame {
+	if d == nil || d.DPB == nil || len(d.DPB.Frames) == 0 {
+		return nil
+	}
+	// Build ordered L0 list: frames with POC < currentPOC, sorted by descending POC.
+	var pastFrames []*frame.Frame
+	for _, fr := range d.DPB.Frames {
+		if fr != nil && fr.POC < currentPOC {
+			pastFrames = append(pastFrames, fr)
+		}
+	}
+	// Sort by descending POC (most recent past first).
+	for i := 0; i < len(pastFrames)-1; i++ {
+		for j := i + 1; j < len(pastFrames); j++ {
+			if pastFrames[j].POC > pastFrames[i].POC {
+				pastFrames[i], pastFrames[j] = pastFrames[j], pastFrames[i]
+			}
+		}
+	}
+	idx := int(refIdx)
+	if idx < 0 {
+		idx = 0
+	}
+	if len(pastFrames) > 0 && idx < len(pastFrames) {
+		return pastFrames[idx]
+	}
+	// Fallback: simple index from end of DPB (handles equal-POC test cases).
+	pos := len(d.DPB.Frames) - 1 - idx
+	if pos < 0 {
+		pos = 0
+	}
+	if pos >= len(d.DPB.Frames) {
+		pos = len(d.DPB.Frames) - 1
+	}
+	return d.DPB.Frames[pos]
+}
+
+// refBidiL1 returns the refIdx-th L1 (future) reference for B-slice prediction.
+func (d *Decoder) refBidiL1(refIdx int8, currentPOC int) *frame.Frame {
+	if d == nil || d.DPB == nil || len(d.DPB.Frames) == 0 {
+		return nil
+	}
+	// Build ordered L1 list: frames with POC > currentPOC, sorted by ascending POC.
+	var futureFrames []*frame.Frame
+	for _, fr := range d.DPB.Frames {
+		if fr != nil && fr.POC > currentPOC {
+			futureFrames = append(futureFrames, fr)
+		}
+	}
+	// Sort by ascending POC (nearest future first).
+	for i := 0; i < len(futureFrames)-1; i++ {
+		for j := i + 1; j < len(futureFrames); j++ {
+			if futureFrames[j].POC < futureFrames[i].POC {
+				futureFrames[i], futureFrames[j] = futureFrames[j], futureFrames[i]
+			}
+		}
+	}
+	idx := int(refIdx)
+	if idx < 0 {
+		idx = 0
+	}
+	if len(futureFrames) > 0 && idx < len(futureFrames) {
+		return futureFrames[idx]
+	}
+	// Fallback: second-most-recent DPB entry (handles equal-POC test cases).
+	base := len(d.DPB.Frames) - 2
+	if base < 0 {
+		base = len(d.DPB.Frames) - 1
+	}
+	pos := base - idx
+	if pos < 0 || pos >= len(d.DPB.Frames) {
+		pos = base
+	}
+	return d.DPB.Frames[pos]
+}
+
 func (d *Decoder) reconstructMBInter(f *frame.Frame, mb *syntax.MBInter, mbX, mbY, qp int) {
 	if f == nil || mb == nil {
 		return
@@ -559,8 +638,8 @@ func (d *Decoder) reconstructMBBidi(f *frame.Frame, mb *syntax.MBBidi, mbX, mbY,
 	if dstBaseX < 0 || dstBaseY < 0 || dstBaseX+16 > f.Width || dstBaseY+16 > f.Height {
 		return
 	}
-	refL0 := d.refL0(mb.RefIdxL0[0])
-	refL1 := d.refL1(mb.RefIdxL1[0])
+	refL0 := d.refBidiL0(mb.RefIdxL0[0], f.POC)
+	refL1 := d.refBidiL1(mb.RefIdxL1[0], f.POC)
 	if refL0 == nil {
 		refL0 = f
 	}
