@@ -14,7 +14,7 @@ import re
 from pathlib import Path
 
 GO_RE = re.compile(r"GORECON part=i8x8 (?:frame=(\d+) )?.*?mb=(\d+) b8=(\d+) x=(\d+) y=(\d+) .*?syntax_mode=(-?\d+) recon_mode=(-?\d+) .*?predsum=(-?\d+) .*?outsum=(-?\d+) .*?block_out=\[([^\]]*)\]")
-FF_RE = re.compile(r"FFRECON part=i8x8 (?:frame=(\d+) )?.*?mb=(\d+) b8=(\d+) x=(\d+) y=(\d+) .*?mode=(-?\d+) .*?predsum=(-?\d+) .*?outsum=(-?\d+) .*?block_out=\[([^\]]*)\]")
+FF_RE = re.compile(r"FFRECON part=i8x8 (?:frame=(\d+) )?.*?mb=(\d+) b8=(\d+) x=(\d+) y=(\d+) .*?mode=(-?\d+) .*?predsum=(-?\d+)(?: .*?pred_block=\[([^\]]*)\])?(?: .*?res_block=\[([^\]]*)\])?.*?outsum=(-?\d+).*?block_out=\[([^\]]*)\]")
 
 
 def parse_blocks(path: Path, pattern: re.Pattern[str]) -> list[dict[str, object]]:
@@ -32,6 +32,8 @@ def parse_blocks(path: Path, pattern: re.Pattern[str]) -> list[dict[str, object]
         key = (mb, b8)
         occurrence = occurrence_by_key.get(key, 0)
         occurrence_by_key[key] = occurrence + 1
+        pred_block: list[int] = []
+        res_block: list[int] = []
         if pattern is GO_RE:
             syntax_mode = int(match.group(6))
             recon_mode = int(match.group(7))
@@ -44,8 +46,10 @@ def parse_blocks(path: Path, pattern: re.Pattern[str]) -> list[dict[str, object]
             recon_mode = None
             ff_mode = int(match.group(6))
             predsum = int(match.group(7))
-            outsum = int(match.group(8))
-            block_out = [int(v) for v in match.group(9).split()]
+            pred_block = [int(v) for v in match.group(8).split()] if match.group(8) else []
+            res_block = [int(v) for v in match.group(9).split()] if match.group(9) else []
+            outsum = int(match.group(10))
+            block_out = [int(v) for v in match.group(11).split()]
         blocks.append({
             "key": key,
             "frame_key": frame if frame is not None else occurrence,
@@ -59,6 +63,8 @@ def parse_blocks(path: Path, pattern: re.Pattern[str]) -> list[dict[str, object]
             "predsum": predsum,
             "outsum": outsum,
             "block_out": block_out,
+            "pred_block": pred_block,
+            "res_block": res_block,
             "line": line,
         })
     return blocks
@@ -191,6 +197,8 @@ def main() -> int:
             f"out_delta={out_delta:+d} pred_delta={pred_delta:+d} res_delta={res_delta:+d} "
             f"block_delta={block_delta} go_out={g['outsum']} ff_out={f['outsum']}"
         )
+        if f.get("pred_block") or f.get("res_block"):
+            line += f" ff_pred_block={f.get('pred_block')} ff_res_block={f.get('res_block')}"
         if yuv_samples is not None:
             sx = int(g["x"]) * 16 + (int(b8) & 1) * 8
             sy = int(g["y"]) * 16 + (int(b8) >> 1) * 8
