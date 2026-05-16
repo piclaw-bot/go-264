@@ -366,11 +366,13 @@ func (d *Decoder) reconstruct8x8(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY, q
 				left[i] = 128
 			}
 		}
+		hasTopRight8x8 := false
 		for i := 8; i < 16; i++ {
 			// Top-right references are available from already reconstructed rows.
 			// Within the current macroblock's lower 8×8 row, crossing right would
 			// read the next macroblock before it is decoded, so extend top[7].
 			if y0 > 0 && (by == 0 || bx == 0) && x0+i < f.Width {
+				hasTopRight8x8 = true
 				top[i] = f.PixelY(x0+i, y0-1)
 			} else {
 				top[i] = top[7]
@@ -452,7 +454,7 @@ func (d *Decoder) reconstruct8x8(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY, q
 			} else if x0 == 0 && y0 > 0 {
 				predTopLeft = top[0]
 			}
-			pred.PredIntra8x8(predicted[:], mode, top[:], left[:], predTopLeft)
+			pred.PredIntra8x8WithTopRight(predicted[:], mode, top[:], left[:], predTopLeft, hasTopRight8x8)
 		}
 
 		block := joinLuma8x8Residual(mb.Coeffs, b8)

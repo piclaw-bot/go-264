@@ -9,7 +9,10 @@ package pred
 //   - left:    8-byte slice  (left[0..7] = pixels to the left)
 //   - topLeft: corner pixel p[-1][-1]
 func PredIntra8x8(pred []uint8, mode int, top, left []uint8, topLeft uint8) {
-	hasTopRight := len(top) >= 16 && top[8] != top[7]
+	PredIntra8x8WithTopRight(pred, mode, top, left, topLeft, len(top) >= 16 && top[8] != top[7])
+}
+
+func PredIntra8x8WithTopRight(pred []uint8, mode int, top, left []uint8, topLeft uint8, hasTopRight bool) {
 
 	clip8 := func(v int) uint8 {
 		if v < 0 {
