@@ -874,35 +874,59 @@ decodeCBP:
 	mb.CBP = syntax.DecodeCABACCBP(dec, models, leftCBP, topCBP)
 	if mb.CBP != 0 {
 		mb.QPDelta = int32(syntax.DecodeCABACDQP(dec, models, lastQScaleDiff))
-		// Decode luma residual.
+		// Decode luma residual — mirrors the P-slice path including 8×8 transform.
 		var nzMB [16]int
-		for blkIdx := 0; blkIdx < 16; blkIdx++ {
-			group := blkIdx / 4
-			if mb.CBP&(1<<uint(group)) != 0 {
-				nza, nzb := nzCBFCtxLuma(blkIdx, &nzMB, leftNZ, topNZ)
-				var block [16]int16
-				tc := dec.DecodeCABACResidual(models, 2, 16, block[:], nza, nzb)
-				mb.Coeffs[blkIdx] = block
-				mb.TotalCoeff[blkIdx] = tc
-				nzMB[blkIdx] = tc
+		use8x8Residual := false
+		if transform8x8Mode && mb.CBP&0xF != 0 && bMBType != syntax.BMBTypeDirect16x16 {
+			if decodeCABACTransform8x8Flag(dec, models, transform8x8Ctx) {
+				use8x8Residual = true
+				mb.Use8x8Transform = true
 			}
 		}
-		// Decode chroma residual.
+		if use8x8Residual {
+			for group := 0; group < 4; group++ {
+				if mb.CBP&(1<<uint(group)) != 0 {
+					nzaBlk, nzbBlk := nzCBFCtxLuma(group*4, &nzMB, leftNZ, topNZ)
+					var buf [64]int16
+					tc := dec.DecodeCABACResidual(models, 5, 64, buf[:], nzaBlk, nzbBlk)
+					splitLuma8x8Residual(&mb.Coeffs, group, buf)
+					for sub := 0; sub < 4; sub++ {
+						mb.TotalCoeff[group*4+sub] = tc
+						nzMB[group*4+sub] = tc
+					}
+				}
+			}
+		} else {
+			for blkIdx := 0; blkIdx < 16; blkIdx++ {
+				group := blkIdx / 4
+				if mb.CBP&(1<<uint(group)) != 0 {
+					nza, nzb := nzCBFCtxLuma(blkIdx, &nzMB, leftNZ, topNZ)
+					var block [16]int16
+					tc := dec.DecodeCABACResidual(models, 2, 16, block[:], nza, nzb)
+					mb.Coeffs[blkIdx] = block
+					mb.TotalCoeff[blkIdx] = tc
+					nzMB[blkIdx] = tc
+				}
+			}
+		}
+		// Decode chroma residual — mirrors the P-slice path exactly.
+		// Chroma DC is a single 4-coefficient block decoded with ONE residual call;
+		// the bug of 5 calls was consuming ~4× too many CABAC bins and causing
+		// accumulated state drift (premature end_of_slice_flag).
 		chromaCBP := (mb.CBP >> 4) & 0x3
 		var nzMBChroma [2][4]int
 		if chromaCBP > 0 {
 			for comp := 0; comp < 2; comp++ {
+				nza, nzb := cabacChromaDCCtx(comp, leftCBP, topCBP)
 				var dc [4]int16
-				var dcBlock [4]int16
-				nzaDC, nzbDC := cabacChromaDCCtx(comp, leftCBP, topCBP)
-				dec.DecodeCABACResidual(models, 3, 4, dcBlock[:], nzaDC, nzbDC)
-				dc[0] = dcBlock[0]
-				for i := 1; i < 4; i++ {
-					nzaDC2, nzbDC2 := nzCBFCtxChroma(comp, i, &nzMBChroma, leftChromaNZ, topChromaNZ)
-					dec.DecodeCABACResidual(models, 3, 4, dcBlock[:], nzaDC2, nzbDC2)
-					dc[i] = dcBlock[0]
+				tc := dec.DecodeCABACResidual(models, 3, 4, dc[:], nza, nzb)
+				if tc > 0 {
+					mb.CBP |= 0x40 << uint(comp)
 				}
-				_ = dc
+				// Store chroma DC for reconstruction.
+				for i := range dc {
+					mb.CoeffsChroma[comp][i][0] = dc[i]
+				}
 			}
 		}
 		if chromaCBP > 1 {
@@ -911,7 +935,9 @@ decodeCBP:
 					nzaCBF, nzbCBF := nzCBFCtxChroma(comp, blk, &nzMBChroma, leftChromaNZ, topChromaNZ)
 					var ac [16]int16
 					tc := dec.DecodeCABACResidual(models, 4, 15, ac[:], nzaCBF, nzbCBF)
-					mb.CoeffsChroma[comp][blk] = ac
+					for j := 1; j < 16; j++ {
+						mb.CoeffsChroma[comp][blk][j] = ac[j]
+					}
 					mb.ChromaTotalCoeff[comp][blk] = tc
 					nzMBChroma[comp][blk] = tc
 				}
