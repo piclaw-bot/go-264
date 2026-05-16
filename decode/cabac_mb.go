@@ -838,12 +838,17 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 				mb.MVL0[i] = decodeCABACMVDPair(dec, models, mvd4, stride4, bx, by, pw, ph)
 			}
 		}
-		// MVD for L1.
+		// MVD for L1: use a zero-filled context cache so L1 amvd=0 (no separate L1 MVD tracker).
+		// FFmpeg maintains ref_cache[1] separately for L1 spatial MVD prediction context;
+		// without a proper L1 mvd4 cache, zero amvd is correct for non-Bi MBs and
+		// avoids wrong bin consumption from L0 magnitudes bleeding into L1 context.
 		if usesL1 {
+			var mvd4L1 []syntax.MotionVector
+			mvd4L1 = make([]syntax.MotionVector, len(mvd4))
 			for i := 0; i < parts; i++ {
 				pw, ph := cabacBPartDims(bMBType, i)
 				bx, by := x4+cabacBPartX(bMBType, i, parts), y4+cabacBPartY(bMBType, i, parts)
-				mb.MVL1[i] = decodeCABACMVDPair(dec, models, mvd4, stride4, bx, by, pw, ph)
+				mb.MVL1[i] = decodeCABACMVDPair(dec, models, mvd4L1, stride4, bx, by, pw, ph)
 			}
 		}
 	}
