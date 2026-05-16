@@ -841,6 +841,35 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 		}
 	}
 
+	// Apply motion-vector predictors: add MVP to each decoded MVD to get final MV.
+	// This mirrors the P-slice applyMVPredictors step. For Direct16x16 skip MBs
+	// the MVs are zero and MVP is irrelevant; for other types MVP must be added.
+	if bMBType != syntax.BMBTypeDirect16x16 && bMBType != syntax.BMBTypeB8x8 {
+		parts := cabacBPartsForType(bMBType)
+		usesL0B, usesL1B := cabacBListsForType(bMBType)
+		x4, y4 := mbX*4, mbY*4
+		if usesL0B {
+			for i := 0; i < parts; i++ {
+				bx := x4 + cabacBPartX(bMBType, i, parts)
+				by := y4 + cabacBPartY(bMBType, i, parts)
+				pw, _ := cabacBPartDims(bMBType, i)
+				mvp := predictMotion4x4(mvd4, nil, stride4, bx, by, pw, int8(mb.RefIdxL0[i]))
+				mb.MVL0[i].X += mvp.X
+				mb.MVL0[i].Y += mvp.Y
+			}
+		}
+		if usesL1B {
+			for i := 0; i < parts; i++ {
+				bx := x4 + cabacBPartX(bMBType, i, parts)
+				by := y4 + cabacBPartY(bMBType, i, parts)
+				pw, _ := cabacBPartDims(bMBType, i)
+				mvp := predictMotion4x4(mvd4, nil, stride4, bx, by, pw, int8(mb.RefIdxL1[i]))
+				mb.MVL1[i].X += mvp.X
+				mb.MVL1[i].Y += mvp.Y
+			}
+		}
+	}
+
 decodeCBP:
 	mb.CBP = syntax.DecodeCABACCBP(dec, models, leftCBP, topCBP)
 	if mb.CBP != 0 {

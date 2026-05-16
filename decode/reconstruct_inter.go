@@ -533,11 +533,14 @@ func fillBPredBlock(dst []uint8, ref *frame.Frame, srcBaseX, srcBaseY, dstX, dst
 	if lastPixel < 0 || lastPixel >= len(ref.Y) {
 		return
 	}
+	// Use bilinear fractional-pixel interpolation (same as P-frame path).
+	// InterPred16x16At writes a 16×16 block from the reference plane into dst
+	// with quarter-pixel bilinear weighting, handling clipped edges.
+	var tmp [256]uint8
+	pred.InterPred16x16At(tmp[:], ref.Y, ref.StrideY, srcBaseX, srcBaseY, pred.MotionVector{X: mv.X, Y: mv.Y})
 	for y := 0; y < h; y++ {
 		for x := 0; x < w; x++ {
-			sx := clampInt(srcBaseX+x+int(mv.X>>2), 0, ref.Width-1)
-			sy := clampInt(srcBaseY+y+int(mv.Y>>2), 0, ref.Height-1)
-			dst[(dstY+y)*16+dstX+x] = ref.PixelY(sx, sy)
+			dst[(dstY+y)*16+dstX+x] = tmp[y*16+x]
 		}
 	}
 }

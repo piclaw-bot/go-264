@@ -571,6 +571,9 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					mbIsIntraCtx[mbIdx] = true
 					nzCtx[mbIdx] = mbIntra.TotalCoeff
 					chromaNZCtx[mbIdx] = mbIntra.ChromaTotalCoeff
+					cbpCtx[mbIdx] = mbIntra.CodedBlockPattern
+					mbTypeCtx[mbIdx] = cabacMBTypeFlag(mbIntra.MBType)
+					nonSkipCtx[mbIdx] = true
 					writeBackIntra4x4(ref4Ctx, mv4Stride, mbX, mbY)
 				} else {
 					cabacLastQScaleDiff = int(mbBidi.QPDelta)
@@ -578,6 +581,27 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					d.reconstructMBBidi(f, mbBidi, mbX, mbY, currentQP)
 					nzCtx[mbIdx] = mbBidi.TotalCoeff
 					chromaNZCtx[mbIdx] = mbBidi.ChromaTotalCoeff
+					cbpCtx[mbIdx] = mbBidi.CBP
+					mbTypeCtx[mbIdx] = 0 // inter B
+					nonSkipCtx[mbIdx] = mbBidi.MBType != syntax.BMBTypeDirect16x16
+					// Write back MV context so subsequent MBs can use L0 MVs for MVP.
+					if mbBidi.MBType != syntax.BMBTypeB8x8 && mbBidi.MBType != syntax.BMBTypeDirect16x16 {
+						_, usesL1B := cabacBListsForType(mbBidi.MBType)
+						_ = usesL1B
+						if mbBidi.MVL0[0].X != 0 || mbBidi.MVL0[0].Y != 0 {
+							// Store L0 MV into the mv4 cache so future MBs get correct MVP.
+							mv := mbBidi.MVL0[0]
+							for dy := 0; dy < 4; dy++ {
+								for dx := 0; dx < 4; dx++ {
+									idx := (mbY*4+dy)*mv4Stride + mbX*4 + dx
+									if idx >= 0 && idx < len(mv4Ctx) {
+										mv4Ctx[idx] = mv
+										ref4Ctx[idx] = mbBidi.RefIdxL0[0]
+									}
+								}
+							}
+						}
+					}
 				}
 				mbQPCtx[mbIdx] = currentQP
 				if cabacDec.DecodeTerminate() == 1 {
