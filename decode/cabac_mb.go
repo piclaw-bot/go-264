@@ -703,11 +703,18 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 		return mb, nil, true
 	}
 
-	// B-slice MB type binarization: ctx base = 27.
-	// First bin: if 0 → B_Direct_16x16 (0).
-	// If 1: second bin at ctx 27+3: if 0 → B_L0_16x16 (1) or B_L1_16x16 (2)
-	//   based on ctx 27+5. Else: bits at ctx 27+4/5/5/5 for remaining types.
-	if dec.DecodeBin(&models[27]) == 0 {
+	// B-slice MB type binarization: ctx base = 27 + ctxOffset.
+	// ctxOffset: +1 if left MB is non-Direct, +1 if top MB is non-Direct.
+	// Mirrors FFmpeg: if (!IS_DIRECT(left_type-1)) ctx++; if (!IS_DIRECT(top_type-1)) ctx++.
+	// leftIsDirect=false means the left MB was non-Direct → increment ctx.
+	typeCtxOffset := 0
+	if !leftIsDirect {
+		typeCtxOffset++
+	}
+	if !topIsDirect {
+		typeCtxOffset++
+	}
+	if dec.DecodeBin(&models[27+typeCtxOffset]) == 0 {
 		mb.MBType = syntax.BMBTypeDirect16x16
 	} else if dec.DecodeBin(&models[27+3]) == 0 {
 		// B_L0_16x16 or B_L1_16x16.

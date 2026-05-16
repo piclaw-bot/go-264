@@ -556,7 +556,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					leftNZ, topNZ, leftChromaNZ, topChromaNZ,
 					leftCBP, topCBP,
 					leftNonSkip, topNonSkip,
-					false, false,
+					!leftNonSkip, !topNonSkip, // leftIsDirect/topIsDirect
 					refIdxCtxsB, mvd4Ctx, mv4Stride, mbX, mbY,
 					pps.Transform8x8Mode, transform8x8CABACCtx,
 					leftMBType, topMBType,
