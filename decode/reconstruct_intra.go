@@ -460,7 +460,16 @@ func (d *Decoder) reconstruct8x8(f *frame.Frame, mb *syntax.MBIntra, mbX, mbY, q
 				predicted[i] = dc
 			}
 		} else {
-			pred.PredIntra8x8(predicted[:], mode, top[:], left[:], topLeft)
+			// FFmpeg's PREDICT_8x8_LOAD_TOP/LEFT macros do not feed a
+			// synthetic 128 corner into the strong reference filter when only
+			// one edge exists; they substitute the first available edge sample.
+			predTopLeft := topLeft
+			if y0 == 0 && x0 > 0 {
+				predTopLeft = left[0]
+			} else if x0 == 0 && y0 > 0 {
+				predTopLeft = top[0]
+			}
+			pred.PredIntra8x8(predicted[:], mode, top[:], left[:], predTopLeft)
 		}
 
 		block := joinLuma8x8Residual(mb.Coeffs, b8)
