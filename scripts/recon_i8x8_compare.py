@@ -78,6 +78,7 @@ def main() -> int:
     parser.add_argument("--summary-by-mode", action="store_true", help="summarize absolute deltas by Go/FFmpeg predictor mode tuple")
     parser.add_argument("--sort", choices=("out", "pred", "res"), default="out", help="sort rows by absolute output, prediction, or residual delta")
     parser.add_argument("--mode-mismatch", action="store_true", help="only show rows where Go reconstruction mode differs from FFmpeg mode")
+    parser.add_argument("--recon-mode-mismatch", action="store_true", help="only show rows where Go reconstruction mode differs from FFmpeg reconstruction mode")
     parser.add_argument("--summary-spatial", action="store_true", help="summarize largest-delta rows by image-region buckets")
     parser.add_argument("--go-yuv", type=Path, help="optional Go frame-0 YUV420P file for neighbour-edge sampling")
     parser.add_argument("--ffmpeg-yuv", type=Path, help="optional FFmpeg frame-0 YUV420P file for neighbour-edge sampling")
@@ -110,6 +111,8 @@ def main() -> int:
         g = go[key]
         f = ff[key]
         if args.mode_mismatch and g["recon_mode"] == f["ff_mode"]:
+            continue
+        if args.recon_mode_mismatch and g["recon_mode"] == f["ff_mode"]:
             continue
         out_delta = int(g["outsum"]) - int(f["outsum"])
         pred_delta = int(g["predsum"]) - int(f["predsum"])
