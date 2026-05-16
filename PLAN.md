@@ -82,7 +82,7 @@ Current parity tooling and findings:
 - CABAC diagnostics now cover MB summaries, CBP bin decisions with consistent arithmetic state, residual CBF/significant/last/level decisions, and intra syntax bins.
 - `testsrc_cabac_p.h264` and `bbb_annexb.h264` first-frame MB syntax summaries now report `NO_DIVERGENCE in compared fields`.
 - `GO264_RECON_TRACE=1` now emits luma Intra_8x8 syntax vs reconstruction mode, prediction reference samples (`top`, `left`, `top_left`), raw row-major coefficients, FFmpeg-storage raw coefficient view, dequantized coefficients, prediction/residual/output and pre/post-IDCT checksums, plus chroma prediction/residual/output and per-4×4 block checksums, enabling direct FFmpeg reconstruction comparisons.
-- Recent accepted reconstruction fixes include luma Intra_8x8 filtered DC references, the top-edge Intra_8x8 `LEFT_DC_PRED` reconstruction case, FFmpeg chroma DC quadrant/edge predictors, FFmpeg `pred_intra_mode` unavailable-neighbour handling, separate I4x4-derived right/bottom mode caches for CABAC I8x8 neighbour prediction, and aligned-buffer reconstruction for partial edge macroblocks. The active gap is remaining Main/High reconstruction quality, especially luma/I8x8-heavy `bbb-frame0`.
+- Recent accepted reconstruction fixes include luma Intra_8x8 filtered DC references, the top-edge Intra_8x8 `LEFT_DC_PRED` reconstruction case, FFmpeg chroma DC quadrant/edge predictors, FFmpeg `pred_intra_mode` unavailable-neighbour handling, separate I4x4-derived right/bottom mode caches for CABAC I8x8 neighbour prediction, aligned-buffer reconstruction for partial edge macroblocks, and FFmpeg-scale 8×8 dequant before IDCT. The active gap is remaining Main/High reconstruction quality, especially luma/I8x8-heavy `bbb-frame0`.
 
 Still gated:
 
@@ -98,8 +98,8 @@ Still gated:
 | Baseline CAVLC avg PSNR | 27.65 dB |
 | Baseline YUV PSNR | Y=39.58 U=38.13 V=34.03 dB |
 | `testsrc_cabac_p.h264` frame 0 | Y=46.58 U=56.42 V=59.54 dB |
-| `bbb-frame0` CABAC avg PSNR | 12.98 dB |
-| `bbb_annexb.h264` frame 0 | Y=13.04 U=31.42 V=47.25 dB |
+| `bbb-frame0` CABAC avg PSNR | 17.02 dB |
+| `bbb_annexb.h264` frame 0 | Y=17.11 U=31.42 V=47.25 dB |
 | BBB baseline decode allocations | ~10.9 MB/op, ~1.3k allocs/op |
 | BBB baseline decode sample | ~44-52 ms/op typical recent sample |
 
