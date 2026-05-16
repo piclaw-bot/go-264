@@ -86,6 +86,8 @@ def main() -> int:
     parser.add_argument("--mode-mismatch", action="store_true", help="only show rows where Go reconstruction mode differs from FFmpeg mode")
     parser.add_argument("--recon-mode-mismatch", action="store_true", help="only show rows where Go reconstruction mode differs from FFmpeg reconstruction mode")
     parser.add_argument("--summary-spatial", action="store_true", help="summarize largest-delta rows by image-region buckets")
+    parser.add_argument("--classify", action="store_true", help="classify rows as mode, prediction-dominant, residual-dominant, or mixed")
+    parser.add_argument("--classify-threshold", type=int, default=200, help="minimum absolute output delta for earliest-class examples")
     parser.add_argument("--go-yuv", type=Path, help="optional Go frame-0 YUV420P file for neighbour-edge sampling")
     parser.add_argument("--ffmpeg-yuv", type=Path, help="optional FFmpeg frame-0 YUV420P file for neighbour-edge sampling")
     parser.add_argument("--width", type=int, help="Y plane width for --go-yuv/--ffmpeg-yuv")
@@ -135,6 +137,33 @@ def main() -> int:
     if not rows:
         print("no matching blocks after filters")
         return 1
+
+    if args.classify:
+        groups: dict[str, list[tuple[int, int, int, int, int, str]]] = {"mode": [], "prediction": [], "residual": [], "mixed": []}
+        for _abs_out, _key, out_delta, pred_delta, res_delta, _block_delta, g, f in rows:
+            abs_out = abs(out_delta)
+            abs_pred = abs(pred_delta)
+            abs_res = abs(res_delta)
+            if g["recon_mode"] != f["ff_mode"]:
+                cls = "mode"
+            elif abs_pred > abs_res * 2:
+                cls = "prediction"
+            elif abs_res > abs_pred * 2:
+                cls = "residual"
+            else:
+                cls = "mixed"
+            mb, b8 = g["key"]
+            groups[cls].append((int(mb), int(b8), abs_out, abs_pred, abs_res, g["line"]))
+        for name in ("mode", "prediction", "residual", "mixed"):
+            items = groups[name]
+            print(f"{name}: count={len(items)}")
+            earliest = next((item for item in sorted(items) if item[2] >= args.classify_threshold), None)
+            if earliest is not None:
+                mb, b8, abs_out, abs_pred, abs_res, _line = earliest
+                print(f"  earliest_abs_out>={args.classify_threshold}: mb={mb:04d} b8={b8} abs_out={abs_out} abs_pred={abs_pred} abs_res={abs_res}")
+            for mb, b8, abs_out, abs_pred, abs_res, _line in sorted(items, key=lambda item: item[2], reverse=True)[: min(args.limit, 5)]:
+                print(f"  top: mb={mb:04d} b8={b8} abs_out={abs_out} abs_pred={abs_pred} abs_res={abs_res}")
+        return 0
 
     if args.summary_spatial:
         sort_index = {"out": 0, "pred": 3, "res": 4}[args.sort]
