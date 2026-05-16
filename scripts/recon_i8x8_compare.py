@@ -237,6 +237,13 @@ def main() -> int:
                     left_go = [go_y[(sy + i) * args.width + sx - 1] for i in range(8)]
                     left_ff = [ff_y[(sy + i) * args.width + sx - 1] for i in range(8)]
                     line += f" left_go={left_go} left_ff={left_ff}"
+                if sy > 0:
+                    top_go = [go_y[(sy - 1) * args.width + sx + i] for i in range(8)]
+                    top_ff = [ff_y[(sy - 1) * args.width + sx + i] for i in range(8)]
+                    line += f" top_go={top_go} top_ff={top_ff}"
+                bottom_go = [go_y[(sy + 7) * args.width + sx + i] for i in range(8)]
+                bottom_ff = [ff_y[(sy + 7) * args.width + sx + i] for i in range(8)]
+                line += f" bottom_go={bottom_go} bottom_ff={bottom_ff}"
                 if sx + 7 < args.width:
                     right_go = [go_y[(sy + i) * args.width + sx + 7] for i in range(8)]
                     right_ff = [ff_y[(sy + i) * args.width + sx + 7] for i in range(8)]
