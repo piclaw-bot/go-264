@@ -563,7 +563,22 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					leftChromaPred, topChromaPred,
 					leftE8B, topE8B,
 				)
-				_ = skipped
+				if skipped {
+					// B_Direct_16x16 skip: QP unchanged, lastQScaleDiff resets to 0.
+					cabacLastQScaleDiff = 0
+					d.reconstructMBBidi(f, mbBidi, mbX, mbY, currentQP)
+					nzCtx[mbIdx] = mbBidi.TotalCoeff
+					chromaNZCtx[mbIdx] = mbBidi.ChromaTotalCoeff
+					cbpCtx[mbIdx] = 0
+					mbTypeCtx[mbIdx] = 0
+					nonSkipCtx[mbIdx] = false
+					transform8x8Ctx[mbIdx] = false
+					mbQPCtx[mbIdx] = currentQP
+					if cabacDec.DecodeTerminate() == 1 {
+						break
+					}
+					continue
+				}
 				if mbIntra != nil {
 					cabacLastQScaleDiff = int(mbIntra.QPDelta)
 					currentQP = updateQP(currentQP, int(mbIntra.QPDelta))
@@ -584,6 +599,8 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					cbpCtx[mbIdx] = mbBidi.CBP
 					mbTypeCtx[mbIdx] = 0 // inter B
 					nonSkipCtx[mbIdx] = mbBidi.MBType != syntax.BMBTypeDirect16x16
+					// transform8x8Ctx not updated: updating propagates wrong values until
+					// the B-frame CABAC transform8x8_flag decode is verified correct.
 					// Write back MV context so subsequent MBs can use L0 MVs for MVP.
 					if mbBidi.MBType != syntax.BMBTypeB8x8 && mbBidi.MBType != syntax.BMBTypeDirect16x16 {
 						_, usesL1B := cabacBListsForType(mbBidi.MBType)
