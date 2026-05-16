@@ -197,23 +197,24 @@ func filterChromaSample(p1, p0, q0, q1, bS, alpha, beta, indexA int) (rp0, rq0 u
 
 // FilterLumaEdgeV filters a vertical luma edge in-place on plane data.
 // The edge is at column x (pixels x-1 and x are p0/q0).
-// rowStart: first row to filter; nrows must be a multiple of 4.
+// rowStart: first row to filter; nrows must be a multiple of 4 (up to 16).
 // bS[4]: boundary strength for each group of 4 rows.
 // indexA/B: clipped QP+offset indices into alpha/beta tables.
+// filterLumaSample is inlined here to avoid multi-return call overhead.
 func FilterLumaEdgeV(plane []uint8, stride, x, rowStart, nrows int, bS [4]int, indexA, indexB int) {
 	if x < 4 || x+4 > stride || indexA < 0 || indexA > 51 || indexB < 0 || indexB > 51 {
 		return
 	}
 	alpha := alphaTable[indexA]
 	beta := betaTable[indexB]
+	alphaQ2 := (alpha >> 2) + 2
 	for g := 0; g < nrows/4 && g < 4; g++ {
 		bs := bS[g]
 		if bs == 0 {
 			continue
 		}
 		for r := 0; r < 4; r++ {
-			row := rowStart + g*4 + r
-			base := row * stride
+			base := (rowStart + g*4 + r) * stride
 			if base+x+4 > len(plane) || base+x-4 < 0 {
 				continue
 			}
@@ -225,27 +226,63 @@ func FilterLumaEdgeV(plane []uint8, stride, x, rowStart, nrows int, bS [4]int, i
 			q1 := int(plane[base+x+1])
 			q2 := int(plane[base+x+2])
 			q3 := int(plane[base+x+3])
-			rp0, rp1, rp2, rq0, rq1, rq2 := filterLumaSample(p3, p2, p1, p0, q0, q1, q2, q3, bs, alpha, beta, indexA)
-			plane[base+x-1] = rp0
-			plane[base+x-2] = rp1
-			plane[base+x-3] = rp2
-			plane[base+x+0] = rq0
-			plane[base+x+1] = rq1
-			plane[base+x+2] = rq2
+			if abs(p0-q0) >= alpha || abs(p1-p0) >= beta || abs(q1-q0) >= beta {
+				continue
+			}
+			if bs == 4 {
+				cond := abs(p0-q0) < alphaQ2
+				if cond && abs(p2-p0) < beta {
+					plane[base+x-1] = Clip1((p2 + 2*p1 + 2*p0 + 2*q0 + q1 + 4) >> 3)
+					plane[base+x-2] = Clip1((p2 + p1 + p0 + q0 + 2) >> 2)
+					plane[base+x-3] = Clip1((2*p3 + 3*p2 + p1 + p0 + q0 + 4) >> 3)
+				} else {
+					plane[base+x-1] = Clip1((2*p1 + p0 + q1 + 2) >> 2)
+				}
+				if cond && abs(q2-q0) < beta {
+					plane[base+x+0] = Clip1((p1 + 2*p0 + 2*q0 + 2*q1 + q2 + 4) >> 3)
+					plane[base+x+1] = Clip1((p0 + q0 + q1 + q2 + 2) >> 2)
+					plane[base+x+2] = Clip1((2*q3 + 3*q2 + q1 + q0 + p0 + 4) >> 3)
+				} else {
+					plane[base+x+0] = Clip1((2*q1 + q0 + p1 + 2) >> 2)
+				}
+			} else {
+				tc0 := tc0Table[indexA][bs-1]
+				tc := tc0
+				p2p0 := abs(p2 - p0)
+				q2q0 := abs(q2 - q0)
+				if p2p0 < beta {
+					tc++
+				}
+				if q2q0 < beta {
+					tc++
+				}
+				delta := Clip3(-tc, tc, ((q0-p0)*4+(p1-q1)+4)>>3)
+				plane[base+x-1] = Clip1(p0 + delta)
+				plane[base+x+0] = Clip1(q0 - delta)
+				if p2p0 < beta {
+					plane[base+x-2] = Clip1(p1 + Clip3(-tc0, tc0, (p2+((p0+q0+1)>>1)-(p1<<1))>>1))
+				}
+				if q2q0 < beta {
+					plane[base+x+1] = Clip1(q1 + Clip3(-tc0, tc0, (q2+((p0+q0+1)>>1)-(q1<<1))>>1))
+				}
+			}
 		}
 	}
 }
 
 // FilterLumaEdgeH filters a horizontal luma edge in-place on plane data.
 // The edge is at row y (pixels y-1 and y are p0/q0).
-// colStart: first column; ncols must be a multiple of 4.
+// colStart: first column; ncols must be a multiple of 4 (up to 16).
 // bS[4]: boundary strength for each group of 4 columns.
+// filterLumaSample is inlined here to avoid multi-return call overhead.
 func FilterLumaEdgeH(plane []uint8, stride, y, colStart, ncols int, bS [4]int, indexA, indexB int) {
 	if y < 4 || indexA < 0 || indexA > 51 || indexB < 0 || indexB > 51 {
 		return
 	}
 	alpha := alphaTable[indexA]
 	beta := betaTable[indexB]
+	alphaQ2 := (alpha >> 2) + 2
+	s := stride
 	for g := 0; g < ncols/4 && g < 4; g++ {
 		bs := bS[g]
 		if bs == 0 {
@@ -253,24 +290,58 @@ func FilterLumaEdgeH(plane []uint8, stride, y, colStart, ncols int, bS [4]int, i
 		}
 		for c := 0; c < 4; c++ {
 			col := colStart + g*4 + c
-			if (y+4)*stride+col >= len(plane) || (y-4)*stride+col < 0 {
+			base := y * s
+			if base+4*s+col >= len(plane) || base-4*s+col < 0 {
 				continue
 			}
-			p3 := int(plane[(y-4)*stride+col])
-			p2 := int(plane[(y-3)*stride+col])
-			p1 := int(plane[(y-2)*stride+col])
-			p0 := int(plane[(y-1)*stride+col])
-			q0 := int(plane[(y+0)*stride+col])
-			q1 := int(plane[(y+1)*stride+col])
-			q2 := int(plane[(y+2)*stride+col])
-			q3 := int(plane[(y+3)*stride+col])
-			rp0, rp1, rp2, rq0, rq1, rq2 := filterLumaSample(p3, p2, p1, p0, q0, q1, q2, q3, bs, alpha, beta, indexA)
-			plane[(y-1)*stride+col] = rp0
-			plane[(y-2)*stride+col] = rp1
-			plane[(y-3)*stride+col] = rp2
-			plane[(y+0)*stride+col] = rq0
-			plane[(y+1)*stride+col] = rq1
-			plane[(y+2)*stride+col] = rq2
+			p3 := int(plane[base-4*s+col])
+			p2 := int(plane[base-3*s+col])
+			p1 := int(plane[base-2*s+col])
+			p0 := int(plane[base-s+col])
+			q0 := int(plane[base+col])
+			q1 := int(plane[base+s+col])
+			q2 := int(plane[base+2*s+col])
+			q3 := int(plane[base+3*s+col])
+			if abs(p0-q0) >= alpha || abs(p1-p0) >= beta || abs(q1-q0) >= beta {
+				continue
+			}
+			if bs == 4 {
+				cond := abs(p0-q0) < alphaQ2
+				if cond && abs(p2-p0) < beta {
+					plane[base-s+col] = Clip1((p2 + 2*p1 + 2*p0 + 2*q0 + q1 + 4) >> 3)
+					plane[base-2*s+col] = Clip1((p2 + p1 + p0 + q0 + 2) >> 2)
+					plane[base-3*s+col] = Clip1((2*p3 + 3*p2 + p1 + p0 + q0 + 4) >> 3)
+				} else {
+					plane[base-s+col] = Clip1((2*p1 + p0 + q1 + 2) >> 2)
+				}
+				if cond && abs(q2-q0) < beta {
+					plane[base+col] = Clip1((p1 + 2*p0 + 2*q0 + 2*q1 + q2 + 4) >> 3)
+					plane[base+s+col] = Clip1((p0 + q0 + q1 + q2 + 2) >> 2)
+					plane[base+2*s+col] = Clip1((2*q3 + 3*q2 + q1 + q0 + p0 + 4) >> 3)
+				} else {
+					plane[base+col] = Clip1((2*q1 + q0 + p1 + 2) >> 2)
+				}
+			} else {
+				tc0 := tc0Table[indexA][bs-1]
+				tc := tc0
+				p2p0 := abs(p2 - p0)
+				q2q0 := abs(q2 - q0)
+				if p2p0 < beta {
+					tc++
+				}
+				if q2q0 < beta {
+					tc++
+				}
+				delta := Clip3(-tc, tc, ((q0-p0)*4+(p1-q1)+4)>>3)
+				plane[base-s+col] = Clip1(p0 + delta)
+				plane[base+col] = Clip1(q0 - delta)
+				if p2p0 < beta {
+					plane[base-2*s+col] = Clip1(p1 + Clip3(-tc0, tc0, (p2+((p0+q0+1)>>1)-(p1<<1))>>1))
+				}
+				if q2q0 < beta {
+					plane[base+s+col] = Clip1(q1 + Clip3(-tc0, tc0, (q2+((p0+q0+1)>>1)-(q1<<1))>>1))
+				}
+			}
 		}
 	}
 }
@@ -290,8 +361,7 @@ func FilterChromaEdgeV(plane []uint8, stride, x, rowStart, nrows int, bS [4]int,
 			continue
 		}
 		for r := 0; r < 2; r++ {
-			row := rowStart + g*2 + r
-			base := row * stride
+			base := (rowStart + g*2 + r) * stride
 			if base+x+2 > len(plane) || base+x-2 < 0 {
 				continue
 			}
@@ -299,9 +369,18 @@ func FilterChromaEdgeV(plane []uint8, stride, x, rowStart, nrows int, bS [4]int,
 			p0 := int(plane[base+x-1])
 			q0 := int(plane[base+x+0])
 			q1 := int(plane[base+x+1])
-			rp0, rq0 := filterChromaSample(p1, p0, q0, q1, bs, alpha, beta, indexA)
-			plane[base+x-1] = rp0
-			plane[base+x+0] = rq0
+			if abs(p0-q0) >= alpha || abs(p1-p0) >= beta || abs(q1-q0) >= beta {
+				continue
+			}
+			if bs == 4 {
+				plane[base+x-1] = Clip1((2*p1 + p0 + q1 + 2) >> 2)
+				plane[base+x+0] = Clip1((2*q1 + q0 + p1 + 2) >> 2)
+			} else {
+				tc := tc0Table[indexA][bs-1] + 1
+				delta := Clip3(-tc, tc, ((q0-p0)*4+(p1-q1)+4)>>3)
+				plane[base+x-1] = Clip1(p0 + delta)
+				plane[base+x+0] = Clip1(q0 - delta)
+			}
 		}
 	}
 }
@@ -315,6 +394,7 @@ func FilterChromaEdgeH(plane []uint8, stride, y, colStart, ncols int, bS [4]int,
 	}
 	alpha := alphaTable[indexA]
 	beta := betaTable[indexB]
+	s := stride
 	for g := 0; g < ncols/4 && g < 2; g++ {
 		bs := bS[g]
 		if bs == 0 {
@@ -322,16 +402,26 @@ func FilterChromaEdgeH(plane []uint8, stride, y, colStart, ncols int, bS [4]int,
 		}
 		for c := 0; c < 4; c++ {
 			col := colStart + g*4 + c
-			if (y+2)*stride+col >= len(plane) || (y-2)*stride+col < 0 {
+			base := y * s
+			if base+2*s+col >= len(plane) || base-2*s+col < 0 {
 				continue
 			}
-			p1 := int(plane[(y-2)*stride+col])
-			p0 := int(plane[(y-1)*stride+col])
-			q0 := int(plane[(y+0)*stride+col])
-			q1 := int(plane[(y+1)*stride+col])
-			rp0, rq0 := filterChromaSample(p1, p0, q0, q1, bs, alpha, beta, indexA)
-			plane[(y-1)*stride+col] = rp0
-			plane[(y+0)*stride+col] = rq0
+			p1 := int(plane[base-2*s+col])
+			p0 := int(plane[base-s+col])
+			q0 := int(plane[base+col])
+			q1 := int(plane[base+s+col])
+			if abs(p0-q0) >= alpha || abs(p1-p0) >= beta || abs(q1-q0) >= beta {
+				continue
+			}
+			if bs == 4 {
+				plane[base-s+col] = Clip1((2*p1 + p0 + q1 + 2) >> 2)
+				plane[base+col] = Clip1((2*q1 + q0 + p1 + 2) >> 2)
+			} else {
+				tc := tc0Table[indexA][bs-1] + 1
+				delta := Clip3(-tc, tc, ((q0-p0)*4+(p1-q1)+4)>>3)
+				plane[base-s+col] = Clip1(p0 + delta)
+				plane[base+col] = Clip1(q0 - delta)
+			}
 		}
 	}
 }
