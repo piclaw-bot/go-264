@@ -11,15 +11,41 @@ import (
 	"github.com/rcarmo/go-264/transform"
 )
 
+func dpbHasReferenceFrames(frames []*frame.Frame) bool {
+	for _, fr := range frames {
+		if fr != nil && fr.IsRef {
+			return true
+		}
+	}
+	return false
+}
+
 func (d *Decoder) refL0(refIdx int8) *frame.Frame {
 	if d == nil || d.DPB == nil || len(d.DPB.Frames) == 0 {
 		return nil
 	}
 	idx := int(refIdx)
-	if idx < 0 || idx >= len(d.DPB.Frames) {
+	if idx < 0 {
 		idx = 0
 	}
-	return d.DPB.Frames[len(d.DPB.Frames)-1-idx]
+	filterRef := dpbHasReferenceFrames(d.DPB.Frames)
+	seen := 0
+	for i := len(d.DPB.Frames) - 1; i >= 0; i-- {
+		fr := d.DPB.Frames[i]
+		if fr == nil || (filterRef && !fr.IsRef) {
+			continue
+		}
+		if seen == idx {
+			return fr
+		}
+		seen++
+	}
+	for i := len(d.DPB.Frames) - 1; i >= 0; i-- {
+		if d.DPB.Frames[i] != nil {
+			return d.DPB.Frames[i]
+		}
+	}
+	return nil
 }
 
 func (d *Decoder) refL1(refIdx int8) *frame.Frame {
@@ -30,15 +56,19 @@ func (d *Decoder) refL1(refIdx int8) *frame.Frame {
 	if idx < 0 {
 		idx = 0
 	}
-	base := len(d.DPB.Frames) - 2
-	if base < 0 {
-		base = len(d.DPB.Frames) - 1
+	filterRef := dpbHasReferenceFrames(d.DPB.Frames)
+	seen := 0
+	for i := len(d.DPB.Frames) - 1; i >= 0; i-- {
+		fr := d.DPB.Frames[i]
+		if fr == nil || (filterRef && !fr.IsRef) {
+			continue
+		}
+		if seen == idx+1 {
+			return fr
+		}
+		seen++
 	}
-	pos := base - idx
-	if pos < 0 || pos >= len(d.DPB.Frames) {
-		pos = base
-	}
-	return d.DPB.Frames[pos]
+	return d.refL0(refIdx)
 }
 
 // refBidiL0 returns the refIdx-th L0 (past) reference for B-slice prediction.
