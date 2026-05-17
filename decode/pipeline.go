@@ -493,7 +493,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 				}
 				if skipRun > 0 {
 					if hdr.SliceType == syntax.SliceTypeB {
-						d.reconstructMBBidi(f, &syntax.MBBidi{MBType: syntax.BMBTypeDirect16x16}, mbX, mbY, currentQP)
+						d.reconstructMBBidi(f, &syntax.MBBidi{MBType: syntax.BMBTypeDirect16x16, RefIdxL1: [4]int8{-1, -1, -1, -1}}, mbX, mbY, currentQP)
 					} else {
 						skipMV := predMV
 						mbSkip := &syntax.MBInter{MBType: syntax.PMBTypeP16x16}
@@ -567,6 +567,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 				if skipped {
 					// B_Direct_16x16 skip: QP unchanged, lastQScaleDiff resets to 0.
 					cabacLastQScaleDiff = 0
+					mbBidi.RefIdxL1 = [4]int8{-1, -1, -1, -1}
 					mbBidi.MVL0[0] = directMVL0
 					d.reconstructMBBidi(f, mbBidi, mbX, mbY, currentQP)
 					nzCtx[mbIdx] = mbBidi.TotalCoeff
@@ -596,6 +597,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					cabacLastQScaleDiff = int(mbBidi.QPDelta)
 					currentQP = updateQP(currentQP, int(mbBidi.QPDelta))
 					if mbBidi.MBType == syntax.BMBTypeDirect16x16 {
+						mbBidi.RefIdxL1 = [4]int8{-1, -1, -1, -1}
 						mbBidi.MVL0[0] = directMVL0
 					}
 					d.reconstructMBBidi(f, mbBidi, mbX, mbY, currentQP)
@@ -623,7 +625,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					skipRun = int(r.ReadUE())
 				}
 				if skipRun > 0 {
-					d.reconstructMBBidi(f, &syntax.MBBidi{MBType: syntax.BMBTypeDirect16x16}, mbX, mbY, currentQP)
+					d.reconstructMBBidi(f, &syntax.MBBidi{MBType: syntax.BMBTypeDirect16x16, RefIdxL1: [4]int8{-1, -1, -1, -1}}, mbX, mbY, currentQP)
 					skipRun--
 					decodeAfterSkipRun = skipRun == 0
 					continue
@@ -649,6 +651,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 			} else {
 				currentQP = updateQP(currentQP, int(mbBidi.QPDelta))
 				if mbBidi.MBType == syntax.BMBTypeDirect16x16 {
+					mbBidi.RefIdxL1 = [4]int8{-1, -1, -1, -1}
 					mbBidi.MVL0[0] = directMVL0
 				}
 				d.reconstructMBBidi(f, mbBidi, mbX, mbY, currentQP)
