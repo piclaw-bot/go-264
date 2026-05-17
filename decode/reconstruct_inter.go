@@ -5,6 +5,9 @@ package decode
 // and chroma inter prediction.
 
 import (
+	"fmt"
+	"os"
+
 	"github.com/rcarmo/go-264/frame"
 	"github.com/rcarmo/go-264/pred"
 	"github.com/rcarmo/go-264/syntax"
@@ -696,6 +699,16 @@ func (d *Decoder) reconstructMBBidi(f *frame.Frame, mb *syntax.MBBidi, mbX, mbY,
 	}
 	if refL0 == nil || refL1 == nil || refL0.Width <= 0 || refL0.Height <= 0 || refL1.Width <= 0 || refL1.Height <= 0 {
 		return
+	}
+
+	if os.Getenv("GO264_DIRECT_TRACE") != "" && (mb.MBType == syntax.BMBTypeDirect16x16 || mb.MBType == syntax.BMBTypeB8x8) {
+		fmt.Fprintf(os.Stderr,
+			"GODIRECT mb=%04d x=%02d y=%02d poc=%d mb_type=%d ref0=%d ref1=%d mv0={%d,%d} mv1={%d,%d} sub0=%d sub1=%d sub2=%d sub3=%d submv0={%d,%d} submv1={%d,%d} submv2={%d,%d} submv3={%d,%d}\n",
+			mbY*d.mbW+mbX, mbX, mbY, f.POC, mb.MBType,
+			mb.RefIdxL0[0], mb.RefIdxL1[0], mb.MVL0[0].X, mb.MVL0[0].Y, mb.MVL1[0].X, mb.MVL1[0].Y,
+			mb.SubMBType[0], mb.SubMBType[1], mb.SubMBType[2], mb.SubMBType[3],
+			mb.SubMVL0[0].X, mb.SubMVL0[0].Y, mb.SubMVL0[4].X, mb.SubMVL0[4].Y,
+			mb.SubMVL0[8].X, mb.SubMVL0[8].Y, mb.SubMVL0[12].X, mb.SubMVL0[12].Y)
 	}
 
 	var blended [256]uint8
