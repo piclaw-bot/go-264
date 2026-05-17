@@ -12,7 +12,7 @@ The current focus is a correct, inspectable decoder core. Encoder work remains p
 | Bitstream reader | ✅ | Fixed-width, Exp-Golomb, fuzz-tested |
 | Slice syntax | ✅ | I/P/B header parsing, POC/ref-marking/SP-SI/deblock field consumption, weighted-prediction table skipping, I_PCM sample consumption, FFmpeg-aligned B-slice list-use/sub-partition syntax, and B intra/residual payload consumption; macroblock syntax lives in `syntax/` |
 | CAVLC | ✅ | Baseline CAVLC decode is the current hard-gated completion point; High-profile inter 8×8 transform residuals now consume FFmpeg-style CAVLC scan chunks |
-| CABAC | 🔶 | Real CABAC contexts, P-slice/intra-in-P syntax, residuals, CBP/DQP/ref/MVD; byte-aligned arithmetic init, FFmpeg luma/chroma/DQP/MVD contexts, I_PCM payload/reset handling, 8×8 residual layout/non-zero context, and first-frame MB syntax parity for the active CABAC fixtures; per-block I4x4/I8x8 luma and chroma reconstruction now match FFmpeg exactly with loop filter disabled; remaining gap is in-loop deblocking |
+| CABAC | 🔶 | Real CABAC contexts, P-slice/intra-in-P syntax, residuals, CBP/DQP/ref/MVD; byte-aligned arithmetic init, FFmpeg luma/chroma/DQP/MVD contexts, I_PCM payload/reset handling, 8×8 residual layout/non-zero context, and first-frame MB syntax parity for the active CABAC fixtures; per-block I4x4/I8x8 luma and chroma reconstruction match FFmpeg with loop filter disabled; B-slice CABAC now decodes substantially beyond the first reference B frame, with remaining quality gap dominated by Direct-mode derivation |
 | Intra prediction | ✅ | I4x4, I8x8, I16x16, chroma DC/horizontal/vertical/plane; chroma DC matches FFmpeg quadrant/edge predictors; I8x8 strong reference filter implemented |
 | Inter prediction | ✅ | P skip, P16x16/P16x8/P8x16/P8x8, 4×4 MV/ref cache write-back, partition-aware chroma prediction |
 | Transforms | ✅ | 4×4 and 8×8 integer transforms with scalar + assembly dispatch hooks |
@@ -31,7 +31,7 @@ Current regression gates are intentionally conservative guards, not a claim of f
 - Motion parity: representative macroblock MV checks against FFmpeg motion-vector side data
 - Reconstruction parity: frame PSNR and max-diff checks against FFmpeg YUV output
 - Baseline CAVLC: marked complete
-- CABAC: first-frame syntax parity and per-block reconstruction (I4x4/I8x8 luma + chroma) now match FFmpeg exactly with loop filter disabled; remaining frame gap is in-loop deblocking
+- CABAC: first-frame syntax parity and per-block reconstruction (I4x4/I8x8 luma + chroma) match FFmpeg with loop filter disabled; deblocking is wired, and current B-frame work is focused on FFmpeg-grounded Direct-mode derivation and remaining reference/MV cache parity
 
 Recent reference values:
 
@@ -43,6 +43,8 @@ Recent reference values:
 | `testsrc_cabac_p.h264` frame 0 | Y=56.96 U=60.68 V=64.62 dB |
 | `bbb-frame0` CABAC | ~31 dB avg PSNR (est.) |
 | `bbb_annexb.h264` frame 0 | Y=59.85 U=56.14 V=57.08 dB |
+| `bbb_annexb.h264` B POC=2 / POC=6 | Y≈21.8 / 21.5 dB |
+| `bbb_annexb.h264` later B POC=14 / POC=20 | Y≈19.6 / 19.3 dB |
 
 ## Package layout
 

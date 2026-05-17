@@ -82,11 +82,12 @@ Current parity tooling and findings:
 - CABAC diagnostics now cover MB summaries, CBP bin decisions with consistent arithmetic state, residual CBF/significant/last/level decisions, and intra syntax bins.
 - `testsrc_cabac_p.h264` and `bbb_annexb.h264` first-frame MB syntax summaries now report `NO_DIVERGENCE in compared fields`.
 - `GO264_RECON_TRACE=1` now emits luma Intra_8x8 syntax vs reconstruction mode, prediction reference samples (`top`, `left`, `top_left`), raw row-major coefficients, FFmpeg-storage raw coefficient view, dequantized coefficients, prediction/residual/output and pre/post-IDCT checksums, plus chroma prediction/residual/output and per-4×4 block checksums, enabling direct FFmpeg reconstruction comparisons.
-- Recent accepted reconstruction fixes include luma Intra_8x8 filtered DC references, FFmpeg chroma DC quadrant/edge predictors, FFmpeg `pred_intra_mode` unavailable-neighbour handling, separate I4x4-derived right/bottom mode caches for CABAC I8x8 neighbour prediction, aligned-buffer reconstruction for partial edge macroblocks, FFmpeg-scale 8×8 dequant before IDCT, available top-right references from already reconstructed rows, FFmpeg-exact I8x8 horizontal-down and vertical-right predictors, and partial-edge chroma reconstruction. Per-block I4x4/I8x8 luma and chroma reconstruction now matches FFmpeg exactly with loop filter disabled. The remaining frame gap is in-loop deblocking only.
+- Recent accepted reconstruction fixes include luma Intra_8x8 filtered DC references, FFmpeg chroma DC quadrant/edge predictors, FFmpeg `pred_intra_mode` unavailable-neighbour handling, separate I4x4-derived right/bottom mode caches for CABAC I8x8 neighbour prediction, aligned-buffer reconstruction for partial edge macroblocks, FFmpeg-scale 8×8 dequant before IDCT, available top-right references from already reconstructed rows, FFmpeg-exact I8x8 horizontal-down and vertical-right predictors, partial-edge chroma reconstruction, B-slice MB-type default-branch parity, shaped B_8x8/sub-partition MV cache write-back, and reference-frame-only DPB list filtering. Per-block I4x4/I8x8 luma and chroma reconstruction matches FFmpeg with loop filter disabled; B-frame quality now depends mainly on proper FFmpeg-style Direct-mode derivation.
 
 Still gated:
 
-- Main/High CABAC frame quality gap vs FFmpeg default output is now entirely attributable to in-loop deblocking: with `-skip_loop_filter all` FFmpeg output matches Go exactly (Y=99.00 U=99.00 V=99.00 for `bbb` frame 0). The deblocking filter code in `filter/deblock.go` has correct primitive logic; it is not yet wired into the decode pipeline.
+- B-slice Direct-mode reconstruction is still a bounded fallback rather than FFmpeg-equivalent colocated temporal/spatial derivation. Full `B_Direct_16x16` currently uses list0 fallback, which improves later B frames but is not the final algorithm. Direct sub-MB modes still need colocated MV/ref derivation before broader Main/High quality can be called complete.
+- Multi-frame CABAC diagnostics need a robust FFmpeg trace path with frame threading disabled and direct-motion trace rows, so first-divergence comparisons can move beyond the first displayed frame without false event-count mismatches.
 - `scripts/recon_i8x8_compare.py` now compares by `(frame,mb,b8,occurrence)` and can filter/sort by prediction or residual delta (`--max-pred-delta`, `--min-pred-delta`, `--sort out|pred|res`) plus summarize by predictor mode or spatial bucket. `scripts/i8x8_mode_compare.py` compares Go I8x8 predicted/decoded modes and edge-cache inputs with FFmpeg `FFMODE` rows, including decoded-mode-only filtering; after the partial-edge fix it reports no decoded-mode mismatches for the compared `bbb` first-frame I8x8 rows. `scripts/i4x4_mode_compare.py` compares Go I4x4 raw/final modes with FFmpeg decoded/writeback rows.
 
 ### Current reference metrics
@@ -99,6 +100,8 @@ Still gated:
 | `testsrc_cabac_p.h264` frame 0 | Y=56.96 U=60.68 V=64.62 dB |
 | `bbb-frame0` CABAC avg PSNR | ~31 dB (est.) |
 | `bbb_annexb.h264` frame 0 | Y=59.85 U=56.14 V=57.08 dB |
+| `bbb_annexb.h264` B POC=2 / POC=6 | Y≈21.8 / 21.5 dB |
+| `bbb_annexb.h264` later B POC=14 / POC=20 | Y≈19.6 / 19.3 dB |
 | BBB baseline decode allocations | ~10.9 MB/op, ~1.3k allocs/op |
 | BBB baseline decode sample | ~44-52 ms/op typical recent sample |
 
