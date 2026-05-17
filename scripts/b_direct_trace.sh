@@ -5,6 +5,14 @@ INPUT="${1:-/workspace/tmp/bbb_annexb.h264}"
 OUTDIR="${2:-/workspace/tmp/go264-b-direct-trace}"
 FRAMES="${FRAMES:-10}"
 MB_LIMIT="${MB_LIMIT:-40}"
+if ! [[ "$FRAMES" =~ ^[0-9]+$ ]] || (( FRAMES < 1 )); then
+  echo "FRAMES must be a positive integer, got: $FRAMES" >&2
+  exit 2
+fi
+if ! [[ "$MB_LIMIT" =~ ^[0-9]+$ ]] || (( MB_LIMIT < 1 )); then
+  echo "MB_LIMIT must be a positive integer, got: $MB_LIMIT" >&2
+  exit 2
+fi
 FFSRC="${FFMPEG_SRC:-/workspace/tmp/ffmpeg-7.1.3}"
 FFMPEG="${FFMPEG:-$FFSRC/ffmpeg}"
 
