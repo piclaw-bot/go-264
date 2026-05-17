@@ -767,8 +767,27 @@ func directTraceSubTypes(mb *syntax.MBBidi) (uint32, uint32, uint32, uint32) {
 }
 
 func directTraceSubType(t uint32) uint32 {
-	if t == 0 {
-		return 12552
+	// FFmpeg FFDIRECT reports internal MB_TYPE flags, not H.264 syntax sub_mb_type.
+	// Constants from libavcodec/mpegutils.h:
+	// 16x16=8, 16x8=16, 8x16=32, 8x8=64, DIRECT2=256,
+	// P0L0=4096, P1L0=8192, P0L1=16384, P1L1=32768.
+	var ffBSubType = [...]uint32{
+		0:  12552, // DIRECT2 | 16x16 | L0
+		1:  4104,  // L0_8x8
+		2:  16392, // L1_8x8
+		3:  20488, // Bi_8x8
+		4:  12304, // L0_8x4
+		5:  12320, // L0_4x8
+		6:  49168, // L1_8x4
+		7:  49184, // L1_4x8
+		8:  61456, // Bi_8x4
+		9:  61472, // Bi_4x8
+		10: 12352, // L0_4x4
+		11: 49216, // L1_4x4
+		12: 61504, // Bi_4x4
+	}
+	if t < uint32(len(ffBSubType)) {
+		return ffBSubType[t]
 	}
 	return t
 }
