@@ -702,11 +702,12 @@ func (d *Decoder) reconstructMBBidi(f *frame.Frame, mb *syntax.MBBidi, mbX, mbY,
 	}
 
 	if os.Getenv("GO264_DIRECT_TRACE") != "" && (mb.MBType == syntax.BMBTypeDirect16x16 || mb.MBType == syntax.BMBTypeB8x8) {
+		sub0, sub1, sub2, sub3 := directTraceSubTypes(mb)
 		fmt.Fprintf(os.Stderr,
 			"GODIRECT mb=%04d x=%02d y=%02d poc=%d mb_type=%d ref0=%d ref1=%d mv0={%d,%d} mv1={%d,%d} sub0=%d sub1=%d sub2=%d sub3=%d submv0={%d,%d} submv1={%d,%d} submv2={%d,%d} submv3={%d,%d}\n",
 			mbY*d.mbW+mbX, mbX, mbY, f.POC, mb.MBType,
 			mb.RefIdxL0[0], mb.RefIdxL1[0], mb.MVL0[0].X, mb.MVL0[0].Y, mb.MVL1[0].X, mb.MVL1[0].Y,
-			mb.SubMBType[0], mb.SubMBType[1], mb.SubMBType[2], mb.SubMBType[3],
+			sub0, sub1, sub2, sub3,
 			mb.SubMVL0[0].X, mb.SubMVL0[0].Y, mb.SubMVL0[4].X, mb.SubMVL0[4].Y,
 			mb.SubMVL0[8].X, mb.SubMVL0[8].Y, mb.SubMVL0[12].X, mb.SubMVL0[12].Y)
 	}
@@ -750,4 +751,24 @@ func (d *Decoder) reconstructMBBidi(f *frame.Frame, mb *syntax.MBBidi, mbX, mbY,
 		ChromaTotalCoeff: mb.ChromaTotalCoeff,
 	}
 	d.writeInterResidual(f, residualMB, blended[:], mbX, mbY, qp)
+}
+
+func directTraceSubTypes(mb *syntax.MBBidi) (uint32, uint32, uint32, uint32) {
+	if mb == nil {
+		return 0, 0, 0, 0
+	}
+	if mb.MBType == syntax.BMBTypeDirect16x16 {
+		// FFmpeg's direct trace reports internal MB_TYPE flags for direct sub-MBs.
+		// 12552 = MB_TYPE_16x16 | MB_TYPE_DIRECT2 | MB_TYPE_L0; this is the
+		// common full-direct shape while our syntax-level representation remains 0.
+		return 12552, 12552, 12552, 12552
+	}
+	return directTraceSubType(mb.SubMBType[0]), directTraceSubType(mb.SubMBType[1]), directTraceSubType(mb.SubMBType[2]), directTraceSubType(mb.SubMBType[3])
+}
+
+func directTraceSubType(t uint32) uint32 {
+	if t == 0 {
+		return 12552
+	}
+	return t
 }
