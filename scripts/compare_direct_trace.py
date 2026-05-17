@@ -86,6 +86,7 @@ def main():
     ap.add_argument('--ff-occurrence', type=int, default=0, help='which repeated frame_num group to compare')
     ap.add_argument('--go-poc', type=int, required=True)
     ap.add_argument('--limit', type=int, default=50)
+    ap.add_argument('--fail-on-diff', action='store_true', help='exit non-zero when any compared row differs or is missing')
     args = ap.parse_args()
     ff = load_ff(args.ffdirect)
     go = load_go(args.godirect)
@@ -116,6 +117,8 @@ def main():
             if diffs >= args.limit:
                 break
     print(f'compared={rows} diffs={diffs}')
+    if args.fail_on_diff and diffs:
+        raise SystemExit(1)
 
 if __name__ == '__main__':
     main()
