@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 INPUT="${1:-/workspace/tmp/bbb_annexb.h264}"
 OUTDIR="${2:-/workspace/tmp/go264-b-direct-trace}"
 FRAMES="${FRAMES:-10}"
@@ -73,7 +72,7 @@ GO264_FFMPEG_DIRECT_TRACE=1 "$FFMPEG" -y -threads 1 -hide_banner \
 grep '^FFDIRECT' "$OUTDIR/ffmpeg.direct.trace" >"$OUTDIR/ffdirect.rows" || true
 python3 - "$OUTDIR/ffdirect.rows" <<'PY'
 import re, sys
-from collections import Counter, defaultdict
+from collections import Counter
 rows = []
 pat = re.compile(r'FFDIRECT mb=(\d+)(?: x=(\d+) y=(\d+))? frame=(\d+) spatial=(\d+) mb_type=([^ ]+) ref0=([^ ]+) ref1=([^ ]+) mv0=\{(-?\d+),(-?\d+)\} mv1=\{(-?\d+),(-?\d+)\}')
 for line in open(sys.argv[1], errors='replace'):

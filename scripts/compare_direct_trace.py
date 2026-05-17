@@ -44,8 +44,8 @@ def main():
             print(f'mb={mb:04d} missing_go')
             diffs += 1
             continue
-        f_ref_mv = (f[4], f[5], f[6], f[7], f[8])
-        g_ref_mv = (g[3], g[4], g[5], g[6], g[7])
+        f_ref_mv = (f[3], f[4], f[5], f[6], f[7], f[8])
+        g_ref_mv = (g[3], g[4], g[5], g[6], g[7], g[8])
         f_sub = f[9:13]
         g_sub = g[9:13]
         if f_ref_mv != g_ref_mv or f_sub != g_sub:
