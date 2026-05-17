@@ -15,18 +15,10 @@ import sys
 p = Path(sys.argv[1])
 mb_limit = sys.argv[2]
 s = p.read_text()
-if 'GO264_FFMPEG_DIRECT_TRACE' in s:
-    sys.exit(0)
 if '#include <stdlib.h>' not in s:
     s = s.replace('#include "h264dec.h"', '#include "h264dec.h"\n#include <stdlib.h>\n#include <stdio.h>')
-old = '''void ff_h264_pred_direct_motion(const H264Context *const h, H264SliceContext *sl,
-                                int *mb_type)
-{
-    if (sl->direct_spatial_mv_pred)
-        pred_spatial_direct_motion(h, sl, mb_type);
-    else
-        pred_temp_direct_motion(h, sl, mb_type);
-}'''
+signature = '''void ff_h264_pred_direct_motion(const H264Context *const h, H264SliceContext *sl,
+                                int *mb_type)'''
 new = f'''void ff_h264_pred_direct_motion(const H264Context *const h, H264SliceContext *sl,
                                 int *mb_type)
 {{
@@ -56,9 +48,26 @@ new = f'''void ff_h264_pred_direct_motion(const H264Context *const h, H264SliceC
                 sl->mv_cache[0][s3][0], sl->mv_cache[0][s3][1]);
     }}
 }}'''
-if old not in s:
+start = s.find(signature)
+if start < 0:
     raise SystemExit('ffmpeg h264_direct.c direct-motion hook target not found')
-p.write_text(s.replace(old, new))
+brace = s.find('{', start)
+if brace < 0:
+    raise SystemExit('ffmpeg h264_direct.c malformed direct-motion function')
+depth = 0
+end = None
+for i in range(brace, len(s)):
+    if s[i] == '{':
+        depth += 1
+    elif s[i] == '}':
+        depth -= 1
+        if depth == 0:
+            end = i + 1
+            break
+if end is None:
+    raise SystemExit('ffmpeg h264_direct.c unterminated direct-motion function')
+# Replace the whole function, whether it is pristine or has an older trace patch.
+p.write_text(s[:start] + new + s[end:])
 PY
 }
 
