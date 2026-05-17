@@ -685,7 +685,11 @@ func (d *Decoder) reconstructMBBidi(f *frame.Frame, mb *syntax.MBBidi, mbX, mbY,
 		var predL1 [256]uint8
 		fillBPredBlock(predL0[:], refL0, mbX*16, mbY*16, 0, 0, 16, 16, mb.MVL0[0])
 		fillBPredBlock(predL1[:], refL1, mbX*16, mbY*16, 0, 0, 16, 16, mb.MVL1[0])
-		useBi := mb.MBType == syntax.BMBTypeBi16x16 || mb.MBType == syntax.BMBTypeDirect16x16
+		// Full B_Direct_16x16 still lacks colocated temporal/spatial derivation.
+		// Prefer list-0 fallback over zero-MV bi-blend: it matches the dominant
+		// reference direction in this stream and avoids averaging in an unrelated
+		// future frame until proper direct MV derivation is available.
+		useBi := mb.MBType == syntax.BMBTypeBi16x16
 		if useBi {
 			syntax.BiPredBlend(blended[:], predL0[:], predL1[:], 256)
 		} else if syntax.BMBTypeL116x16 == mb.MBType {
