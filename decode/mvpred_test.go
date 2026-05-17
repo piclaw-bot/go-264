@@ -60,3 +60,51 @@ func TestGetMV4HandlesInvalidInputs(t *testing.T) {
 		t.Fatalf("negative x ref=%d want -2", ref)
 	}
 }
+
+func TestWriteBackBidiDirectPreservesChosenL0MV(t *testing.T) {
+	mv4 := make([]syntax.MotionVector, 16)
+	ref4 := make([]int8, 16)
+	mb := &syntax.MBBidi{
+		MBType:   syntax.BMBTypeDirect16x16,
+		RefIdxL0: [4]int8{0},
+		MVL0:     [4]syntax.MotionVector{{X: 3, Y: -2}},
+	}
+	writeBackBidiL0Context(mv4, ref4, 4, 0, 0, mb)
+	for i := 0; i < 16; i++ {
+		if mv4[i] != mb.MVL0[0] || ref4[i] != 0 {
+			t.Fatalf("direct writeback idx=%d mv=%+v ref=%d, want %+v/ref0", i, mv4[i], ref4[i], mb.MVL0[0])
+		}
+	}
+}
+
+func TestWriteBackBidiB8x8UsesSubPartitionShapes(t *testing.T) {
+	mv4 := make([]syntax.MotionVector, 16)
+	ref4 := make([]int8, 16)
+	for i := range ref4 {
+		ref4[i] = -2
+	}
+	mb := &syntax.MBBidi{MBType: syntax.BMBTypeB8x8}
+	mb.SubMBType[0] = 1 // L0_8x8: fills top-left 2x2
+	mb.SubMBType[1] = 5 // L0_4x8: fills two vertical 1x2 partitions in top-right
+	mb.SubMVL0[0] = syntax.MotionVector{X: 1, Y: 1}
+	mb.SubMVL0[4] = syntax.MotionVector{X: 2, Y: 2}
+	mb.SubMVL0[5] = syntax.MotionVector{X: 3, Y: 3}
+	mb.RefIdxL0[0], mb.RefIdxL0[1] = 0, 1
+	writeBackBidiL0Context(mv4, ref4, 4, 0, 0, mb)
+
+	for _, idx := range []int{0, 1, 4, 5} {
+		if mv4[idx] != mb.SubMVL0[0] || ref4[idx] != 0 {
+			t.Fatalf("8x8 fill idx=%d mv=%+v ref=%d", idx, mv4[idx], ref4[idx])
+		}
+	}
+	for _, idx := range []int{2, 6} {
+		if mv4[idx] != mb.SubMVL0[4] || ref4[idx] != 1 {
+			t.Fatalf("4x8 left fill idx=%d mv=%+v ref=%d", idx, mv4[idx], ref4[idx])
+		}
+	}
+	for _, idx := range []int{3, 7} {
+		if mv4[idx] != mb.SubMVL0[5] || ref4[idx] != 1 {
+			t.Fatalf("4x8 right fill idx=%d mv=%+v ref=%d", idx, mv4[idx], ref4[idx])
+		}
+	}
+}
