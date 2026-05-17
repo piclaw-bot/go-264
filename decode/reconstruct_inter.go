@@ -577,16 +577,31 @@ func (d *Decoder) fillBSubPrediction(dst []uint8, mb *syntax.MBBidi, fallback *f
 	if d == nil || mb == nil || len(dst) < 256 || part < 0 || part >= 4 {
 		return
 	}
-	useL0 := syntax.BSubUsesL0(mb.SubMBType[part])
-	useL1 := syntax.BSubUsesL1(mb.SubMBType[part])
-	if mb.SubMBType[part] == 0 {
-		// Direct B sub-MBs need colocated-MV derivation. Until that is wired, use
-		// the same conservative direct fallback as full-block B_Direct_16x16:
-		// blend list 0 and list 1 with the stored/default zero MVs instead of
-		// leaving the sub-rectangle black.
-		useL0, useL1 = true, true
+	t := mb.SubMBType[part]
+	useL0 := syntax.BSubUsesL0(t)
+	useL1 := syntax.BSubUsesL1(t)
+	if t == 0 {
+		// Direct B sub-MBs still need colocated-MV derivation. Keep the existing
+		// conservative fallback for that case, but do not let it hide explicit
+		// sub-partition MVs for L0/L1/Bi B_8x8 modes.
+		d.fillBPredByUse(dst, fallback, mbX, mbY, dstX, dstY, 8, 8, mb.RefIdxL0[part], mb.RefIdxL1[part], mb.MVL0[part], mb.MVL1[part], true, true)
+		return
 	}
-	d.fillBPredByUse(dst, fallback, mbX, mbY, dstX, dstY, 8, 8, mb.RefIdxL0[part], mb.RefIdxL1[part], mb.MVL0[part], mb.MVL1[part], useL0, useL1)
+	w4, h4 := syntax.BMBSubPartFillDims(t)
+	parts := syntax.BMBSubPartCount(t)
+	for j := 0; j < parts; j++ {
+		var ox4, oy4 int
+		switch t {
+		case 4, 6, 8: // 8x4: top then bottom
+			ox4, oy4 = 0, j
+		case 5, 7, 9: // 4x8: left then right
+			ox4, oy4 = j, 0
+		default: // 8x8 (j=0) or 4x4 (2x2 scan)
+			ox4, oy4 = j&1, j>>1
+		}
+		idx := part*4 + j
+		d.fillBPredByUse(dst, fallback, mbX, mbY, dstX+ox4*4, dstY+oy4*4, w4*4, h4*4, mb.RefIdxL0[part], mb.RefIdxL1[part], mb.SubMVL0[idx], mb.SubMVL1[idx], useL0, useL1)
+	}
 }
 
 func (d *Decoder) fillBPredByUse(dst []uint8, fallback *frame.Frame, mbX, mbY, dstX, dstY, w, h int, refIdxL0, refIdxL1 int8, mvL0, mvL1 syntax.MotionVector, useL0, useL1 bool) {
