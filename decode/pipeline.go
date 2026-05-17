@@ -601,24 +601,10 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					nonSkipCtx[mbIdx] = mbBidi.MBType != syntax.BMBTypeDirect16x16
 					// transform8x8Ctx not updated: updating propagates wrong values until
 					// the B-frame CABAC transform8x8_flag decode is verified correct.
-					// Write back MV context so subsequent MBs can use L0 MVs for MVP.
-					if mbBidi.MBType != syntax.BMBTypeB8x8 && mbBidi.MBType != syntax.BMBTypeDirect16x16 {
-						_, usesL1B := cabacBListsForType(mbBidi.MBType)
-						_ = usesL1B
-						if mbBidi.MVL0[0].X != 0 || mbBidi.MVL0[0].Y != 0 {
-							// Store L0 MV into the mv4 cache so future MBs get correct MVP.
-							mv := mbBidi.MVL0[0]
-							for dy := 0; dy < 4; dy++ {
-								for dx := 0; dx < 4; dx++ {
-									idx := (mbY*4+dy)*mv4Stride + mbX*4 + dx
-									if idx >= 0 && idx < len(mv4Ctx) {
-										mv4Ctx[idx] = mv
-										ref4Ctx[idx] = mbBidi.RefIdxL0[0]
-									}
-								}
-							}
-						}
-					}
+					// Write back L0 MV/ref context for future MVP/ref_idx context. FFmpeg keeps
+					// a 4×4 MV/ref cache; B_8x8 and two-part B MBs must fill the same shaped
+					// regions, not just MVL0[0] over the whole macroblock.
+					writeBackBidiL0Context(mv4Ctx, ref4Ctx, mv4Stride, mbX, mbY, mbBidi)
 				}
 				mbQPCtx[mbIdx] = currentQP
 				if cabacDec.DecodeTerminate() == 1 {

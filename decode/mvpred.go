@@ -352,3 +352,59 @@ func applyMVPredictors(mb *syntax.MBInter, mv4 []syntax.MotionVector, ref4 []int
 		mb.MV[0] = mb.SubMV[0]
 	}
 }
+
+func writeBackBidiL0Context(mv4 []syntax.MotionVector, ref4 []int8, stride4, mbX, mbY int, mb *syntax.MBBidi) {
+	if mb == nil || stride4 <= 0 {
+		return
+	}
+	fill := func(x4, y4, w4, h4 int, mv syntax.MotionVector, ref int8) {
+		for dy := 0; dy < h4; dy++ {
+			row := (y4+dy)*stride4 + x4
+			for dx := 0; dx < w4; dx++ {
+				idx := row + dx
+				if idx >= 0 && idx < len(mv4) && idx < len(ref4) {
+					mv4[idx] = mv
+					ref4[idx] = ref
+				}
+			}
+		}
+	}
+	x4, y4 := mbX*4, mbY*4
+	if mb.MBType == syntax.BMBTypeDirect16x16 {
+		fill(x4, y4, 4, 4, syntax.MotionVector{}, 0)
+		return
+	}
+	if mb.MBType == syntax.BMBTypeB8x8 {
+		for part := 0; part < 4; part++ {
+			t := mb.SubMBType[part]
+			if !syntax.BMBSubUsesL0(t) {
+				continue
+			}
+			baseX, baseY := x4+(part&1)*2, y4+(part>>1)*2
+			w4, h4 := syntax.BMBSubPartFillDims(t)
+			parts := syntax.BMBSubPartCount(t)
+			for j := 0; j < parts; j++ {
+				var ox4, oy4 int
+				switch t {
+				case 4, 6, 8:
+					ox4, oy4 = 0, j
+				case 5, 7, 9:
+					ox4, oy4 = j, 0
+				default:
+					ox4, oy4 = j&1, j>>1
+				}
+				fill(baseX+ox4, baseY+oy4, w4, h4, mb.SubMVL0[part*4+j], mb.RefIdxL0[part])
+			}
+		}
+		return
+	}
+	parts := cabacBPartsForType(mb.MBType)
+	usesL0, _ := cabacBListsForType(mb.MBType)
+	if !usesL0 {
+		return
+	}
+	for part := 0; part < parts; part++ {
+		w4, h4 := cabacBPartDims(mb.MBType, part)
+		fill(x4+cabacBPartX(mb.MBType, part, parts), y4+cabacBPartY(mb.MBType, part, parts), w4, h4, mb.MVL0[part], mb.RefIdxL0[part])
+	}
+}
