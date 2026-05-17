@@ -261,6 +261,10 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 		mbY := mbIdx / mbWidth
 		predMV := predictSkipMV4x4(mv4Ctx, ref4Ctx, mv4Stride, mbX*4, mbY*4)
 		directMVL0 := predMV
+		directRefL1 := int8(-1)
+		if hdr.DirectSpatialMvPred && predictBDirectSpatialL0Ref(mv4Ctx, ref4Ctx, mv4Stride, mbX*4, mbY*4) < 0 {
+			directRefL1 = 0
+		}
 
 		var leftNZ, topNZ *[16]int
 		var leftChromaNZ, topChromaNZ *[2][4]int
@@ -567,7 +571,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 				if skipped {
 					// B_Direct_16x16 skip: QP unchanged, lastQScaleDiff resets to 0.
 					cabacLastQScaleDiff = 0
-					mbBidi.RefIdxL1 = [4]int8{-1, -1, -1, -1}
+					mbBidi.RefIdxL1 = [4]int8{directRefL1, directRefL1, directRefL1, directRefL1}
 					mbBidi.MVL0[0] = directMVL0
 					d.reconstructMBBidi(f, mbBidi, mbX, mbY, currentQP)
 					nzCtx[mbIdx] = mbBidi.TotalCoeff
@@ -597,7 +601,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					cabacLastQScaleDiff = int(mbBidi.QPDelta)
 					currentQP = updateQP(currentQP, int(mbBidi.QPDelta))
 					if mbBidi.MBType == syntax.BMBTypeDirect16x16 {
-						mbBidi.RefIdxL1 = [4]int8{-1, -1, -1, -1}
+						mbBidi.RefIdxL1 = [4]int8{directRefL1, directRefL1, directRefL1, directRefL1}
 						mbBidi.MVL0[0] = directMVL0
 					}
 					d.reconstructMBBidi(f, mbBidi, mbX, mbY, currentQP)
@@ -651,7 +655,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 			} else {
 				currentQP = updateQP(currentQP, int(mbBidi.QPDelta))
 				if mbBidi.MBType == syntax.BMBTypeDirect16x16 {
-					mbBidi.RefIdxL1 = [4]int8{-1, -1, -1, -1}
+					mbBidi.RefIdxL1 = [4]int8{directRefL1, directRefL1, directRefL1, directRefL1}
 					mbBidi.MVL0[0] = directMVL0
 				}
 				d.reconstructMBBidi(f, mbBidi, mbX, mbY, currentQP)

@@ -408,3 +408,23 @@ func writeBackBidiL0Context(mv4 []syntax.MotionVector, ref4 []int8, stride4, mbX
 		fill(x4+cabacBPartX(mb.MBType, part, parts), y4+cabacBPartY(mb.MBType, part, parts), w4, h4, mb.MVL0[part], mb.RefIdxL0[part])
 	}
 }
+
+func predictBDirectSpatialL0Ref(mv4 []syntax.MotionVector, ref4 []int8, stride4, x4, y4 int) int8 {
+	const partNotAvailable int8 = -2
+	_, leftRef := getMV4(mv4, ref4, stride4, x4-1, y4)
+	_, topRef := getMV4(mv4, ref4, stride4, x4, y4-1)
+	_, cRef := getMV4(mv4, ref4, stride4, x4+4, y4-1)
+	if cRef == partNotAvailable {
+		_, cRef = getMV4(mv4, ref4, stride4, x4-1, y4-1)
+	}
+	best := int8(127)
+	for _, r := range []int8{leftRef, topRef, cRef} {
+		if r >= 0 && r < best {
+			best = r
+		}
+	}
+	if best == 127 {
+		return -1
+	}
+	return best
+}
