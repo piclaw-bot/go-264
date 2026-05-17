@@ -51,7 +51,7 @@ func (d *Decoder) refBidiL0(refIdx int8, currentPOC int) *frame.Frame {
 	// Build ordered L0 list: frames with POC < currentPOC, sorted by descending POC.
 	var pastFrames []*frame.Frame
 	for _, fr := range d.DPB.Frames {
-		if fr != nil && fr.POC < currentPOC {
+		if fr != nil && fr.IsRef && fr.POC < currentPOC {
 			pastFrames = append(pastFrames, fr)
 		}
 	}
@@ -89,7 +89,7 @@ func (d *Decoder) refBidiL1(refIdx int8, currentPOC int) *frame.Frame {
 	// Build ordered L1 list: frames with POC > currentPOC, sorted by ascending POC.
 	var futureFrames []*frame.Frame
 	for _, fr := range d.DPB.Frames {
-		if fr != nil && fr.POC > currentPOC {
+		if fr != nil && fr.IsRef && fr.POC > currentPOC {
 			futureFrames = append(futureFrames, fr)
 		}
 	}
