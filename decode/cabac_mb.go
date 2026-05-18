@@ -676,7 +676,7 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 	leftNonSkip, topNonSkip bool,
 	leftIsDirect, topIsDirect bool,
 	refCtxs [4]int,
-	mvd4 []syntax.MotionVector, stride4, mbX, mbY int,
+	mv4 []syntax.MotionVector, ref4 []int8, mvd4 []syntax.MotionVector, stride4, mbX, mbY int,
 	transform8x8Mode bool, transform8x8Ctx int,
 	leftMBType, topMBType uint32,
 	leftChromaPred, topChromaPred int8,
@@ -813,14 +813,22 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 				default:
 					sx, sy = bx+(j&1), by+(j>>1)
 				}
+				idx := i*4 + j
 				if syntax.BMBSubUsesL0(t) {
-					mb.SubMVL0[i*4+j] = decodeCABACMVDPair(dec, models, mvd4, stride4, sx, sy, fillW4, fillH4)
+					mb.SubMVL0[idx] = decodeCABACMVDPair(dec, models, mvd4, stride4, sx, sy, fillW4, fillH4)
+					mvp := predictMotion4x4(mv4, ref4, stride4, sx, sy, fillW4, mb.RefIdxL0[i])
+					mb.SubMVL0[idx].X += mvp.X
+					mb.SubMVL0[idx].Y += mvp.Y
+					fillMV4(mv4, ref4, stride4, sx, sy, fillW4, fillH4, mb.SubMVL0[idx], mb.RefIdxL0[i])
 				}
 				if syntax.BMBSubUsesL1(t) {
 					if mvd4L1Sub == nil {
 						mvd4L1Sub = make([]syntax.MotionVector, len(mvd4))
 					}
-					mb.SubMVL1[i*4+j] = decodeCABACMVDPair(dec, models, mvd4L1Sub, stride4, sx, sy, fillW4, fillH4)
+					mb.SubMVL1[idx] = decodeCABACMVDPair(dec, models, mvd4L1Sub, stride4, sx, sy, fillW4, fillH4)
+					mvp := predictMotion4x4(mv4, nil, stride4, sx, sy, fillW4, mb.RefIdxL1[i])
+					mb.SubMVL1[idx].X += mvp.X
+					mb.SubMVL1[idx].Y += mvp.Y
 				}
 			}
 		}
@@ -866,8 +874,9 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 	}
 
 	// Apply motion-vector predictors: add MVP to each decoded MVD to get final MV.
-	// This mirrors the P-slice applyMVPredictors step. For Direct16x16 skip MBs
-	// the MVs are zero and MVP is irrelevant; for other types MVP must be added.
+	// CABAC MVD context uses mvd4 above, but MVP itself comes from the neighbouring
+	// final-MV cache. Using the MVD cache here loses non-zero neighbour motion and
+	// breaks later B_Direct spatial prediction.
 	if bMBType != syntax.BMBTypeDirect16x16 && bMBType != syntax.BMBTypeB8x8 {
 		parts := cabacBPartsForType(bMBType)
 		usesL0B, usesL1B := cabacBListsForType(bMBType)
@@ -877,7 +886,7 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 				bx := x4 + cabacBPartX(bMBType, i, parts)
 				by := y4 + cabacBPartY(bMBType, i, parts)
 				pw, _ := cabacBPartDims(bMBType, i)
-				mvp := predictMotion4x4(mvd4, nil, stride4, bx, by, pw, int8(mb.RefIdxL0[i]))
+				mvp := predictMotion4x4(mv4, ref4, stride4, bx, by, pw, int8(mb.RefIdxL0[i]))
 				mb.MVL0[i].X += mvp.X
 				mb.MVL0[i].Y += mvp.Y
 			}
@@ -887,7 +896,7 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 				bx := x4 + cabacBPartX(bMBType, i, parts)
 				by := y4 + cabacBPartY(bMBType, i, parts)
 				pw, _ := cabacBPartDims(bMBType, i)
-				mvp := predictMotion4x4(mvd4, nil, stride4, bx, by, pw, int8(mb.RefIdxL1[i]))
+				mvp := predictMotion4x4(mv4, ref4, stride4, bx, by, pw, int8(mb.RefIdxL1[i]))
 				mb.MVL1[i].X += mvp.X
 				mb.MVL1[i].Y += mvp.Y
 			}

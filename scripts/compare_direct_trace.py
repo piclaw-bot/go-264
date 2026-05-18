@@ -24,7 +24,7 @@ FF_RE = re.compile(
     r'submv3=\{(?P<submv3x>-?\d+),(?P<submv3y>-?\d+)\})?'
 )
 GO_RE = re.compile(
-    r'GODIRECT mb=(?P<mb>\d+).*?poc=(?P<frame>\d+).*?mb_type=(?P<mbtype>\d+) '
+    r'GODIRECT mb=(?P<mb>\d+).*?poc=(?P<frame>\d+)\b.*?mb_type=(?P<mbtype>\d+) '
     r'ref0=(?P<ref0>-?\d+) ref1=(?P<ref1>-?\d+) '
     r'mv0=\{(?P<mv0x>-?\d+),(?P<mv0y>-?\d+)\} mv1=\{(?P<mv1x>-?\d+),(?P<mv1y>-?\d+)\}.*?'
     r'sub0=(?P<sub0>\d+) sub1=(?P<sub1>\d+) sub2=(?P<sub2>\d+) sub3=(?P<sub3>\d+)'
@@ -68,14 +68,20 @@ def load_ff(path: str) -> dict[tuple[int, int, int], dict[str, object]]:
         out[(frame, occurrence[frame], mb)] = row
     return out
 
-def load_go(path: str) -> dict[tuple[int, int], dict[str, object]]:
+def load_go(path: str) -> dict[tuple[int, int, int], dict[str, object]]:
     out = {}
+    occurrence: defaultdict[int, int] = defaultdict(int)
+    last_mb: dict[int, int] = {}
     for line in open(path, errors='replace'):
         m = GO_RE.search(line)
         if not m:
             continue
         row = row_from_match(m)
-        out[(int(row['frame']), int(row['mb']))] = row
+        mb, frame = int(row['mb']), int(row['frame'])
+        if frame in last_mb and mb <= last_mb[frame]:
+            occurrence[frame] += 1
+        last_mb[frame] = mb
+        out[(frame, occurrence[frame], mb)] = row
     return out
 
 def main():
@@ -85,6 +91,7 @@ def main():
     ap.add_argument('--ff-frame', type=int, required=True)
     ap.add_argument('--ff-occurrence', type=int, default=0, help='which repeated frame_num group to compare')
     ap.add_argument('--go-poc', type=int, required=True)
+    ap.add_argument('--go-occurrence', type=int, default=0, help='which repeated Go POC group to compare')
     ap.add_argument('--limit', type=int, default=50)
     ap.add_argument('--fail-on-diff', action='store_true', help='exit non-zero when any compared row differs or is missing')
     args = ap.parse_args()
@@ -99,7 +106,7 @@ def main():
         return
     for _, _, mb in frame_keys:
         f = ff[(args.ff_frame, args.ff_occurrence, mb)]
-        g = go.get((args.go_poc, mb))
+        g = go.get((args.go_poc, args.go_occurrence, mb))
         rows += 1
         if g is None:
             print(f'mb={mb:04d} missing_go')

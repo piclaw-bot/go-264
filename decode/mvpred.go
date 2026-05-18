@@ -428,3 +428,42 @@ func predictBDirectSpatialL0Ref(mv4 []syntax.MotionVector, ref4 []int8, stride4,
 	}
 	return best
 }
+
+func predictBDirectSpatialL0ForSimpleRefs(mv4 []syntax.MotionVector, ref4 []int8, stride4, x4, y4 int) (int8, syntax.MotionVector) {
+	const partNotAvailable int8 = -2
+	left, leftRef := getMV4(mv4, ref4, stride4, x4-1, y4)
+	top, topRef := getMV4(mv4, ref4, stride4, x4, y4-1)
+	c, cRef := getMV4(mv4, ref4, stride4, x4+4, y4-1)
+	if cRef == partNotAvailable {
+		c, cRef = getMV4(mv4, ref4, stride4, x4-1, y4-1)
+	}
+	best := int8(127)
+	for _, r := range []int8{leftRef, topRef, cRef} {
+		if r >= 0 && r < best {
+			best = r
+		}
+	}
+	if best == 127 {
+		return -1, syntax.MotionVector{}
+	}
+	matches := 0
+	if leftRef == best {
+		matches++
+	}
+	if topRef == best {
+		matches++
+	}
+	if cRef == best {
+		matches++
+	}
+	if matches > 1 {
+		return best, syntax.MotionVector{X: median3(left.X, top.X, c.X), Y: median3(left.Y, top.Y, c.Y)}
+	}
+	if leftRef == best {
+		return best, left
+	}
+	if topRef == best {
+		return best, top
+	}
+	return best, c
+}
