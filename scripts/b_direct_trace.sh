@@ -19,6 +19,7 @@ FFMPEG="${FFMPEG:-$FFSRC/ffmpeg}"
 patch_ffmpeg_direct_trace() {
   python3 - "$FFSRC/libavcodec/h264_direct.c" "$MB_LIMIT" <<'PY'
 from pathlib import Path
+import re
 import sys
 p = Path(sys.argv[1])
 mb_limit = sys.argv[2]
@@ -92,6 +93,11 @@ if end is None:
 # trace patch, then add a tiny in-scope colocated-MV trace inside
 # pred_spatial_direct_motion where l1mv/l1ref variables exist.
 s = s[:start] + new + s[end:]
+# Older runs leave in-scope colocated hooks in FFmpeg's working tree. Keep the
+# caller's current MB_LIMIT authoritative instead of silently reusing the limit
+# baked into a previous patch.
+s = re.sub(r'\(sl->mb_x \+ sl->mb_y \* h->mb_width\) < \d+\)',
+           f'(sl->mb_x + sl->mb_y * h->mb_width) < {mb_limit})', s)
 s = s.replace(
     'fprintf(stderr, "FFCOLZERO8 mb=%04d i8=%d colref0=%d colref1=%d colmv={%d,%d} ref0=%d ref1=%d\\n",\n                                sl->mb_x + sl->mb_y * h->mb_width, i8, l1ref0[i8], l1ref1[i8], mv_col[0], mv_col[1], ref[0], ref[1]);',
     'fprintf(stderr, "FFCOLZERO8 mb=%04d i8=%d coltype0=%d coltype1=%d colref0=%d colref1=%d colmv={%d,%d} ref0=%d ref1=%d is_b8x8=%d sub_type=%u mb_type=%d\\n",\n                                sl->mb_x + sl->mb_y * h->mb_width, i8, mb_type_col[0], mb_type_col[1], l1ref0[i8], l1ref1[i8], mv_col[0], mv_col[1], ref[0], ref[1], is_b8x8, sub_mb_type, *mb_type);')
