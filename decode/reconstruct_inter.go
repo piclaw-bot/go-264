@@ -614,10 +614,10 @@ func (d *Decoder) fillBSubPrediction(dst []uint8, mb *syntax.MBBidi, fallback *f
 	useL0 := syntax.BSubUsesL0(t)
 	useL1 := syntax.BSubUsesL1(t)
 	if t == 0 {
-		// Direct B sub-MBs still need colocated-MV derivation. Keep the existing
-		// conservative fallback for that case, but do not let it hide explicit
-		// sub-partition MVs for L0/L1/Bi B_8x8 modes.
-		d.fillBPredByUse(dst, fallback, mbX, mbY, dstX, dstY, 8, 8, mb.RefIdxL0[part], mb.RefIdxL1[part], mb.MVL0[part], mb.MVL1[part], true, true)
+		// Direct B sub-MBs still need full colocated temporal derivation, but the
+		// decoder stores the spatial direct fallback in SubMVL* so reconstruction
+		// and subsequent B_8x8 MVP diagnostics use the same cache-resolved motion.
+		d.fillBPredByUse(dst, fallback, mbX, mbY, dstX, dstY, 8, 8, mb.RefIdxL0[part], mb.RefIdxL1[part], mb.SubMVL0[part*4], mb.SubMVL1[part*4], true, true)
 		return
 	}
 	w4, h4 := syntax.BMBSubPartFillDims(t)

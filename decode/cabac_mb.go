@@ -800,6 +800,21 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 		for i := 0; i < 4; i++ {
 			t := mb.SubMBType[i]
 			bx, by := x4+(i&1)*2, y4+(i>>1)*2
+			if t == 0 {
+				// B_Direct_8x8 writes resolved direct motion into FFmpeg's MV cache
+				// before later explicit B_8x8 sub-partitions call pred_motion. Until
+				// colocated temporal derivation is implemented, use the same spatial
+				// MVP fallback as our direct reconstruction path so following sub-MB
+				// MVPs see a populated direct neighbour instead of stale zeros.
+				mv0 := predictMotion4x4(mv4, ref4, stride4, bx, by, 2, mb.RefIdxL0[i])
+				mv1 := predictMotion4x4(mv4L1, ref4L1, stride4, bx, by, 2, mb.RefIdxL1[i])
+				mb.SubMVL0[i*4] = mv0
+				mb.SubMVL1[i*4] = mv1
+				fillMV4(mv4, ref4, stride4, bx, by, 2, 2, mv0, mb.RefIdxL0[i])
+				fillMV4(mv4L1, ref4L1, stride4, bx, by, 2, 2, mv1, mb.RefIdxL1[i])
+				fillMVD4(mvd4, stride4, bx, by, 2, 2, syntax.MotionVector{})
+				continue
+			}
 			sc := syntax.BMBSubPartCount(t)
 			fillW4, fillH4 := syntax.BMBSubPartFillDims(t)
 			for j := 0; j < sc; j++ {
