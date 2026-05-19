@@ -88,8 +88,37 @@ for i in range(brace, len(s)):
             break
 if end is None:
     raise SystemExit('ffmpeg h264_direct.c unterminated direct-motion function')
-# Replace the whole function, whether it is pristine or has an older trace patch.
-p.write_text(s[:start] + new + s[end:])
+# Replace the whole wrapper function, whether it is pristine or has an older
+# trace patch, then add a tiny in-scope colocated-MV trace inside
+# pred_spatial_direct_motion where l1mv/l1ref variables exist.
+s = s[:start] + new + s[end:]
+if 'FFCOLZERO8 mb=' not in s:
+    needle8 = '''                    const int16_t *mv_col = l1mv[x8 * 3 + y8 * 3 * b4_stride];
+                    if (FFABS(mv_col[0]) <= 1 && FFABS(mv_col[1]) <= 1) {
+'''
+    repl8 = '''                    const int16_t *mv_col = l1mv[x8 * 3 + y8 * 3 * b4_stride];
+                    if (getenv("GO264_FFMPEG_DIRECT_TRACE") && (sl->mb_x + sl->mb_y * h->mb_width) < ''' + mb_limit + ''')
+                        fprintf(stderr, "FFCOLZERO8 mb=%04d i8=%d colref0=%d colref1=%d colmv={%d,%d} ref0=%d ref1=%d\\n",
+                                sl->mb_x + sl->mb_y * h->mb_width, i8, l1ref0[i8], l1ref1[i8], mv_col[0], mv_col[1], ref[0], ref[1]);
+                    if (FFABS(mv_col[0]) <= 1 && FFABS(mv_col[1]) <= 1) {
+'''
+    if needle8 in s:
+        s = s.replace(needle8, repl8, 1)
+if 'FFCOLZERO mb=' not in s:
+    needle = '''                    const int16_t *mv_col = l1mv[x8 * 2 + (i4 & 1) +
+                                                     (y8 * 2 + (i4 >> 1)) * b4_stride];
+                        if (FFABS(mv_col[0]) <= 1 && FFABS(mv_col[1]) <= 1) {
+'''
+    repl = '''                    const int16_t *mv_col = l1mv[x8 * 2 + (i4 & 1) +
+                                                     (y8 * 2 + (i4 >> 1)) * b4_stride];
+                        if (getenv("GO264_FFMPEG_DIRECT_TRACE") && (sl->mb_x + sl->mb_y * h->mb_width) < ''' + mb_limit + ''')
+                            fprintf(stderr, "FFCOLZERO mb=%04d i8=%d i4=%d colref0=%d colref1=%d colmv={%d,%d} ref0=%d ref1=%d\\n",
+                                    sl->mb_x + sl->mb_y * h->mb_width, i8, i4, l1ref0[i8], l1ref1[i8], mv_col[0], mv_col[1], ref[0], ref[1]);
+                        if (FFABS(mv_col[0]) <= 1 && FFABS(mv_col[1]) <= 1) {
+'''
+    if needle in s:
+        s = s.replace(needle, repl, 1)
+p.write_text(s)
 PY
 }
 
