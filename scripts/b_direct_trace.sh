@@ -108,8 +108,9 @@ if 'FFCOLZERO8 mb=' not in s:
                                 sl->mb_x + sl->mb_y * h->mb_width, i8, mb_type_col[0], mb_type_col[1], l1ref0[i8], l1ref1[i8], mv_col[0], mv_col[1], ref[0], ref[1], is_b8x8, sub_mb_type, *mb_type);
                     if (FFABS(mv_col[0]) <= 1 && FFABS(mv_col[1]) <= 1) {
 '''
-    if needle8 in s:
-        s = s.replace(needle8, repl8, 1)
+    if needle8 not in s:
+        raise SystemExit('ffmpeg h264_direct.c spatial 8x8 colocated-zero hook target not found')
+    s = s.replace(needle8, repl8, 1)
 if 'FFCOLZERO mb=' not in s:
     needle = '''                    const int16_t *mv_col = l1mv[x8 * 2 + (i4 & 1) +
                                                      (y8 * 2 + (i4 >> 1)) * b4_stride];
@@ -122,8 +123,9 @@ if 'FFCOLZERO mb=' not in s:
                                     sl->mb_x + sl->mb_y * h->mb_width, i8, i4, mb_type_col[0], mb_type_col[1], l1ref0[i8], l1ref1[i8], mv_col[0], mv_col[1], ref[0], ref[1], is_b8x8, sub_mb_type, *mb_type);
                         if (FFABS(mv_col[0]) <= 1 && FFABS(mv_col[1]) <= 1) {
 '''
-    if needle in s:
-        s = s.replace(needle, repl, 1)
+    if needle not in s:
+        raise SystemExit('ffmpeg h264_direct.c spatial sub-8x8 colocated-zero hook target not found')
+    s = s.replace(needle, repl, 1)
 p.write_text(s)
 PY
 }
