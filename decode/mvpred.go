@@ -1,8 +1,8 @@
 package decode
 
 // decode/mvpred.go — motion vector prediction helpers and 4x4 MV/ref cache
-// write-back. All functions are pure computations on the MV cache slices with
-// no dependency on the frame or reconstruction path.
+// write-back. Most functions are pure cache computations; B-direct colocated
+// checks also inspect the selected future reference frame's saved motion cache.
 
 import (
 	"fmt"

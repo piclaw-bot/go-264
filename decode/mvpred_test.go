@@ -3,6 +3,7 @@ package decode
 import (
 	"testing"
 
+	"github.com/rcarmo/go-264/frame"
 	"github.com/rcarmo/go-264/syntax"
 )
 
@@ -74,6 +75,25 @@ func TestWriteBackBidiDirectPreservesChosenL0MV(t *testing.T) {
 		if mv4[i] != mb.MVL0[0] || ref4[i] != 0 {
 			t.Fatalf("direct writeback idx=%d mv=%+v ref=%d, want %+v/ref0", i, mv4[i], ref4[i], mb.MVL0[0])
 		}
+	}
+}
+
+func TestColocatedDirect8x8ZeroUsesFFmpegRepresentative(t *testing.T) {
+	col := &frame.Frame{POC: 14, MotionStride4: 8, MotionL0: make([][2]int16, 64), RefIdxL0: make([]int8, 64)}
+	for i := range col.RefIdxL0 {
+		col.RefIdxL0[i] = -2
+	}
+	// mb=(1,1), bottom-right 8x8 direct partition samples 4x4 position
+	// x=1*4+3, y=1*4+3 (FFmpeg x8*3/y8*3), not the 8x8 centre.
+	idx := 7*col.MotionStride4 + 7
+	col.RefIdxL0[idx] = 0
+	col.MotionL0[idx] = [2]int16{-1, 1}
+	if !colocatedDirect8x8Zero(col, 1, 1, 3) {
+		t.Fatalf("expected FFmpeg representative {-1,1}/ref0 to trigger direct zero")
+	}
+	col.MotionL0[idx] = [2]int16{-1, 2}
+	if colocatedDirect8x8Zero(col, 1, 1, 3) {
+		t.Fatalf("expected y magnitude > 1 not to trigger direct zero")
 	}
 }
 
