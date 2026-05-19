@@ -615,6 +615,8 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 						mbBidi.RefIdxL0[0] = directRefL0
 						mbBidi.RefIdxL1 = [4]int8{directRefL1, directRefL1, directRefL1, directRefL1}
 						mbBidi.MVL0[0] = directMVL0
+					} else if applyDirectSpatial {
+						applyB8x8DirectSpatialL0(mbBidi, directRefL0, directMVL0, directRefL1)
 					}
 					d.reconstructMBBidi(f, mbBidi, mbX, mbY, currentQP)
 					nzCtx[mbIdx] = mbBidi.TotalCoeff
@@ -670,6 +672,8 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					mbBidi.RefIdxL0[0] = directRefL0
 					mbBidi.RefIdxL1 = [4]int8{directRefL1, directRefL1, directRefL1, directRefL1}
 					mbBidi.MVL0[0] = directMVL0
+				} else if applyDirectSpatial {
+					applyB8x8DirectSpatialL0(mbBidi, directRefL0, directMVL0, directRefL1)
 				}
 				d.reconstructMBBidi(f, mbBidi, mbX, mbY, currentQP)
 				nzCtx[mbIdx] = mbBidi.TotalCoeff

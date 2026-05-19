@@ -409,6 +409,40 @@ func writeBackBidiL0Context(mv4 []syntax.MotionVector, ref4 []int8, stride4, mbX
 	}
 }
 
+func predictBPartMotion4x4(mv4 []syntax.MotionVector, ref4 []int8, stride4, x4, y4 int, mbType uint32, part int, targetRef int8) syntax.MotionVector {
+	parts := cabacBPartsForType(mbType)
+	if parts == 2 {
+		switch mbType {
+		case syntax.BMBTypeL016x8, syntax.BMBTypeL116x8, syntax.BMBTypeBi16x8:
+			return predict16x8Motion4x4(mv4, ref4, stride4, x4, y4, part, targetRef)
+		case syntax.BMBTypeL016x8b, syntax.BMBTypeL116x8b, syntax.BMBTypeBi16x8b,
+			syntax.BMBTypeL08x16, syntax.BMBTypeL18x16, syntax.BMBTypeBi8x16:
+			return predict8x16Motion4x4(mv4, ref4, stride4, x4, y4, part, targetRef)
+		}
+	}
+	bx := x4 + cabacBPartX(mbType, part, parts)
+	by := y4 + cabacBPartY(mbType, part, parts)
+	pw, _ := cabacBPartDims(mbType, part)
+	return predictMotion4x4(mv4, ref4, stride4, bx, by, pw, targetRef)
+}
+
+func applyB8x8DirectSpatialL0(mb *syntax.MBBidi, refL0 int8, mvL0 syntax.MotionVector, refL1 int8) {
+	if mb == nil || mb.MBType != syntax.BMBTypeB8x8 {
+		return
+	}
+	for part, t := range mb.SubMBType {
+		if t != 0 { // B_Direct_8x8 only; explicit L0/L1/Bi sub-MBs keep decoded MVD/MVP MVs.
+			continue
+		}
+		mb.RefIdxL0[part] = refL0
+		mb.RefIdxL1[part] = refL1
+		mb.MVL0[part] = mvL0
+		for j := 0; j < 4; j++ {
+			mb.SubMVL0[part*4+j] = mvL0
+		}
+	}
+}
+
 func predictBDirectSpatialL0Ref(mv4 []syntax.MotionVector, ref4 []int8, stride4, x4, y4 int) int8 {
 	const partNotAvailable int8 = -2
 	_, leftRef := getMV4(mv4, ref4, stride4, x4-1, y4)
