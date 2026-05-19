@@ -446,7 +446,8 @@ func predictBPartMotion4x4(mv4 []syntax.MotionVector, ref4 []int8, stride4, x4, 
 		case syntax.BMBTypeL016x8, syntax.BMBTypeL116x8, syntax.BMBTypeBi16x8:
 			return predict16x8Motion4x4(mv4, ref4, stride4, x4, y4, part, targetRef)
 		case syntax.BMBTypeL016x8b, syntax.BMBTypeL116x8b, syntax.BMBTypeBi16x8b,
-			syntax.BMBTypeL08x16, syntax.BMBTypeL18x16, syntax.BMBTypeBi8x16:
+			syntax.BMBTypeL08x16, syntax.BMBTypeL18x16, syntax.BMBTypeBi8x16,
+			13, 15, 17, 19, 21:
 			return predict8x16Motion4x4(mv4, ref4, stride4, x4, y4, part, targetRef)
 		}
 	}
