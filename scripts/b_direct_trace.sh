@@ -92,14 +92,20 @@ if end is None:
 # trace patch, then add a tiny in-scope colocated-MV trace inside
 # pred_spatial_direct_motion where l1mv/l1ref variables exist.
 s = s[:start] + new + s[end:]
+s = s.replace(
+    'fprintf(stderr, "FFCOLZERO8 mb=%04d i8=%d colref0=%d colref1=%d colmv={%d,%d} ref0=%d ref1=%d\\n",\n                                sl->mb_x + sl->mb_y * h->mb_width, i8, l1ref0[i8], l1ref1[i8], mv_col[0], mv_col[1], ref[0], ref[1]);',
+    'fprintf(stderr, "FFCOLZERO8 mb=%04d i8=%d coltype0=%d coltype1=%d colref0=%d colref1=%d colmv={%d,%d} ref0=%d ref1=%d is_b8x8=%d sub_type=%u mb_type=%d\\n",\n                                sl->mb_x + sl->mb_y * h->mb_width, i8, mb_type_col[0], mb_type_col[1], l1ref0[i8], l1ref1[i8], mv_col[0], mv_col[1], ref[0], ref[1], is_b8x8, sub_mb_type, *mb_type);')
+s = s.replace(
+    'fprintf(stderr, "FFCOLZERO mb=%04d i8=%d i4=%d colref0=%d colref1=%d colmv={%d,%d} ref0=%d ref1=%d\\n",\n                                    sl->mb_x + sl->mb_y * h->mb_width, i8, i4, l1ref0[i8], l1ref1[i8], mv_col[0], mv_col[1], ref[0], ref[1]);',
+    'fprintf(stderr, "FFCOLZERO mb=%04d i8=%d i4=%d coltype0=%d coltype1=%d colref0=%d colref1=%d colmv={%d,%d} ref0=%d ref1=%d is_b8x8=%d sub_type=%u mb_type=%d\\n",\n                                    sl->mb_x + sl->mb_y * h->mb_width, i8, i4, mb_type_col[0], mb_type_col[1], l1ref0[i8], l1ref1[i8], mv_col[0], mv_col[1], ref[0], ref[1], is_b8x8, sub_mb_type, *mb_type);')
 if 'FFCOLZERO8 mb=' not in s:
     needle8 = '''                    const int16_t *mv_col = l1mv[x8 * 3 + y8 * 3 * b4_stride];
                     if (FFABS(mv_col[0]) <= 1 && FFABS(mv_col[1]) <= 1) {
 '''
     repl8 = '''                    const int16_t *mv_col = l1mv[x8 * 3 + y8 * 3 * b4_stride];
                     if (getenv("GO264_FFMPEG_DIRECT_TRACE") && (sl->mb_x + sl->mb_y * h->mb_width) < ''' + mb_limit + ''')
-                        fprintf(stderr, "FFCOLZERO8 mb=%04d i8=%d colref0=%d colref1=%d colmv={%d,%d} ref0=%d ref1=%d\\n",
-                                sl->mb_x + sl->mb_y * h->mb_width, i8, l1ref0[i8], l1ref1[i8], mv_col[0], mv_col[1], ref[0], ref[1]);
+                        fprintf(stderr, "FFCOLZERO8 mb=%04d i8=%d coltype0=%d coltype1=%d colref0=%d colref1=%d colmv={%d,%d} ref0=%d ref1=%d is_b8x8=%d sub_type=%u mb_type=%d\\n",
+                                sl->mb_x + sl->mb_y * h->mb_width, i8, mb_type_col[0], mb_type_col[1], l1ref0[i8], l1ref1[i8], mv_col[0], mv_col[1], ref[0], ref[1], is_b8x8, sub_mb_type, *mb_type);
                     if (FFABS(mv_col[0]) <= 1 && FFABS(mv_col[1]) <= 1) {
 '''
     if needle8 in s:
@@ -112,8 +118,8 @@ if 'FFCOLZERO mb=' not in s:
     repl = '''                    const int16_t *mv_col = l1mv[x8 * 2 + (i4 & 1) +
                                                      (y8 * 2 + (i4 >> 1)) * b4_stride];
                         if (getenv("GO264_FFMPEG_DIRECT_TRACE") && (sl->mb_x + sl->mb_y * h->mb_width) < ''' + mb_limit + ''')
-                            fprintf(stderr, "FFCOLZERO mb=%04d i8=%d i4=%d colref0=%d colref1=%d colmv={%d,%d} ref0=%d ref1=%d\\n",
-                                    sl->mb_x + sl->mb_y * h->mb_width, i8, i4, l1ref0[i8], l1ref1[i8], mv_col[0], mv_col[1], ref[0], ref[1]);
+                            fprintf(stderr, "FFCOLZERO mb=%04d i8=%d i4=%d coltype0=%d coltype1=%d colref0=%d colref1=%d colmv={%d,%d} ref0=%d ref1=%d is_b8x8=%d sub_type=%u mb_type=%d\\n",
+                                    sl->mb_x + sl->mb_y * h->mb_width, i8, i4, mb_type_col[0], mb_type_col[1], l1ref0[i8], l1ref1[i8], mv_col[0], mv_col[1], ref[0], ref[1], is_b8x8, sub_mb_type, *mb_type);
                         if (FFABS(mv_col[0]) <= 1 && FFABS(mv_col[1]) <= 1) {
 '''
     if needle in s:
