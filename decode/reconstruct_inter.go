@@ -623,15 +623,7 @@ func (d *Decoder) fillBSubPrediction(dst []uint8, mb *syntax.MBBidi, fallback *f
 	w4, h4 := syntax.BMBSubPartFillDims(t)
 	parts := syntax.BMBSubPartCount(t)
 	for j := 0; j < parts; j++ {
-		var ox4, oy4 int
-		switch t {
-		case 4, 6, 8: // 8x4: top then bottom
-			ox4, oy4 = 0, j
-		case 5, 7, 9: // 4x8: left then right
-			ox4, oy4 = j, 0
-		default: // 8x8 (j=0) or 4x4 (2x2 scan)
-			ox4, oy4 = j&1, j>>1
-		}
+		ox4, oy4 := bSubPartOffset4x4(t, j)
 		idx := part*4 + j
 		d.fillBPredByUse(dst, fallback, mbX, mbY, dstX+ox4*4, dstY+oy4*4, w4*4, h4*4, mb.RefIdxL0[part], mb.RefIdxL1[part], mb.SubMVL0[idx], mb.SubMVL1[idx], useL0, useL1)
 	}

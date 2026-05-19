@@ -407,15 +407,7 @@ func writeBackBidiListContext(mv4 []syntax.MotionVector, ref4 []int8, stride4, m
 			w4, h4 := syntax.BMBSubPartFillDims(t)
 			parts := syntax.BMBSubPartCount(t)
 			for j := 0; j < parts; j++ {
-				var ox4, oy4 int
-				switch t {
-				case 4, 6, 8:
-					ox4, oy4 = 0, j
-				case 5, 7, 9:
-					ox4, oy4 = j, 0
-				default:
-					ox4, oy4 = j&1, j>>1
-				}
+				ox4, oy4 := bSubPartOffset4x4(t, j)
 				mv, ref := mb.SubMVL0[part*4+j], mb.RefIdxL0[part]
 				if list == 1 {
 					mv, ref = mb.SubMVL1[part*4+j], mb.RefIdxL1[part]
@@ -436,6 +428,17 @@ func writeBackBidiListContext(mv4 []syntax.MotionVector, ref4 []int8, stride4, m
 		}
 		w4, h4 := cabacBPartDims(mb.MBType, part)
 		fill(x4+cabacBPartX(mb.MBType, part, parts), y4+cabacBPartY(mb.MBType, part, parts), w4, h4, mv, ref)
+	}
+}
+
+func bSubPartOffset4x4(t uint32, part int) (x4, y4 int) {
+	switch t {
+	case 4, 6, 8: // 8x4: top then bottom
+		return 0, part
+	case 5, 7, 9: // 4x8: left then right
+		return part, 0
+	default: // 8x8 (part=0) or 4x4 (2x2 scan)
+		return part & 1, part >> 1
 	}
 }
 

@@ -771,18 +771,15 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 		for i := 0; i < 4; i++ {
 			mb.SubMBType[i] = decodeCABACBSubMBType(dec, models)
 		}
-		// Ref idx and MVD for each sub-partition per list.
-		// Only decode L0 ref if any sub-MB uses L0; similar for L1.
-		// For simplicity decode L0 then L1 refs, then MVDs in raster order.
+		// Ref-idx syntax is decoded list-by-list before MVDs, matching FFmpeg's
+		// B_8x8 CABAC order. The context inputs are the sub-MB origins computed by
+		// the caller from the current neighbour ref cache.
 		x4, y4 := mbX*4, mbY*4
 		if numRefL0 > 1 {
 			for i := 0; i < 4; i++ {
 				t := mb.SubMBType[i]
 				if syntax.BMBSubUsesL0(t) {
-					bx, by := x4+(i&1)*2, y4+(i>>1)*2
 					mb.RefIdxL0[i] = int8(syntax.DecodeCABACRef(dec, models, refCtxs[i]))
-					_ = bx
-					_ = by
 				}
 			}
 		}
@@ -821,15 +818,8 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 			sc := syntax.BMBSubPartCount(t)
 			fillW4, fillH4 := syntax.BMBSubPartFillDims(t)
 			for j := 0; j < sc; j++ {
-				var sx, sy int
-				switch t {
-				case 4, 6, 8: // 8x4: top then bottom
-					sx, sy = bx, by+j
-				case 5, 7, 9: // 4x8: left then right
-					sx, sy = bx+j, by
-				default:
-					sx, sy = bx+(j&1), by+(j>>1)
-				}
+				ox4, oy4 := bSubPartOffset4x4(t, j)
+				sx, sy := bx+ox4, by+oy4
 				idx := i*4 + j
 				if !syntax.BMBSubUsesL0(t) {
 					fillMVD4(mvd4, stride4, sx, sy, fillW4, fillH4, syntax.MotionVector{})

@@ -77,6 +77,25 @@ func TestWriteBackBidiDirectPreservesChosenL0MV(t *testing.T) {
 	}
 }
 
+func TestBSubPartOffset4x4MatchesSubPartitionShapes(t *testing.T) {
+	tests := []struct {
+		typ        uint32
+		part, x, y int
+	}{
+		{1, 0, 0, 0},  // 8x8
+		{4, 1, 0, 1},  // 8x4 bottom
+		{5, 1, 1, 0},  // 4x8 right
+		{10, 2, 0, 1}, // 4x4 bottom-left scan
+		{10, 3, 1, 1}, // 4x4 bottom-right scan
+	}
+	for _, tt := range tests {
+		x, y := bSubPartOffset4x4(tt.typ, tt.part)
+		if x != tt.x || y != tt.y {
+			t.Fatalf("type=%d part=%d offset=(%d,%d), want (%d,%d)", tt.typ, tt.part, x, y, tt.x, tt.y)
+		}
+	}
+}
+
 func TestWriteBackBidiB8x8UsesSubPartitionShapes(t *testing.T) {
 	mv4 := make([]syntax.MotionVector, 16)
 	ref4 := make([]int8, 16)
