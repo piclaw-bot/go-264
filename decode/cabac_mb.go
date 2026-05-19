@@ -1073,17 +1073,14 @@ func cabacBPartsForType(t uint32) int {
 	return 1
 }
 
-// cabacBListsForType returns whether L0 and L1 are used for the given B MB type.
+// cabacBListsForType returns whether any partition of a B MB type uses L0/L1.
 func cabacBListsForType(t uint32) (usesL0, usesL1 bool) {
-	switch t {
-	case syntax.BMBTypeL016x16, syntax.BMBTypeL016x8, syntax.BMBTypeL016x8b, syntax.BMBTypeL08x16:
-		return true, false
-	case syntax.BMBTypeL116x16, syntax.BMBTypeL116x8, syntax.BMBTypeL116x8b, syntax.BMBTypeL18x16:
-		return false, true
-	default:
-		// Bi types, L0_L1, L1_L0 — use both.
-		return true, true
+	parts := cabacBPartsForType(t)
+	for part := 0; part < parts; part++ {
+		usesL0 = usesL0 || cabacBPartUsesL0(t, part)
+		usesL1 = usesL1 || cabacBPartUsesL1(t, part)
 	}
+	return usesL0, usesL1
 }
 
 func cabacBPartDims(t uint32, part int) (w, h int) {

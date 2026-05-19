@@ -177,3 +177,24 @@ func TestPredictBPartMotionUsesShapeForAllBTwoPartitionTypes(t *testing.T) {
 		}
 	}
 }
+
+func TestCABACBListsForTypeUsesPerPartitionTables(t *testing.T) {
+	tests := []struct {
+		typ            uint32
+		wantL0, wantL1 bool
+	}{
+		{syntax.BMBTypeL016x16, true, false},
+		{syntax.BMBTypeL116x16, false, true},
+		{syntax.BMBTypeBi16x16, true, true},
+		{10, true, true}, // B_L1_L0_16x8
+		{11, true, true}, // B_L1_L0_8x16
+		{12, true, true}, // B_L0_Bi_16x8
+		{13, true, true}, // B_L0_Bi_8x16
+	}
+	for _, tt := range tests {
+		gotL0, gotL1 := cabacBListsForType(tt.typ)
+		if gotL0 != tt.wantL0 || gotL1 != tt.wantL1 {
+			t.Fatalf("type %d lists=(%v,%v), want (%v,%v)", tt.typ, gotL0, gotL1, tt.wantL0, tt.wantL1)
+		}
+	}
+}
