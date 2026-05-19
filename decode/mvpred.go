@@ -483,7 +483,7 @@ func applyB8x8DirectSpatial(mb *syntax.MBBidi, refL0 int8, mvL0 syntax.MotionVec
 }
 
 func colocatedDirect8x8Zero(colocated *frame.Frame, mbX, mbY, part int) bool {
-	if colocated == nil || colocated.MotionStride4 <= 0 || len(colocated.MotionL0) == 0 || len(colocated.RefIdxL0) != len(colocated.MotionL0) {
+	if colocated == nil || colocated.MotionStride4 <= 0 || len(colocated.MotionL0) == 0 || len(colocated.RefIdxL0) != len(colocated.MotionL0) || part < 0 || part > 3 {
 		return false
 	}
 	// FFmpeg's spatial-direct 8x8 zero check samples the colocated 4x4
@@ -491,6 +491,9 @@ func colocatedDirect8x8Zero(colocated *frame.Frame, mbX, mbY, part int) bool {
 	// right/bottom 8x8 partitions), not the geometric centre of the 8x8 block.
 	x4 := mbX*4 + (part&1)*3
 	y4 := mbY*4 + (part>>1)*3
+	if x4 < 0 || y4 < 0 || x4 >= colocated.MotionStride4 {
+		return false
+	}
 	idx := y4*colocated.MotionStride4 + x4
 	if idx < 0 || idx >= len(colocated.MotionL0) || idx >= len(colocated.RefIdxL0) {
 		return false

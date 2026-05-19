@@ -95,6 +95,9 @@ func TestColocatedDirect8x8ZeroUsesFFmpegRepresentative(t *testing.T) {
 	if colocatedDirect8x8Zero(col, 1, 1, 3) {
 		t.Fatalf("expected y magnitude > 1 not to trigger direct zero")
 	}
+	if colocatedDirect8x8Zero(col, -1, 1, 3) || colocatedDirect8x8Zero(col, 1, -1, 3) || colocatedDirect8x8Zero(col, 1, 1, 4) {
+		t.Fatalf("invalid macroblock coordinates or partition must not sample wrapped cache positions")
+	}
 }
 
 func TestBSubPartOffset4x4MatchesSubPartitionShapes(t *testing.T) {
