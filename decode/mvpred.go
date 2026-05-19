@@ -492,11 +492,15 @@ func colocatedDirect8x8Zero(colocated *frame.Frame, mbX, mbY, part int) bool {
 	x4 := mbX*4 + (part&1)*3
 	y4 := mbY*4 + (part>>1)*3
 	idx := y4*colocated.MotionStride4 + x4
-	if idx < 0 || idx >= len(colocated.MotionL0) || idx >= len(colocated.RefIdxL0) || colocated.RefIdxL0[idx] != 0 {
+	if idx < 0 || idx >= len(colocated.MotionL0) || idx >= len(colocated.RefIdxL0) {
 		return false
 	}
 	mv := colocated.MotionL0[idx]
-	return mv[0] >= -1 && mv[0] <= 1 && mv[1] >= -1 && mv[1] <= 1
+	zero := colocated.RefIdxL0[idx] == 0 && mv[0] >= -1 && mv[0] <= 1 && mv[1] >= -1 && mv[1] <= 1
+	if os.Getenv("GO264_DIRECT_COL_TRACE") != "" {
+		fmt.Fprintf(os.Stderr, "GOCOLZERO mbx=%02d mby=%02d part=%d colpoc=%d colref0=%d colmv={%d,%d} zero=%t\n", mbX, mbY, part, colocated.POC, colocated.RefIdxL0[idx], mv[0], mv[1], zero)
+	}
+	return zero
 }
 
 func predictBDirectSpatialL0Ref(mv4 []syntax.MotionVector, ref4 []int8, stride4, x4, y4 int) int8 {
