@@ -68,6 +68,8 @@ def main() -> None:
     ap.add_argument('ffcolzero')
     ap.add_argument('gocolzero')
     ap.add_argument('--width', type=int, default=40, help='macroblock width for bbb 640px fixture')
+    ap.add_argument('--mb', type=int, help='compare only one absolute macroblock index')
+    ap.add_argument('--part', type=int, help='compare only one 8x8 partition index')
     ap.add_argument('--limit', type=int, default=20)
     ap.add_argument('--fail-on-diff', action='store_true')
     args = ap.parse_args()
@@ -76,14 +78,19 @@ def main() -> None:
     diffs = 0
     compared = 0
     for key in sorted(ff):
+        mb, part, occ = key
+        if args.mb is not None and mb != args.mb:
+            continue
+        if args.part is not None and part != args.part:
+            continue
         f = ff[key]
         g = go.get(key)
         compared += 1
         if g is None:
-            print(f'mb={key[0]:04d} part={key[1]} occ={key[2]} missing_go ff_ref_mv={f["ref_mv"]} is_b8x8={f["is_b8x8"]} sub_type={f["sub_type"]} mb_type={f["mb_type"]}')
+            print(f'mb={mb:04d} part={part} occ={occ} missing_go ff_ref_mv={f["ref_mv"]} is_b8x8={f["is_b8x8"]} sub_type={f["sub_type"]} mb_type={f["mb_type"]}')
             diffs += 1
         elif f['ref_mv'] != g['ref_mv']:
-            print(f'mb={key[0]:04d} part={key[1]} occ={key[2]} ref_mv ff={f["ref_mv"]} go={g["ref_mv"]} go_zero={g["zero"]}')
+            print(f'mb={mb:04d} part={part} occ={occ} ref_mv ff={f["ref_mv"]} go={g["ref_mv"]} go_zero={g["zero"]}')
             diffs += 1
         if diffs >= args.limit:
             break
