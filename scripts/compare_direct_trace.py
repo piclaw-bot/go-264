@@ -104,6 +104,8 @@ def main():
     if not frame_keys:
         occurrences = sorted({k[1] for k in ff if k[0] == args.ff_frame})
         print(f'no_ff_rows frame={args.ff_frame} occurrence={args.ff_occurrence} available_occurrences={occurrences}')
+        if args.fail_on_diff:
+            raise SystemExit(1)
         return
     for _, _, mb in frame_keys:
         f = ff[(args.ff_frame, args.ff_occurrence, mb)]
