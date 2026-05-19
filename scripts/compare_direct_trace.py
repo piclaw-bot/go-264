@@ -93,6 +93,7 @@ def main():
     ap.add_argument('--go-poc', type=int, required=True)
     ap.add_argument('--go-occurrence', type=int, default=0, help='which repeated Go POC group to compare')
     ap.add_argument('--limit', type=int, default=50)
+    ap.add_argument('--compare-subtypes', action='store_true', help='also report direct sub-type shape differences; off by default because FFDIRECT is pre-explicit-MVD for mixed B_8x8 rows')
     ap.add_argument('--fail-on-diff', action='store_true', help='exit non-zero when any compared row differs or is missing')
     args = ap.parse_args()
     ff = load_ff(args.ffdirect)
@@ -113,14 +114,19 @@ def main():
             diffs += 1
             continue
         mismatch = []
-        if f['ref_mv'] != g['ref_mv']:
-            mismatch.append('ref_mv')
         # FFmpeg may report Direct+Bi internal flags (61704) for resolved direct
         # 8x8 cache cells while Go normalizes direct cache cells to 12552. Treat
         # both as direct for direct-motion comparisons and only report sub-type
         # differences for non-direct shape disagreements.
         direct_flags = {12552, 61704}
-        if any((fs not in direct_flags or gs not in direct_flags) and fs != gs for fs, gs in zip(f['sub'], g['sub'])):
+        all_direct = all(s in direct_flags for s in f['sub']) and all(s in direct_flags for s in g['sub'])
+        # For mixed B_8x8 rows, FFDIRECT is emitted before explicit sub-MB MVD
+        # decode overwrites non-direct cache cells. Top-level ref/mv fields are
+        # therefore stale unless the whole row is direct; compare direct sub-MVs
+        # below instead.
+        if all_direct and f['ref_mv'] != g['ref_mv']:
+            mismatch.append('ref_mv')
+        if args.compare_subtypes and any((fs not in direct_flags or gs not in direct_flags) and fs != gs for fs, gs in zip(f['sub'], g['sub'])):
             mismatch.append('sub')
         # FFmpeg's FFDIRECT rows are emitted inside pred_direct_motion, before
         # explicit B_8x8 sub-MB MVD decoding overwrites non-direct sub blocks.
