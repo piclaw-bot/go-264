@@ -101,6 +101,12 @@ GO264_FFMPEG_DIRECT_TRACE=1 "$FFMPEG" -y -threads 1 -hide_banner \
   >"$OUTDIR/ffmpeg.stdout" 2>"$OUTDIR/ffmpeg.direct.trace" || true
 
 grep '^FFDIRECT' "$OUTDIR/ffmpeg.direct.trace" >"$OUTDIR/ffdirect.rows" || true
+
+rm -rf "$OUTDIR/go-frames"
+mkdir -p "$OUTDIR/go-frames"
+GO264_DIRECT_TRACE=1 go run ./cmd/decode264 -f yuv -i "$INPUT" -o "$OUTDIR/go-frames" \
+  >"$OUTDIR/go.stdout" 2>"$OUTDIR/go.direct.trace"
+grep '^GODIRECT' "$OUTDIR/go.direct.trace" >"$OUTDIR/godirect.rows" || true
 python3 - "$OUTDIR/ffdirect.rows" <<'PY'
 import re, sys
 from collections import Counter
@@ -124,4 +130,11 @@ for frame, count in sorted(by_frame.items())[:20]:
     print(f'frame={frame} rows={count} spatial={dict(spatial)} refs={dict(refs.most_common(4))} mv0={dict(mv0.most_common(4))}')
 PY
 
-echo "trace=$OUTDIR/ffdirect.rows"
+if [[ -n "${GO_POC:-}" ]]; then
+  python3 scripts/compare_direct_trace.py "$OUTDIR/ffdirect.rows" "$OUTDIR/godirect.rows" \
+    --ff-frame "${FF_FRAME:-2}" --ff-occurrence "${FF_OCCURRENCE:-0}" \
+    --go-poc "$GO_POC" --go-occurrence "${GO_OCCURRENCE:-0}" --limit "${LIMIT:-20}" || true
+fi
+
+echo "ffdirect=$OUTDIR/ffdirect.rows"
+echo "godirect=$OUTDIR/godirect.rows"
