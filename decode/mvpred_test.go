@@ -108,3 +108,72 @@ func TestWriteBackBidiB8x8UsesSubPartitionShapes(t *testing.T) {
 		}
 	}
 }
+
+func TestWriteBackBidiB8x8DirectWritesBothLists(t *testing.T) {
+	mv4L0 := make([]syntax.MotionVector, 16)
+	mv4L1 := make([]syntax.MotionVector, 16)
+	ref4L0 := make([]int8, 16)
+	ref4L1 := make([]int8, 16)
+	for i := range ref4L0 {
+		ref4L0[i], ref4L1[i] = -2, -2
+	}
+	mb := &syntax.MBBidi{MBType: syntax.BMBTypeB8x8}
+	mb.SubMBType[2] = 0 // Direct bottom-left 8x8.
+	mb.RefIdxL0[2], mb.RefIdxL1[2] = 0, 1
+	mb.SubMVL0[8] = syntax.MotionVector{X: 4, Y: -1}
+	mb.SubMVL1[8] = syntax.MotionVector{X: -2, Y: 3}
+
+	writeBackBidiL0Context(mv4L0, ref4L0, 4, 0, 0, mb)
+	writeBackBidiL1Context(mv4L1, ref4L1, 4, 0, 0, mb)
+
+	for _, idx := range []int{8, 9, 12, 13} {
+		if mv4L0[idx] != mb.SubMVL0[8] || ref4L0[idx] != 0 {
+			t.Fatalf("L0 direct fill idx=%d mv=%+v ref=%d", idx, mv4L0[idx], ref4L0[idx])
+		}
+		if mv4L1[idx] != mb.SubMVL1[8] || ref4L1[idx] != 1 {
+			t.Fatalf("L1 direct fill idx=%d mv=%+v ref=%d", idx, mv4L1[idx], ref4L1[idx])
+		}
+	}
+}
+
+func TestPredictBPartMotionUsesShapeForAllBTwoPartitionTypes(t *testing.T) {
+	stride := 8
+	mv4 := make([]syntax.MotionVector, stride*8)
+	ref4 := make([]int8, stride*8)
+	for i := range ref4 {
+		ref4[i] = -2
+	}
+	// For first 16x8 partitions, directional prediction must prefer top even
+	// when generic median would choose a different value.
+	mv4[0*stride+1] = syntax.MotionVector{X: 30, Y: 30} // top
+	ref4[0*stride+1] = 0
+	mv4[1*stride+0] = syntax.MotionVector{X: 20, Y: 20} // left
+	ref4[1*stride+0] = 0
+	mv4[0*stride+5] = syntax.MotionVector{X: 0, Y: 0} // diagonal
+	ref4[0*stride+5] = 0
+
+	for _, typ := range []uint32{4, 6, 8, 10, 12, 14, 16, 18, 20} {
+		got := predictBPartMotion4x4(mv4, ref4, stride, 1, 1, typ, 0, 0)
+		if got != (syntax.MotionVector{X: 30, Y: 30}) {
+			t.Fatalf("type %d 16x8 part0 MVP=%+v want top", typ, got)
+		}
+	}
+
+	// For second 8x16 partitions, directional prediction must prefer diagonal.
+	for i := range ref4 {
+		ref4[i] = -2
+		mv4[i] = syntax.MotionVector{}
+	}
+	mv4[0*stride+5] = syntax.MotionVector{X: -3, Y: 2} // diagonal
+	ref4[0*stride+5] = 0
+	mv4[1*stride+2] = syntax.MotionVector{X: 6, Y: 6} // left for generic median
+	ref4[1*stride+2] = 0
+	mv4[0*stride+3] = syntax.MotionVector{X: 7, Y: 7} // top for generic median
+	ref4[0*stride+3] = 0
+	for _, typ := range []uint32{5, 7, 9, 11, 13, 15, 17, 19, 21} {
+		got := predictBPartMotion4x4(mv4, ref4, stride, 1, 1, typ, 1, 0)
+		if got != (syntax.MotionVector{X: -3, Y: 2}) {
+			t.Fatalf("type %d 8x16 part1 MVP=%+v want diagonal", typ, got)
+		}
+	}
+}

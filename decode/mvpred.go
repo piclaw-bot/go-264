@@ -442,12 +442,10 @@ func writeBackBidiListContext(mv4 []syntax.MotionVector, ref4 []int8, stride4, m
 func predictBPartMotion4x4(mv4 []syntax.MotionVector, ref4 []int8, stride4, x4, y4 int, mbType uint32, part int, targetRef int8) syntax.MotionVector {
 	parts := cabacBPartsForType(mbType)
 	if parts == 2 {
-		switch mbType {
-		case 4, 6, 8, 10, 12, 14, 16, 18, 20:
-			return predict16x8Motion4x4(mv4, ref4, stride4, x4, y4, part, targetRef)
-		case 5, 7, 9, 11, 13, 15, 17, 19, 21:
+		if cabacBIs8x16(mbType) {
 			return predict8x16Motion4x4(mv4, ref4, stride4, x4, y4, part, targetRef)
 		}
+		return predict16x8Motion4x4(mv4, ref4, stride4, x4, y4, part, targetRef)
 	}
 	bx := x4 + cabacBPartX(mbType, part, parts)
 	by := y4 + cabacBPartY(mbType, part, parts)
