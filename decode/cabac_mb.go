@@ -676,7 +676,7 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 	leftNonSkip, topNonSkip bool,
 	leftIsDirect, topIsDirect bool,
 	refCtxs [4]int,
-	mv4 []syntax.MotionVector, ref4 []int8, mvd4 []syntax.MotionVector, stride4, mbX, mbY int,
+	mv4 []syntax.MotionVector, ref4 []int8, mv4L1 []syntax.MotionVector, ref4L1 []int8, mvd4 []syntax.MotionVector, stride4, mbX, mbY int,
 	transform8x8Mode bool, transform8x8Ctx int,
 	leftMBType, topMBType uint32,
 	leftChromaPred, topChromaPred int8,
@@ -794,7 +794,6 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 				}
 			}
 		}
-		// L1 MVDs for B_8x8 sub-MBs use a zero context cache (no separate L1 tracker).
 		// B_8x8 sub-MBs fill the ENTIRE sub-partition area (not just 1×1) so that
 		// subsequent sub-MB amvd computations read the correct magnitude context.
 		var mvd4L1Sub []syntax.MotionVector
@@ -826,9 +825,10 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 						mvd4L1Sub = make([]syntax.MotionVector, len(mvd4))
 					}
 					mb.SubMVL1[idx] = decodeCABACMVDPair(dec, models, mvd4L1Sub, stride4, sx, sy, fillW4, fillH4)
-					mvp := predictMotion4x4(mv4, nil, stride4, sx, sy, fillW4, mb.RefIdxL1[i])
+					mvp := predictMotion4x4(mv4L1, ref4L1, stride4, sx, sy, fillW4, mb.RefIdxL1[i])
 					mb.SubMVL1[idx].X += mvp.X
 					mb.SubMVL1[idx].Y += mvp.Y
+					fillMV4(mv4L1, ref4L1, stride4, sx, sy, fillW4, fillH4, mb.SubMVL1[idx], mb.RefIdxL1[i])
 				}
 			}
 		}
@@ -910,9 +910,13 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 				if !cabacBPartUsesL1(bMBType, i) {
 					continue
 				}
-				mvp := predictBPartMotion4x4(mv4, ref4, stride4, x4, y4, bMBType, i, mb.RefIdxL1[i])
+				mvp := predictBPartMotion4x4(mv4L1, ref4L1, stride4, x4, y4, bMBType, i, mb.RefIdxL1[i])
 				mb.MVL1[i].X += mvp.X
 				mb.MVL1[i].Y += mvp.Y
+				bx := x4 + cabacBPartX(bMBType, i, parts)
+				by := y4 + cabacBPartY(bMBType, i, parts)
+				bw, bh := cabacBPartDims(bMBType, i)
+				fillMV4(mv4L1, ref4L1, stride4, bx, by, bw, bh, mb.MVL1[i], mb.RefIdxL1[i])
 			}
 		}
 	}

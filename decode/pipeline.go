@@ -237,10 +237,13 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 	}
 	mv4Stride := mbWidth * 4
 	mv4Ctx := make([]syntax.MotionVector, mv4Stride*mbHeight*4)
+	mv4L1Ctx := make([]syntax.MotionVector, mv4Stride*mbHeight*4)
 	mvd4Ctx := make([]syntax.MotionVector, mv4Stride*mbHeight*4)
 	ref4Ctx := make([]int8, mv4Stride*mbHeight*4)
+	ref4L1Ctx := make([]int8, mv4Stride*mbHeight*4)
 	for i := range ref4Ctx {
 		ref4Ctx[i] = -2
+		ref4L1Ctx[i] = -2
 	}
 	skipRun := 0
 	decodeAfterSkipRun := false
@@ -261,10 +264,11 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 		mbY := mbIdx / mbWidth
 		predMV := predictSkipMV4x4(mv4Ctx, ref4Ctx, mv4Stride, mbX*4, mbY*4)
 		directRefL0, directMVL0 := int8(0), predMV
-		directRefL1 := int8(-1)
+		directRefL1, directMVL1 := int8(-1), syntax.MotionVector{}
 		applyDirectSpatial := hdr.DirectSpatialMvPred && hdr.NumRefIdxL0Active <= 2
 		if applyDirectSpatial {
 			directRefL0, directMVL0 = predictBDirectSpatialL0ForSimpleRefs(mv4Ctx, ref4Ctx, mv4Stride, mbX*4, mbY*4)
+			directRefL1, directMVL1 = predictBDirectSpatialL0ForSimpleRefs(mv4L1Ctx, ref4L1Ctx, mv4Stride, mbX*4, mbY*4)
 			if directRefL0 < 0 {
 				directRefL0 = 0
 				directRefL1 = 0
@@ -569,7 +573,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					leftCBP, topCBP,
 					leftNonSkip, topNonSkip,
 					!leftNonSkip, !topNonSkip, // leftIsDirect/topIsDirect
-					refIdxCtxsB, mv4Ctx, ref4Ctx, mvd4Ctx, mv4Stride, mbX, mbY,
+					refIdxCtxsB, mv4Ctx, ref4Ctx, mv4L1Ctx, ref4L1Ctx, mvd4Ctx, mv4Stride, mbX, mbY,
 					pps.Transform8x8Mode, transform8x8CABACCtx,
 					leftMBType, topMBType,
 					leftChromaPred, topChromaPred,
@@ -581,6 +585,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					mbBidi.RefIdxL0[0] = directRefL0
 					mbBidi.RefIdxL1 = [4]int8{directRefL1, directRefL1, directRefL1, directRefL1}
 					mbBidi.MVL0[0] = directMVL0
+					mbBidi.MVL1[0] = directMVL1
 					d.reconstructMBBidi(f, mbBidi, mbX, mbY, currentQP)
 					nzCtx[mbIdx] = mbBidi.TotalCoeff
 					chromaNZCtx[mbIdx] = mbBidi.ChromaTotalCoeff
@@ -590,6 +595,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					transform8x8Ctx[mbIdx] = false
 					if applyDirectSpatial {
 						writeBackBidiL0Context(mv4Ctx, ref4Ctx, mv4Stride, mbX, mbY, mbBidi)
+						writeBackBidiL1Context(mv4L1Ctx, ref4L1Ctx, mv4Stride, mbX, mbY, mbBidi)
 					}
 					mbQPCtx[mbIdx] = currentQP
 					if cabacDec.DecodeTerminate() == 1 {
@@ -615,8 +621,9 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 						mbBidi.RefIdxL0[0] = directRefL0
 						mbBidi.RefIdxL1 = [4]int8{directRefL1, directRefL1, directRefL1, directRefL1}
 						mbBidi.MVL0[0] = directMVL0
+						mbBidi.MVL1[0] = directMVL1
 					} else if applyDirectSpatial {
-						applyB8x8DirectSpatialL0(mbBidi, directRefL0, directMVL0, directRefL1)
+						applyB8x8DirectSpatial(mbBidi, directRefL0, directMVL0, directRefL1, directMVL1)
 					}
 					d.reconstructMBBidi(f, mbBidi, mbX, mbY, currentQP)
 					nzCtx[mbIdx] = mbBidi.TotalCoeff
@@ -626,10 +633,11 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					nonSkipCtx[mbIdx] = mbBidi.MBType != syntax.BMBTypeDirect16x16
 					// transform8x8Ctx not updated: updating propagates wrong values until
 					// the B-frame CABAC transform8x8_flag decode is verified correct.
-					// Write back L0 MV/ref context for future MVP/ref_idx context. FFmpeg keeps
-					// a 4×4 MV/ref cache; B_8x8 and two-part B MBs must fill the same shaped
+					// Write back 4×4 MV/ref contexts for future MVP/ref_idx context. FFmpeg keeps
+					// separate list caches; B_8x8 and two-part B MBs must fill the same shaped
 					// regions, not just MVL0[0] over the whole macroblock.
 					writeBackBidiL0Context(mv4Ctx, ref4Ctx, mv4Stride, mbX, mbY, mbBidi)
+					writeBackBidiL1Context(mv4L1Ctx, ref4L1Ctx, mv4Stride, mbX, mbY, mbBidi)
 				}
 				mbQPCtx[mbIdx] = currentQP
 				if cabacDec.DecodeTerminate() == 1 {
@@ -672,8 +680,9 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					mbBidi.RefIdxL0[0] = directRefL0
 					mbBidi.RefIdxL1 = [4]int8{directRefL1, directRefL1, directRefL1, directRefL1}
 					mbBidi.MVL0[0] = directMVL0
+					mbBidi.MVL1[0] = directMVL1
 				} else if applyDirectSpatial {
-					applyB8x8DirectSpatialL0(mbBidi, directRefL0, directMVL0, directRefL1)
+					applyB8x8DirectSpatial(mbBidi, directRefL0, directMVL0, directRefL1, directMVL1)
 				}
 				d.reconstructMBBidi(f, mbBidi, mbX, mbY, currentQP)
 				nzCtx[mbIdx] = mbBidi.TotalCoeff

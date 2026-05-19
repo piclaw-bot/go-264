@@ -353,7 +353,15 @@ func applyMVPredictors(mb *syntax.MBInter, mv4 []syntax.MotionVector, ref4 []int
 	}
 }
 
+func writeBackBidiL1Context(mv4 []syntax.MotionVector, ref4 []int8, stride4, mbX, mbY int, mb *syntax.MBBidi) {
+	writeBackBidiListContext(mv4, ref4, stride4, mbX, mbY, mb, 1)
+}
+
 func writeBackBidiL0Context(mv4 []syntax.MotionVector, ref4 []int8, stride4, mbX, mbY int, mb *syntax.MBBidi) {
+	writeBackBidiListContext(mv4, ref4, stride4, mbX, mbY, mb, 0)
+}
+
+func writeBackBidiListContext(mv4 []syntax.MotionVector, ref4 []int8, stride4, mbX, mbY int, mb *syntax.MBBidi, list int) {
 	if mb == nil || stride4 <= 0 {
 		return
 	}
@@ -371,13 +379,17 @@ func writeBackBidiL0Context(mv4 []syntax.MotionVector, ref4 []int8, stride4, mbX
 	}
 	x4, y4 := mbX*4, mbY*4
 	if mb.MBType == syntax.BMBTypeDirect16x16 {
-		fill(x4, y4, 4, 4, mb.MVL0[0], mb.RefIdxL0[0])
+		mv, ref := mb.MVL0[0], mb.RefIdxL0[0]
+		if list == 1 {
+			mv, ref = mb.MVL1[0], mb.RefIdxL1[0]
+		}
+		fill(x4, y4, 4, 4, mv, ref)
 		return
 	}
 	if mb.MBType == syntax.BMBTypeB8x8 {
 		for part := 0; part < 4; part++ {
 			t := mb.SubMBType[part]
-			if !syntax.BMBSubUsesL0(t) {
+			if (list == 0 && !syntax.BMBSubUsesL0(t)) || (list == 1 && !syntax.BMBSubUsesL1(t)) {
 				continue
 			}
 			baseX, baseY := x4+(part&1)*2, y4+(part>>1)*2
@@ -393,22 +405,26 @@ func writeBackBidiL0Context(mv4 []syntax.MotionVector, ref4 []int8, stride4, mbX
 				default:
 					ox4, oy4 = j&1, j>>1
 				}
-				fill(baseX+ox4, baseY+oy4, w4, h4, mb.SubMVL0[part*4+j], mb.RefIdxL0[part])
+				mv, ref := mb.SubMVL0[part*4+j], mb.RefIdxL0[part]
+				if list == 1 {
+					mv, ref = mb.SubMVL1[part*4+j], mb.RefIdxL1[part]
+				}
+				fill(baseX+ox4, baseY+oy4, w4, h4, mv, ref)
 			}
 		}
 		return
 	}
 	parts := cabacBPartsForType(mb.MBType)
-	usesL0, _ := cabacBListsForType(mb.MBType)
-	if !usesL0 {
-		return
-	}
 	for part := 0; part < parts; part++ {
-		if !cabacBPartUsesL0(mb.MBType, part) {
+		if (list == 0 && !cabacBPartUsesL0(mb.MBType, part)) || (list == 1 && !cabacBPartUsesL1(mb.MBType, part)) {
 			continue
 		}
+		mv, ref := mb.MVL0[part], mb.RefIdxL0[part]
+		if list == 1 {
+			mv, ref = mb.MVL1[part], mb.RefIdxL1[part]
+		}
 		w4, h4 := cabacBPartDims(mb.MBType, part)
-		fill(x4+cabacBPartX(mb.MBType, part, parts), y4+cabacBPartY(mb.MBType, part, parts), w4, h4, mb.MVL0[part], mb.RefIdxL0[part])
+		fill(x4+cabacBPartX(mb.MBType, part, parts), y4+cabacBPartY(mb.MBType, part, parts), w4, h4, mv, ref)
 	}
 }
 
@@ -429,7 +445,7 @@ func predictBPartMotion4x4(mv4 []syntax.MotionVector, ref4 []int8, stride4, x4, 
 	return predictMotion4x4(mv4, ref4, stride4, bx, by, pw, targetRef)
 }
 
-func applyB8x8DirectSpatialL0(mb *syntax.MBBidi, refL0 int8, mvL0 syntax.MotionVector, refL1 int8) {
+func applyB8x8DirectSpatial(mb *syntax.MBBidi, refL0 int8, mvL0 syntax.MotionVector, refL1 int8, mvL1 syntax.MotionVector) {
 	if mb == nil || mb.MBType != syntax.BMBTypeB8x8 {
 		return
 	}
@@ -440,8 +456,10 @@ func applyB8x8DirectSpatialL0(mb *syntax.MBBidi, refL0 int8, mvL0 syntax.MotionV
 		mb.RefIdxL0[part] = refL0
 		mb.RefIdxL1[part] = refL1
 		mb.MVL0[part] = mvL0
+		mb.MVL1[part] = mvL1
 		for j := 0; j < 4; j++ {
 			mb.SubMVL0[part*4+j] = mvL0
+			mb.SubMVL1[part*4+j] = mvL1
 		}
 	}
 }
