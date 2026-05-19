@@ -404,6 +404,9 @@ func writeBackBidiL0Context(mv4 []syntax.MotionVector, ref4 []int8, stride4, mbX
 		return
 	}
 	for part := 0; part < parts; part++ {
+		if !cabacBPartUsesL0(mb.MBType, part) {
+			continue
+		}
 		w4, h4 := cabacBPartDims(mb.MBType, part)
 		fill(x4+cabacBPartX(mb.MBType, part, parts), y4+cabacBPartY(mb.MBType, part, parts), w4, h4, mb.MVL0[part], mb.RefIdxL0[part])
 	}

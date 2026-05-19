@@ -112,7 +112,19 @@ def main():
             print(f'mb={mb:04d} missing_go')
             diffs += 1
             continue
-        mismatch = [name for name in ('ref_mv', 'sub', 'submv') if f[name] != g[name]]
+        mismatch = []
+        if f['ref_mv'] != g['ref_mv']:
+            mismatch.append('ref_mv')
+        if f['sub'] != g['sub']:
+            mismatch.append('sub')
+        # FFmpeg's FFDIRECT rows are emitted inside pred_direct_motion, before
+        # explicit B_8x8 sub-MB MVD decoding overwrites non-direct sub blocks.
+        # Compare sub-MVs only for sub blocks that are direct in both traces;
+        # otherwise the row is intentionally stale on the FFmpeg side.
+        direct_flags = {12552}
+        direct_idxs = [i for i, (fs, gs) in enumerate(zip(f['sub'], g['sub'])) if fs in direct_flags and gs in direct_flags]
+        if any(f['submv'][i] != g['submv'][i] for i in direct_idxs):
+            mismatch.append('submv')
         if mismatch:
             print(
                 f'mb={mb:04d} fields={",".join(mismatch)} '

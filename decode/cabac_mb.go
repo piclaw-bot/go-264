@@ -842,17 +842,24 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 		x4, y4 := mbX*4, mbY*4
 		if numRefL0 > 1 && usesL0 {
 			for i := 0; i < parts; i++ {
-				mb.RefIdxL0[i] = int8(syntax.DecodeCABACRef(dec, models, refCtxs[i]))
+				if cabacBPartUsesL0(bMBType, i) {
+					mb.RefIdxL0[i] = int8(syntax.DecodeCABACRef(dec, models, refCtxs[i]))
+				}
 			}
 		}
 		if numRefL1 > 1 && usesL1 {
 			for i := 0; i < parts; i++ {
-				mb.RefIdxL1[i] = int8(syntax.DecodeCABACRef(dec, models, refCtxs[i]))
+				if cabacBPartUsesL1(bMBType, i) {
+					mb.RefIdxL1[i] = int8(syntax.DecodeCABACRef(dec, models, refCtxs[i]))
+				}
 			}
 		}
 		// MVD for L0.
 		if usesL0 {
 			for i := 0; i < parts; i++ {
+				if !cabacBPartUsesL0(bMBType, i) {
+					continue
+				}
 				pw, ph := cabacBPartDims(bMBType, i)
 				bx, by := x4+cabacBPartX(bMBType, i, parts), y4+cabacBPartY(bMBType, i, parts)
 				mb.MVL0[i] = decodeCABACMVDPair(dec, models, mvd4, stride4, bx, by, pw, ph)
@@ -866,6 +873,9 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 			var mvd4L1 []syntax.MotionVector
 			mvd4L1 = make([]syntax.MotionVector, len(mvd4))
 			for i := 0; i < parts; i++ {
+				if !cabacBPartUsesL1(bMBType, i) {
+					continue
+				}
 				pw, ph := cabacBPartDims(bMBType, i)
 				bx, by := x4+cabacBPartX(bMBType, i, parts), y4+cabacBPartY(bMBType, i, parts)
 				mb.MVL1[i] = decodeCABACMVDPair(dec, models, mvd4L1, stride4, bx, by, pw, ph)
@@ -883,6 +893,9 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 		x4, y4 := mbX*4, mbY*4
 		if usesL0B {
 			for i := 0; i < parts; i++ {
+				if !cabacBPartUsesL0(bMBType, i) {
+					continue
+				}
 				mvp := predictBPartMotion4x4(mv4, ref4, stride4, x4, y4, bMBType, i, mb.RefIdxL0[i])
 				mb.MVL0[i].X += mvp.X
 				mb.MVL0[i].Y += mvp.Y
@@ -894,6 +907,9 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 		}
 		if usesL1B {
 			for i := 0; i < parts; i++ {
+				if !cabacBPartUsesL1(bMBType, i) {
+					continue
+				}
 				mvp := predictBPartMotion4x4(mv4, ref4, stride4, x4, y4, bMBType, i, mb.RefIdxL1[i])
 				mb.MVL1[i].X += mvp.X
 				mb.MVL1[i].Y += mvp.Y
@@ -1005,12 +1021,7 @@ func decodeCABACBSubMBType(dec *cabac.CABACDecoder, models []cabac.CABACCtx) uin
 
 // cabacBPartsForType returns the number of motion-vector partitions for a B MB type.
 func cabacBPartsForType(t uint32) int {
-	switch t {
-	case syntax.BMBTypeL016x16, syntax.BMBTypeL116x16, syntax.BMBTypeBi16x16:
-		return 1
-	case syntax.BMBTypeL016x8, syntax.BMBTypeL116x8, syntax.BMBTypeBi16x8,
-		syntax.BMBTypeL016x8b, syntax.BMBTypeL116x8b, syntax.BMBTypeBi16x8b,
-		syntax.BMBTypeL08x16, syntax.BMBTypeL18x16, syntax.BMBTypeBi8x16:
+	if t >= 4 && t <= 21 {
 		return 2
 	}
 	return 1
@@ -1030,38 +1041,32 @@ func cabacBListsForType(t uint32) (usesL0, usesL1 bool) {
 }
 
 func cabacBPartDims(t uint32, part int) (w, h int) {
-	switch t {
-	case syntax.BMBTypeL016x16, syntax.BMBTypeL116x16, syntax.BMBTypeBi16x16:
-		return 4, 4
-	case syntax.BMBTypeL016x8, syntax.BMBTypeL116x8, syntax.BMBTypeBi16x8:
-		return 4, 2 // 16x8 partitions (top/bottom halves)
-	case syntax.BMBTypeL016x8b, syntax.BMBTypeL116x8b, syntax.BMBTypeBi16x8b,
-		syntax.BMBTypeL08x16, syntax.BMBTypeL18x16, syntax.BMBTypeBi8x16:
-		return 2, 4 // 8x16 partitions (left/right halves)
+	if t >= 4 && t <= 21 {
+		if cabacBIs8x16(t) {
+			return 2, 4
+		}
+		return 4, 2
 	}
-	return 2, 2
+	return 4, 4
 }
 
 func cabacBPartX(t uint32, part, nParts int) int {
-	if nParts == 2 {
-		switch t {
-		case syntax.BMBTypeL016x8b, syntax.BMBTypeL116x8b, syntax.BMBTypeBi16x8b,
-			syntax.BMBTypeL08x16, syntax.BMBTypeL18x16, syntax.BMBTypeBi8x16:
-			return part * 2 // 8x16: left part at x=0, right part at x=2
-		}
+	if nParts == 2 && cabacBIs8x16(t) {
+		return part * 2
 	}
 	return 0
 }
 
 func cabacBPartY(t uint32, part, nParts int) int {
-	if nParts == 2 {
-		switch t {
-		case syntax.BMBTypeL016x8b, syntax.BMBTypeL116x8b, syntax.BMBTypeBi16x8b,
-			syntax.BMBTypeL08x16, syntax.BMBTypeL18x16, syntax.BMBTypeBi8x16:
-			return 0 // 8x16: both parts at y=0
-		default:
-			return part * 2 // 16x8: top part at y=0, bottom at y=2
-		}
+	if nParts == 2 && !cabacBIs8x16(t) {
+		return part * 2
 	}
 	return 0
 }
+
+func cabacBIs8x16(t uint32) bool {
+	return t == 5 || t == 7 || t == 9 || t == 11 || t == 13 || t == 15 || t == 17 || t == 19 || t == 21
+}
+
+func cabacBPartUsesL0(t uint32, part int) bool { return syntax.BPartUsesL0(t, part) }
+func cabacBPartUsesL1(t uint32, part int) bool { return syntax.BPartUsesL1(t, part) }
