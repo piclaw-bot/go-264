@@ -115,13 +115,17 @@ def main():
         mismatch = []
         if f['ref_mv'] != g['ref_mv']:
             mismatch.append('ref_mv')
-        if f['sub'] != g['sub']:
+        # FFmpeg may report Direct+Bi internal flags (61704) for resolved direct
+        # 8x8 cache cells while Go normalizes direct cache cells to 12552. Treat
+        # both as direct for direct-motion comparisons and only report sub-type
+        # differences for non-direct shape disagreements.
+        direct_flags = {12552, 61704}
+        if any((fs not in direct_flags or gs not in direct_flags) and fs != gs for fs, gs in zip(f['sub'], g['sub'])):
             mismatch.append('sub')
         # FFmpeg's FFDIRECT rows are emitted inside pred_direct_motion, before
         # explicit B_8x8 sub-MB MVD decoding overwrites non-direct sub blocks.
         # Compare sub-MVs only for sub blocks that are direct in both traces;
         # otherwise the row is intentionally stale on the FFmpeg side.
-        direct_flags = {12552}
         direct_idxs = [i for i, (fs, gs) in enumerate(zip(f['sub'], g['sub'])) if fs in direct_flags and gs in direct_flags]
         if any(f['submv'][i] != g['submv'][i] for i in direct_idxs):
             mismatch.append('submv')
