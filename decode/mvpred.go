@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/rcarmo/go-264/frame"
 	"github.com/rcarmo/go-264/syntax"
 )
 
@@ -457,7 +458,7 @@ func predictBPartMotion4x4(mv4 []syntax.MotionVector, ref4 []int8, stride4, x4, 
 	return predictMotion4x4(mv4, ref4, stride4, bx, by, pw, targetRef)
 }
 
-func applyB8x8DirectSpatial(mb *syntax.MBBidi, refL0 int8, mvL0 syntax.MotionVector, refL1 int8, mvL1 syntax.MotionVector) {
+func applyB8x8DirectSpatial(mb *syntax.MBBidi, refL0 int8, mvL0 syntax.MotionVector, refL1 int8, mvL1 syntax.MotionVector, colocated *frame.Frame, mbX, mbY int) {
 	if mb == nil || mb.MBType != syntax.BMBTypeB8x8 {
 		return
 	}
@@ -469,11 +470,33 @@ func applyB8x8DirectSpatial(mb *syntax.MBBidi, refL0 int8, mvL0 syntax.MotionVec
 		mb.RefIdxL1[part] = refL1
 		mb.MVL0[part] = mvL0
 		mb.MVL1[part] = mvL1
+		partMVL0 := mvL0
+		if refL0 == 0 && colocatedDirect8x8Zero(colocated, mbX, mbY, part) {
+			partMVL0 = syntax.MotionVector{}
+		}
 		for j := 0; j < 4; j++ {
-			mb.SubMVL0[part*4+j] = mvL0
+			mb.SubMVL0[part*4+j] = partMVL0
 			mb.SubMVL1[part*4+j] = mvL1
 		}
+		mb.MVL0[part] = partMVL0
 	}
+}
+
+func colocatedDirect8x8Zero(colocated *frame.Frame, mbX, mbY, part int) bool {
+	if colocated == nil || colocated.MotionStride4 <= 0 || len(colocated.MotionL0) == 0 || len(colocated.RefIdxL0) != len(colocated.MotionL0) {
+		return false
+	}
+	// FFmpeg's spatial-direct 8x8 zero check samples the colocated 4x4
+	// representative at x8*3/y8*3 within the macroblock (bottom/right cell for
+	// right/bottom 8x8 partitions), not the geometric centre of the 8x8 block.
+	x4 := mbX*4 + (part&1)*3
+	y4 := mbY*4 + (part>>1)*3
+	idx := y4*colocated.MotionStride4 + x4
+	if idx < 0 || idx >= len(colocated.MotionL0) || idx >= len(colocated.RefIdxL0) || colocated.RefIdxL0[idx] != 0 {
+		return false
+	}
+	mv := colocated.MotionL0[idx]
+	return mv[0] >= -1 && mv[0] <= 1 && mv[1] >= -1 && mv[1] <= 1
 }
 
 func predictBDirectSpatialL0Ref(mv4 []syntax.MotionVector, ref4 []int8, stride4, x4, y4 int) int8 {

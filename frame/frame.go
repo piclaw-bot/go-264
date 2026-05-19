@@ -5,15 +5,18 @@ package frame
 // Frame represents a decoded YUV 4:2:0 picture.
 type Frame struct {
 	Width, Height int
-	Y             []uint8 // Luma plane (Width × Height)
-	U             []uint8 // Chroma U plane (Width/2 × Height/2)
-	V             []uint8 // Chroma V plane (Width/2 × Height/2)
-	StrideY       int     // Y plane stride (may be > Width for alignment)
-	StrideC       int     // Chroma stride
-	POC           int     // Picture order count
-	FrameNum      int     // Frame number
-	IsIDR         bool    // Is this an IDR frame?
-	IsRef         bool    // Is this a reference frame?
+	Y             []uint8    // Luma plane (Width × Height)
+	U             []uint8    // Chroma U plane (Width/2 × Height/2)
+	V             []uint8    // Chroma V plane (Width/2 × Height/2)
+	StrideY       int        // Y plane stride (may be > Width for alignment)
+	StrideC       int        // Chroma stride
+	POC           int        // Picture order count
+	FrameNum      int        // Frame number
+	IsIDR         bool       // Is this an IDR frame?
+	IsRef         bool       // Is this a reference frame?
+	MotionStride4 int        // width of 4x4 motion/ref caches
+	MotionL0      [][2]int16 // decoded list0 4x4 motion cache for B-direct colocated checks
+	RefIdxL0      []int8     // decoded list0 4x4 ref cache matching MotionL0
 }
 
 // NewFrame allocates a YUV 4:2:0 frame.

@@ -638,7 +638,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 						mbBidi.MVL0[0] = directMVL0
 						mbBidi.MVL1[0] = directMVL1
 					} else if applyDirectSpatial {
-						applyB8x8DirectSpatial(mbBidi, directRefL0, directMVL0, directRefL1, directMVL1)
+						applyB8x8DirectSpatial(mbBidi, directRefL0, directMVL0, directRefL1, directMVL1, d.refBidiL1(0, f.POC), mbX, mbY)
 					}
 					d.reconstructMBBidi(f, mbBidi, mbX, mbY, currentQP)
 					nzCtx[mbIdx] = mbBidi.TotalCoeff
@@ -697,7 +697,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					mbBidi.MVL0[0] = directMVL0
 					mbBidi.MVL1[0] = directMVL1
 				} else if applyDirectSpatial {
-					applyB8x8DirectSpatial(mbBidi, directRefL0, directMVL0, directRefL1, directMVL1)
+					applyB8x8DirectSpatial(mbBidi, directRefL0, directMVL0, directRefL1, directMVL1, d.refBidiL1(0, f.POC), mbX, mbY)
 				}
 				d.reconstructMBBidi(f, mbBidi, mbX, mbY, currentQP)
 				nzCtx[mbIdx] = mbBidi.TotalCoeff
@@ -706,6 +706,13 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 		}
 		// Per-MB QP always updated here so deblocking can average neighbours.
 		mbQPCtx[mbIdx] = currentQP
+	}
+
+	f.MotionStride4 = mv4Stride
+	f.MotionL0 = make([][2]int16, len(mv4Ctx))
+	f.RefIdxL0 = append(f.RefIdxL0[:0], ref4Ctx...)
+	for i, mv := range mv4Ctx {
+		f.MotionL0[i] = [2]int16{mv.X, mv.Y}
 	}
 
 	// In-loop deblocking filter (H.264 §8.7), applied in a second pass over all
