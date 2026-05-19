@@ -52,6 +52,76 @@ def load(path: str, regex: re.Pattern[str]) -> dict[tuple[int, int, int], dict[s
         out[(frame, occurrence[frame], mb)] = r
     return out
 
+GO_L0 = {
+    0: (True, True), 1: (True, False), 2: (False, False), 3: (True, False),
+    4: (True, True), 5: (True, True), 6: (False, False), 7: (False, False),
+    8: (True, False), 9: (True, False), 10: (False, True), 11: (False, True),
+    12: (True, True), 13: (True, True), 14: (False, True), 15: (False, True),
+    16: (True, True), 17: (True, True), 18: (True, False), 19: (True, False),
+    20: (True, True), 21: (True, True), 22: (True, True),
+}
+GO_L1 = {
+    0: (True, True), 1: (False, False), 2: (True, False), 3: (True, False),
+    4: (False, False), 5: (False, False), 6: (True, True), 7: (True, True),
+    8: (False, True), 9: (False, True), 10: (True, False), 11: (True, False),
+    12: (False, True), 13: (False, True), 14: (True, True), 15: (True, True),
+    16: (True, False), 17: (True, False), 18: (True, True), 19: (True, True),
+    20: (True, True), 21: (True, True), 22: (True, True),
+}
+
+def go_uses(row: dict[str, object], list_idx: int, part: int) -> bool:
+    mt = int(row['mbtype'])
+    if part == 1 and mt in {0, 1, 2, 3}:
+        part = 0
+    if mt == 22:
+        subs = row['sub']
+        st = int(subs[min(part, 3)])
+        if list_idx == 0:
+            return st in {0, 1, 3, 4, 5, 8, 9, 10, 12}
+        return st in {0, 2, 3, 6, 7, 8, 9, 11, 12}
+    table = GO_L0 if list_idx == 0 else GO_L1
+    return table.get(mt, (False, False))[0 if part == 0 else 1]
+
+def ff_uses(row: dict[str, object], list_idx: int, part: int) -> bool:
+    t = int(row['mbtype'])
+    if part == 1 and (t & 8):  # MB_TYPE_16x16: scan8[4] is same partition cache.
+        part = 0
+    if list_idx == 0:
+        return (t & (4096 if part == 0 else 8192)) != 0
+    return (t & (16384 if part == 0 else 32768)) != 0
+
+def ref_mv_mismatch(f: dict[str, object], g: dict[str, object]) -> bool:
+    fr = f['ref_mv']; gr = g['ref_mv']
+    # Report use-mask differences before checking values. Unused-list cache cells
+    # are intentionally noisy in FFmpeg and Go and should not drive bisection.
+    for list_idx in (0, 1):
+        fu = ff_uses(f, list_idx, 0)
+        gu = go_uses(g, list_idx, 0)
+        if fu != gu:
+            return True
+        if not fu:
+            continue
+        if list_idx == 0 and (fr[0], fr[2], fr[3]) != (gr[0], gr[2], gr[3]):
+            return True
+        if list_idx == 1 and (fr[1], fr[4], fr[5]) != (gr[1], gr[4], gr[5]):
+            return True
+    return False
+
+def p1_mismatch(f: dict[str, object], g: dict[str, object]) -> bool:
+    fp = f['p1']; gp = g['p1']
+    for list_idx in (0, 1):
+        fu = ff_uses(f, list_idx, 1)
+        gu = go_uses(g, list_idx, 1)
+        if fu != gu:
+            return True
+        if not fu:
+            continue
+        if list_idx == 0 and (fp[0], fp[1]) != (gp[0], gp[1]):
+            return True
+        if list_idx == 1 and (fp[2], fp[3]) != (gp[2], gp[3]):
+            return True
+    return False
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument('ffbidi')
@@ -76,9 +146,9 @@ def main() -> None:
             diffs += 1
         else:
             fields = []
-            if f['ref_mv'] != g['ref_mv']:
+            if ref_mv_mismatch(f, g):
                 fields.append('ref_mv')
-            if f['p1'] != g['p1']:
+            if p1_mismatch(f, g):
                 fields.append('p1')
             # FF sub_mb_type cache is meaningful for B_8x8-shaped rows. For
             # direct 16x16/two-part MBs it often carries FFmpeg-internal cache
