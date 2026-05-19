@@ -886,6 +886,10 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 				mvp := predictBPartMotion4x4(mv4, ref4, stride4, x4, y4, bMBType, i, mb.RefIdxL0[i])
 				mb.MVL0[i].X += mvp.X
 				mb.MVL0[i].Y += mvp.Y
+				bx := x4 + cabacBPartX(bMBType, i, parts)
+				by := y4 + cabacBPartY(bMBType, i, parts)
+				bw, bh := cabacBPartDims(bMBType, i)
+				fillMV4(mv4, ref4, stride4, bx, by, bw, bh, mb.MVL0[i], mb.RefIdxL0[i])
 			}
 		}
 		if usesL1B {

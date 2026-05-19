@@ -40,15 +40,24 @@ new = f'''void ff_h264_pred_direct_motion(const H264Context *const h, H264SliceC
         int s1 = scan8[4];
         int s2 = scan8[8];
         int s3 = scan8[12];
+        int a = scan8[0] - 1;
+        int b = scan8[0] - 8;
+        int c = scan8[0] - 8 + 4;
+        int d = scan8[0] - 8 - 1;
         fprintf(stderr,
                 "FFDIRECT mb=%04d x=%02d y=%02d frame=%d spatial=%d mb_type=%d "
                 "ref0=%d ref1=%d mv0={{%d,%d}} mv1={{%d,%d}} "
+                "ctxA0=%d/{{%d,%d}} ctxB0=%d/{{%d,%d}} ctxC0=%d/{{%d,%d}} ctxD0=%d/{{%d,%d}} "
                 "sub0=%d sub1=%d sub2=%d sub3=%d "
                 "submv0={{%d,%d}} submv1={{%d,%d}} submv2={{%d,%d}} submv3={{%d,%d}}\\n",
                 mb, sl->mb_x, sl->mb_y, h->poc.frame_num, sl->direct_spatial_mv_pred, *mb_type,
                 sl->ref_cache[0][s0], sl->ref_cache[1][s0],
                 sl->mv_cache[0][s0][0], sl->mv_cache[0][s0][1],
                 sl->mv_cache[1][s0][0], sl->mv_cache[1][s0][1],
+                sl->ref_cache[0][a], sl->mv_cache[0][a][0], sl->mv_cache[0][a][1],
+                sl->ref_cache[0][b], sl->mv_cache[0][b][0], sl->mv_cache[0][b][1],
+                sl->ref_cache[0][c], sl->mv_cache[0][c][0], sl->mv_cache[0][c][1],
+                sl->ref_cache[0][d], sl->mv_cache[0][d][0], sl->mv_cache[0][d][1],
                 sl->sub_mb_type[0], sl->sub_mb_type[1], sl->sub_mb_type[2], sl->sub_mb_type[3],
                 sl->mv_cache[0][s0][0], sl->mv_cache[0][s0][1],
                 sl->mv_cache[0][s1][0], sl->mv_cache[0][s1][1],
