@@ -28,13 +28,14 @@ trace = f'''   if( IS_INTER( mb_type ) ) {{
    }}
    if (getenv("GO264_FFMPEG_B_MB_TRACE") && sl->slice_type_nos == AV_PICTURE_TYPE_B && (sl->mb_x + sl->mb_y * h->mb_width) < {mb_limit}) {{
         int s0 = scan8[0];
+        int s1 = (mb_type & 16) ? scan8[8] : scan8[4];
         fprintf(stderr, "FFBIDI mb=%04d x=%02d y=%02d frame=%d type=%d ref0=%d ref1=%d mv0={{%d,%d}} mv1={{%d,%d}} mv0p1={{%d,%d}} mv1p1={{%d,%d}} sub0=%d sub1=%d sub2=%d sub3=%d\\n",
                 sl->mb_x + sl->mb_y * h->mb_width, sl->mb_x, sl->mb_y, h->poc.frame_num, mb_type,
                 sl->ref_cache[0][s0], sl->ref_cache[1][s0],
                 sl->mv_cache[0][s0][0], sl->mv_cache[0][s0][1],
                 sl->mv_cache[1][s0][0], sl->mv_cache[1][s0][1],
-                sl->mv_cache[0][scan8[4]][0], sl->mv_cache[0][scan8[4]][1],
-                sl->mv_cache[1][scan8[4]][0], sl->mv_cache[1][scan8[4]][1],
+                sl->mv_cache[0][s1][0], sl->mv_cache[0][s1][1],
+                sl->mv_cache[1][s1][0], sl->mv_cache[1][s1][1],
                 sl->sub_mb_type[0], sl->sub_mb_type[1], sl->sub_mb_type[2], sl->sub_mb_type[3]);
    }}
 '''
