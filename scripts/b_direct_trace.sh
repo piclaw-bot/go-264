@@ -146,6 +146,7 @@ GO264_FFMPEG_DIRECT_TRACE=1 "$FFMPEG" -y -threads 1 -hide_banner \
   >"$OUTDIR/ffmpeg.stdout" 2>"$OUTDIR/ffmpeg.direct.trace" || true
 
 grep '^FFDIRECT' "$OUTDIR/ffmpeg.direct.trace" >"$OUTDIR/ffdirect.rows" || true
+grep -E '^FFCOLZERO(8)?' "$OUTDIR/ffmpeg.direct.trace" >"$OUTDIR/ffcolzero.rows" || true
 
 rm -rf "$OUTDIR/go-frames"
 mkdir -p "$OUTDIR/go-frames"
@@ -153,6 +154,7 @@ mkdir -p "${GOTMPDIR:-/workspace/tmp/gotmp}"
 GOTMPDIR="${GOTMPDIR:-/workspace/tmp/gotmp}" GO264_DIRECT_TRACE=1 go run ./cmd/decode264 -f yuv -i "$INPUT" -o "$OUTDIR/go-frames" \
   >"$OUTDIR/go.stdout" 2>"$OUTDIR/go.direct.trace"
 grep '^GODIRECT' "$OUTDIR/go.direct.trace" >"$OUTDIR/godirect.rows" || true
+grep '^GOCOLZERO' "$OUTDIR/go.direct.trace" >"$OUTDIR/gocolzero.rows" || true
 python3 - "$OUTDIR/ffdirect.rows" <<'PY'
 import re, sys
 from collections import Counter
@@ -184,3 +186,5 @@ fi
 
 echo "ffdirect=$OUTDIR/ffdirect.rows"
 echo "godirect=$OUTDIR/godirect.rows"
+echo "ffcolzero=$OUTDIR/ffcolzero.rows"
+echo "gocolzero=$OUTDIR/gocolzero.rows"
