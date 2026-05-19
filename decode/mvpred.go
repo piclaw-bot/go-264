@@ -400,17 +400,17 @@ func writeBackBidiListContext(mv4 []syntax.MotionVector, ref4 []int8, stride4, m
 		for part := 0; part < 4; part++ {
 			t := mb.SubMBType[part]
 			usesList := t == 0 || (list == 0 && syntax.BMBSubUsesL0(t)) || (list == 1 && syntax.BMBSubUsesL1(t))
-			if !usesList {
-				continue
-			}
 			baseX, baseY := x4+(part&1)*2, y4+(part>>1)*2
 			w4, h4 := syntax.BMBSubPartFillDims(t)
 			parts := syntax.BMBSubPartCount(t)
 			for j := 0; j < parts; j++ {
 				ox4, oy4 := bSubPartOffset4x4(t, j)
-				mv, ref := mb.SubMVL0[part*4+j], mb.RefIdxL0[part]
-				if list == 1 {
-					mv, ref = mb.SubMVL1[part*4+j], mb.RefIdxL1[part]
+				mv, ref := syntax.MotionVector{}, int8(-1)
+				if usesList {
+					mv, ref = mb.SubMVL0[part*4+j], mb.RefIdxL0[part]
+					if list == 1 {
+						mv, ref = mb.SubMVL1[part*4+j], mb.RefIdxL1[part]
+					}
 				}
 				fill(baseX+ox4, baseY+oy4, w4, h4, mv, ref)
 			}
@@ -419,12 +419,13 @@ func writeBackBidiListContext(mv4 []syntax.MotionVector, ref4 []int8, stride4, m
 	}
 	parts := cabacBPartsForType(mb.MBType)
 	for part := 0; part < parts; part++ {
-		if (list == 0 && !cabacBPartUsesL0(mb.MBType, part)) || (list == 1 && !cabacBPartUsesL1(mb.MBType, part)) {
-			continue
-		}
-		mv, ref := mb.MVL0[part], mb.RefIdxL0[part]
-		if list == 1 {
-			mv, ref = mb.MVL1[part], mb.RefIdxL1[part]
+		usesList := (list == 0 && cabacBPartUsesL0(mb.MBType, part)) || (list == 1 && cabacBPartUsesL1(mb.MBType, part))
+		mv, ref := syntax.MotionVector{}, int8(-1)
+		if usesList {
+			mv, ref = mb.MVL0[part], mb.RefIdxL0[part]
+			if list == 1 {
+				mv, ref = mb.MVL1[part], mb.RefIdxL1[part]
+			}
 		}
 		w4, h4 := cabacBPartDims(mb.MBType, part)
 		fill(x4+cabacBPartX(mb.MBType, part, parts), y4+cabacBPartY(mb.MBType, part, parts), w4, h4, mv, ref)
