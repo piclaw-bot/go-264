@@ -18,6 +18,13 @@ WRITE_RE = re.compile(
     r'sub0=\{(?P<subx>-?\d+),(?P<suby>-?\d+)\}'
 )
 
+FF_DIRECT_RE = re.compile(
+    r'FFDIRECT mb=(?P<mb>\d+).*?frame=(?P<frame>-?\d+)\b.*?spatial=(?P<spatial>\d+)\b.*?'
+    r'submv0=\{(?P<x0>-?\d+),(?P<y0>-?\d+)\} submv1=\{(?P<x1>-?\d+),(?P<y1>-?\d+)\} '
+    r'submv2=\{(?P<x2>-?\d+),(?P<y2>-?\d+)\} submv3=\{(?P<x3>-?\d+),(?P<y3>-?\d+)\}'
+)
+
+
 def load_direct(path: str, poc_filter: int | None = None, spatial_filter: int | None = None, occurrence: int = 0) -> dict[int, tuple[tuple[int, int], ...]]:
     out = {}
     seen: dict[int, int] = {}
@@ -36,6 +43,28 @@ def load_direct(path: str, poc_filter: int | None = None, spatial_filter: int | 
             continue
         out[mb] = tuple((int(m[f'x{i}']), int(m[f'y{i}'])) for i in range(4))
     return out
+
+def load_ff_direct(path: str | None, frame_filter: int | None = None, spatial_filter: int | None = None, occurrence: int = 0) -> dict[int, tuple[tuple[int, int], ...]]:
+    if not path:
+        return {}
+    out = {}
+    seen: dict[int, int] = {}
+    for line in open(path, errors='replace'):
+        m = FF_DIRECT_RE.search(line)
+        if not m:
+            continue
+        if frame_filter is not None and int(m['frame']) != frame_filter:
+            continue
+        if spatial_filter is not None and int(m['spatial']) != spatial_filter:
+            continue
+        mb = int(m['mb'])
+        occ = seen.get(mb, 0)
+        seen[mb] = occ + 1
+        if occ != occurrence:
+            continue
+        out[mb] = tuple((int(m[f'x{i}']), int(m[f'y{i}'])) for i in range(4))
+    return out
+
 
 def load_write(path: str, poc_filter: int | None = None, occurrence: int = 0) -> dict[tuple[int, int], dict[str, object]]:
     out = {}
@@ -64,6 +93,8 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument('godirect')
     ap.add_argument('gomotwrite')
+    ap.add_argument('--ffdirect', help='optional FFDIRECT rows; when set, only report write MVs that differ from FF sub-MVs')
+    ap.add_argument('--ff-frame', type=int, help='FF frame filter for --ffdirect')
     ap.add_argument('--mb', type=int)
     ap.add_argument('--from-mb', type=int, dest='from_mb')
     ap.add_argument('--to-mb', type=int, dest='to_mb')
@@ -79,6 +110,7 @@ def main() -> None:
     args = ap.parse_args()
     direct = load_direct(args.godirect, args.poc, args.spatial, args.direct_occurrence)
     writes = load_write(args.gomotwrite, args.poc, args.write_occurrence)
+    ff_direct = load_ff_direct(args.ffdirect, args.ff_frame, args.spatial, args.direct_occurrence)
     compared = diffs = 0
     for mb in sorted(direct):
         if args.mb is not None and mb != args.mb:
@@ -98,8 +130,13 @@ def main() -> None:
             if args.only_zero_direct and dmv != (0, 0):
                 continue
             compared += 1
-            if w['mv0'] != dmv or w['sub0'] != dmv:
-                print(f'mb={mb:04d} poc={w["poc"]} type={w["mbtype"]} part={part} direct_sub={dmv} write_sub={w["sub0"]} write_mv={w["mv0"]} ref0={w["ref0"]}')
+            ffmv = ff_direct.get(mb, (None, None, None, None))[part] if ff_direct else None
+            mismatch = (w['mv0'] != dmv or w['sub0'] != dmv)
+            if ffmv is not None:
+                mismatch = w['mv0'] != ffmv
+            if mismatch:
+                ff_text = f' ff_sub={ffmv}' if ffmv is not None else ''
+                print(f'mb={mb:04d} poc={w["poc"]} type={w["mbtype"]} part={part} direct_sub={dmv} write_sub={w["sub0"]} write_mv={w["mv0"]}{ff_text} ref0={w["ref0"]}')
                 diffs += 1
                 if diffs >= args.limit:
                     print(f'compared={compared} diffs={diffs}')

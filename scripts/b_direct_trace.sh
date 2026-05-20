@@ -198,6 +198,7 @@ if [[ -n "${GO_POC:-}" ]]; then
     --go-poc "$GO_POC" --go-occurrence "${GO_OCCURRENCE:-0}" --limit "${LIMIT:-20}" || true
   if [[ -s "$OUTDIR/gomotwrite.rows" ]]; then
     python3 scripts/compare_direct_writeback.py "$OUTDIR/godirect.rows" "$OUTDIR/gomotwrite.rows" \
+      --ffdirect "$OUTDIR/ffdirect.rows" --ff-frame "${FF_FRAME:-2}" \
       --poc "$GO_POC" --spatial 1 --mb-type 0 --ref0 0 --only-zero-direct --limit "${LIMIT:-20}" \
       >"$OUTDIR/gowrite.diff" || true
   fi
