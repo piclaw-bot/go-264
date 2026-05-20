@@ -727,6 +727,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 	for i, mv := range mv4Ctx {
 		f.MotionL0[i] = [2]int16{mv.X, mv.Y}
 	}
+	traceSavedMotion(f, mbWidth)
 
 	// In-loop deblocking filter (H.264 §8.7), applied in a second pass over all
 	// MBs so that each filtered MB uses fully reconstructed (but not yet filtered)
