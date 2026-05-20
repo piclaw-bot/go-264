@@ -18,6 +18,10 @@ GO_RE = re.compile(
     r'GOMOTSAVE frame=(?P<frame>-?\d+) poc=(?P<poc>-?\d+) mb=(?P<mb>\d+).*?part=(?P<part>\d+) '
     r'mbtype=(?P<mbtype>\d+) ref0=(?P<ref>-?\d+) mv0=\{(?P<x>-?\d+),(?P<y>-?\d+)\}'
 )
+GO4_RE = re.compile(
+    r'GOMOTSAVE4 frame=(?P<frame>-?\d+) poc=(?P<poc>-?\d+) mb=(?P<mb>\d+).*?cell=(?P<xcell>\d+),(?P<ycell>\d+) '
+    r'mbtype=(?P<mbtype>\d+) ref0=(?P<ref>-?\d+) mv0=\{(?P<x>-?\d+),(?P<y>-?\d+)\}'
+)
 
 
 def load_ff(path: str) -> list[dict[str, int]]:
@@ -36,16 +40,23 @@ def load_ff(path: str) -> list[dict[str, int]]:
     return rows
 
 
-def load_go(path: str, frame_filter: int | None = None) -> dict[tuple[int, int, int], dict[str, object]]:
+def load_go(path: str, frame_filter: int | None = None, detail: bool = False) -> dict[tuple[int, int, int], dict[str, object]]:
     rows = {}
     for line in open(path, errors='replace'):
-        m = GO_RE.search(line)
+        m = GO4_RE.search(line) if detail else GO_RE.search(line)
         if not m:
             continue
         frame = int(m['frame'])
         if frame_filter is not None and frame != frame_filter:
             continue
-        key = (int(m['poc']), int(m['mb']), int(m['part']))
+        if detail:
+            xcell, ycell = int(m['xcell']), int(m['ycell'])
+            if xcell not in (0, 3) or ycell not in (0, 3):
+                continue
+            part = (1 if xcell == 3 else 0) + (2 if ycell == 3 else 0)
+        else:
+            part = int(m['part'])
+        key = (int(m['poc']), int(m['mb']), part)
         rows[key] = {
             'frame': frame,
             'mbtype': int(m['mbtype']),
@@ -60,6 +71,7 @@ def main() -> None:
     ap.add_argument('gomotsave')
     ap.add_argument('--go-colpoc', type=int, required=True, help='Go saved-frame POC to compare')
     ap.add_argument('--go-frame', type=int, help='Go saved-frame frame_num to disambiguate repeated POCs')
+    ap.add_argument('--use-detail', action='store_true', help='compare against GOMOTSAVE4 x8*3/y8*3 representative cells')
     ap.add_argument('--mb', type=int)
     ap.add_argument('--part', type=int)
     ap.add_argument('--ff-ref0', type=int)
@@ -69,7 +81,7 @@ def main() -> None:
     ap.add_argument('--fail-on-diff', action='store_true')
     args = ap.parse_args()
     ff = load_ff(args.ffcolzero)
-    go = load_go(args.gomotsave, args.go_frame)
+    go = load_go(args.gomotsave, args.go_frame, args.use_detail)
     compared = diffs = 0
     seen: set[tuple[int, int, tuple[int, int, int]]] = set()
     for f in ff:
