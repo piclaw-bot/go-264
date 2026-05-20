@@ -634,7 +634,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					cbpCtx[mbIdx] = mbIntra.CodedBlockPattern
 					mbTypeCtx[mbIdx] = cabacMBTypeFlag(mbIntra.MBType)
 					nonSkipCtx[mbIdx] = true
-					writeBackIntra4x4(ref4Ctx, mv4Stride, mbX, mbY)
+					bmc.writeBackIntra(mbX, mbY)
 				} else {
 					cabacLastQScaleDiff = int(mbBidi.QPDelta)
 					currentQP = updateQP(currentQP, int(mbBidi.QPDelta))
@@ -698,7 +698,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 				mbIsIntraCtx[mbIdx] = true
 				nzCtx[mbIdx] = mb.TotalCoeff
 				chromaNZCtx[mbIdx] = mb.ChromaTotalCoeff
-				writeBackIntra4x4(ref4Ctx, mv4Stride, mbX, mbY)
+				bmc.writeBackIntra(mbX, mbY)
 				mbFFTypeCtx[mbIdx] = ffBidiMBType(mbBidi)
 			} else {
 				currentQP = updateQP(currentQP, int(mbBidi.QPDelta))

@@ -65,6 +65,11 @@ func (c bMotionCache) applyDirect8x8Spatial(mbX, mbY int, mb *syntax.MBBidi, ref
 	applyB8x8DirectSpatial(mb, refL0, mvL0, refL1, mvL1, colocated, mbX, mbY)
 }
 
+func (c bMotionCache) writeBackIntra(mbX, mbY int) {
+	writeBackIntra4x4(c.ref[0], c.stride4, mbX, mbY)
+	writeBackIntra4x4(c.ref[1], c.stride4, mbX, mbY)
+}
+
 func (c bMotionCache) writeBackBidi(mbX, mbY int, mb *syntax.MBBidi) {
 	writeBackBidiListContext(c.mv[0], c.ref[0], c.stride4, mbX, mbY, mb, 0)
 	writeBackBidiListContext(c.mv[1], c.ref[1], c.stride4, mbX, mbY, mb, 1)

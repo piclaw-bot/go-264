@@ -34,6 +34,23 @@ func TestBMotionCacheHelpersUseListState(t *testing.T) {
 	}
 }
 
+func TestBMotionCacheWriteBackIntraMarksBothLists(t *testing.T) {
+	c := newBMotionCache(4, 1)
+	for list := 0; list < 2; list++ {
+		for i := range c.ref4(list) {
+			c.ref4(list)[i] = 0
+		}
+	}
+	c.writeBackIntra(0, 0)
+	for list := 0; list < 2; list++ {
+		for i, ref := range c.ref4(list) {
+			if ref != -1 {
+				t.Fatalf("list=%d idx=%d ref=%d want -1", list, i, ref)
+			}
+		}
+	}
+}
+
 func TestBMotionCacheWriteBackKeepsListsSeparate(t *testing.T) {
 	c := newBMotionCache(4, 1)
 	mb := &syntax.MBBidi{MBType: syntax.BMBTypeBi16x16, RefIdxL0: [4]int8{0}, RefIdxL1: [4]int8{1}}
