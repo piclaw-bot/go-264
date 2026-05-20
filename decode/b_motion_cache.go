@@ -57,6 +57,16 @@ func (c bMotionCache) predictDirectSpatial(list, x4, y4 int) (int8, syntax.Motio
 	return predictBDirectSpatialL0ForSimpleRefs(c.mv4(list), c.ref4(list), c.stride4, x4, y4)
 }
 
+func (c bMotionCache) initDirect16x16(mb *syntax.MBBidi, refL0 int8, mvL0 syntax.MotionVector, refL1 int8, mvL1 syntax.MotionVector) {
+	if mb == nil || mb.MBType != syntax.BMBTypeDirect16x16 {
+		return
+	}
+	mb.RefIdxL0[0] = refL0
+	mb.RefIdxL1 = [4]int8{refL1, refL1, refL1, refL1}
+	mb.MVL0[0] = mvL0
+	mb.MVL1[0] = mvL1
+}
+
 func (c bMotionCache) applyDirect16x16Spatial(mbX, mbY int, mb *syntax.MBBidi, colocated *frame.Frame) {
 	applyBDirect16x16SpatialSubMVs(mb, colocated, mbX, mbY)
 }

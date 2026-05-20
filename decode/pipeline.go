@@ -600,10 +600,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					// B_Direct_16x16 skip: QP unchanged, lastQScaleDiff resets to 0.
 					cabacLastQScaleDiff = 0
 					mbBidi.DirectSpatial = hdr.DirectSpatialMvPred
-					mbBidi.RefIdxL0[0] = directRefL0
-					mbBidi.RefIdxL1 = [4]int8{directRefL1, directRefL1, directRefL1, directRefL1}
-					mbBidi.MVL0[0] = directMVL0
-					mbBidi.MVL1[0] = directMVL1
+					bmc.initDirect16x16(mbBidi, directRefL0, directMVL0, directRefL1, directMVL1)
 					if applyDirectSpatial {
 						bmc.applyDirect16x16Spatial(mbX, mbY, mbBidi, d.refBidiL1(0, f.POC))
 					}
@@ -640,10 +637,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					currentQP = updateQP(currentQP, int(mbBidi.QPDelta))
 					mbBidi.DirectSpatial = hdr.DirectSpatialMvPred
 					if mbBidi.MBType == syntax.BMBTypeDirect16x16 {
-						mbBidi.RefIdxL0[0] = directRefL0
-						mbBidi.RefIdxL1 = [4]int8{directRefL1, directRefL1, directRefL1, directRefL1}
-						mbBidi.MVL0[0] = directMVL0
-						mbBidi.MVL1[0] = directMVL1
+						bmc.initDirect16x16(mbBidi, directRefL0, directMVL0, directRefL1, directMVL1)
 						if applyDirectSpatial {
 							bmc.applyDirect16x16Spatial(mbX, mbY, mbBidi, d.refBidiL1(0, f.POC))
 						}
@@ -704,10 +698,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 				currentQP = updateQP(currentQP, int(mbBidi.QPDelta))
 				mbBidi.DirectSpatial = hdr.DirectSpatialMvPred
 				if mbBidi.MBType == syntax.BMBTypeDirect16x16 {
-					mbBidi.RefIdxL0[0] = directRefL0
-					mbBidi.RefIdxL1 = [4]int8{directRefL1, directRefL1, directRefL1, directRefL1}
-					mbBidi.MVL0[0] = directMVL0
-					mbBidi.MVL1[0] = directMVL1
+					bmc.initDirect16x16(mbBidi, directRefL0, directMVL0, directRefL1, directMVL1)
 					if applyDirectSpatial {
 						bmc.applyDirect16x16Spatial(mbX, mbY, mbBidi, d.refBidiL1(0, f.POC))
 					}

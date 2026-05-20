@@ -34,6 +34,22 @@ func TestBMotionCacheHelpersUseListState(t *testing.T) {
 	}
 }
 
+func TestBMotionCacheInitDirect16x16(t *testing.T) {
+	c := newBMotionCache(4, 1)
+	mb := &syntax.MBBidi{MBType: syntax.BMBTypeDirect16x16}
+	mv0 := syntax.MotionVector{X: 1, Y: 2}
+	mv1 := syntax.MotionVector{X: -3, Y: 4}
+	c.initDirect16x16(mb, 1, mv0, 0, mv1)
+	if mb.RefIdxL0[0] != 1 || mb.MVL0[0] != mv0 || mb.MVL1[0] != mv1 {
+		t.Fatalf("direct init L0/L1 mismatch: %+v", mb)
+	}
+	for i, ref := range mb.RefIdxL1 {
+		if ref != 0 {
+			t.Fatalf("RefIdxL1[%d]=%d want 0", i, ref)
+		}
+	}
+}
+
 func TestBMotionCacheWriteBackIntraMarksBothLists(t *testing.T) {
 	c := newBMotionCache(4, 1)
 	for list := 0; list < 2; list++ {
