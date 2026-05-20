@@ -831,5 +831,8 @@ func directTraceSubMVs(mb *syntax.MBBidi) (syntax.MotionVector, syntax.MotionVec
 	if mb == nil {
 		return syntax.MotionVector{}, syntax.MotionVector{}, syntax.MotionVector{}, syntax.MotionVector{}
 	}
+	if mb.SubMVL0[0] == (syntax.MotionVector{}) && mb.MVL0[0] != (syntax.MotionVector{}) {
+		return mb.MVL0[0], mb.MVL0[0], mb.MVL0[0], mb.MVL0[0]
+	}
 	return mb.SubMVL0[0], mb.SubMVL0[4], mb.SubMVL0[8], mb.SubMVL0[12]
 }
