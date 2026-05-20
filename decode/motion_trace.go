@@ -18,8 +18,21 @@ func traceSavedMotion(f *frame.Frame, mbWidth int) {
 			limit = n
 		}
 	}
+	detail := os.Getenv("GO264_MOTION_SAVE_DETAIL") != ""
 	for mb := 0; mb < limit; mb++ {
 		mbX, mbY := mb%mbWidth, mb/mbWidth
+		if detail {
+			for y := 0; y < 4; y++ {
+				for x := 0; x < 4; x++ {
+					idx := (mbY*4+y)*f.MotionStride4 + mbX*4 + x
+					if idx < 0 || idx >= len(f.MotionL0) || idx >= len(f.RefIdxL0) {
+						continue
+					}
+					mv := f.MotionL0[idx]
+					fmt.Fprintf(os.Stderr, "GOMOTSAVE4 frame=%d poc=%d mb=%04d x=%02d y=%02d cell=%d,%d mbtype=%d ref0=%d mv0={%d,%d}\n", f.FrameNum, f.POC, mb, mbX, mbY, x, y, f.MBType[mb], f.RefIdxL0[idx], mv[0], mv[1])
+				}
+			}
+		}
 		for part := 0; part < 4; part++ {
 			x4 := mbX*4 + (part&1)*3
 			y4 := mbY*4 + (part>>1)*3
