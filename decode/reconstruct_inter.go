@@ -842,11 +842,12 @@ func directTraceSubMVs(mb *syntax.MBBidi) (syntax.MotionVector, syntax.MotionVec
 
 func directTracePartitionMVs(mb *syntax.MBBidi) (syntax.MotionVector, syntax.MotionVector, syntax.MotionVector, syntax.MotionVector) {
 	s0, s1, s2, s3 := mb.MVL0[0], mb.MVL0[0], mb.MVL0[0], mb.MVL0[0]
-	switch mb.MBType {
-	case syntax.BMBTypeL016x8, syntax.BMBTypeL116x8, syntax.BMBTypeBi16x8, syntax.BMBTypeL08x16, syntax.BMBTypeL18x16, syntax.BMBTypeBi8x16:
-		s2, s3 = mb.MVL0[1], mb.MVL0[1]
-	case syntax.BMBTypeL016x8b, syntax.BMBTypeL116x8b, syntax.BMBTypeBi16x8b:
-		s1, s3 = mb.MVL0[1], mb.MVL0[1]
+	if cabacBPartsForType(mb.MBType) == 2 {
+		if cabacBIs8x16(mb.MBType) {
+			s1, s3 = mb.MVL0[1], mb.MVL0[1]
+		} else {
+			s2, s3 = mb.MVL0[1], mb.MVL0[1]
+		}
 	}
 	return s0, s1, s2, s3
 }
