@@ -462,7 +462,7 @@ func applyBDirect16x16SpatialSubMVs(mb *syntax.MBBidi, colocated *frame.Frame, m
 	if mb == nil || mb.MBType != syntax.BMBTypeDirect16x16 {
 		return
 	}
-	useColocatedZero := mb.RefIdxL0[0] == 0 && colocatedDirectUses8x8(colocated, mbX, mbY)
+	useColocatedZero := mb.RefIdxL0[0] == 0 && mb.RefIdxL1[0] < 0 && colocatedDirectUses8x8(colocated, mbX, mbY)
 	for part := 0; part < 4; part++ {
 		partMVL0 := mb.MVL0[0]
 		if useColocatedZero && colocatedDirect8x8Zero(colocated, mbX, mbY, part, -1) {
