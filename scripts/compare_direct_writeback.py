@@ -18,8 +18,9 @@ WRITE_RE = re.compile(
     r'sub0=\{(?P<subx>-?\d+),(?P<suby>-?\d+)\}'
 )
 
-def load_direct(path: str, poc_filter: int | None = None, spatial_filter: int | None = None) -> dict[int, tuple[tuple[int, int], ...]]:
+def load_direct(path: str, poc_filter: int | None = None, spatial_filter: int | None = None, occurrence: int = 0) -> dict[int, tuple[tuple[int, int], ...]]:
     out = {}
+    seen: dict[int, int] = {}
     for line in open(path, errors='replace'):
         m = DIRECT_RE.search(line)
         if not m:
@@ -28,22 +29,29 @@ def load_direct(path: str, poc_filter: int | None = None, spatial_filter: int | 
             continue
         if spatial_filter is not None and int(m['spatial']) != spatial_filter:
             continue
-        # Keep the first matching occurrence for a macroblock. Later rows with the
-        # same POC/MB are usually repeated diagnostic emissions (or temporal-direct
-        # probes when --spatial is omitted) and would otherwise hide the row that
-        # produced the write-back trace.
-        out.setdefault(int(m['mb']), tuple((int(m[f'x{i}']), int(m[f'y{i}'])) for i in range(4)))
+        mb = int(m['mb'])
+        occ = seen.get(mb, 0)
+        seen[mb] = occ + 1
+        if occ != occurrence:
+            continue
+        out[mb] = tuple((int(m[f'x{i}']), int(m[f'y{i}'])) for i in range(4))
     return out
 
-def load_write(path: str, poc_filter: int | None = None) -> dict[tuple[int, int], dict[str, object]]:
+def load_write(path: str, poc_filter: int | None = None, occurrence: int = 0) -> dict[tuple[int, int], dict[str, object]]:
     out = {}
+    seen: dict[tuple[int, int], int] = {}
     for line in open(path, errors='replace'):
         m = WRITE_RE.search(line)
         if not m:
             continue
         if poc_filter is not None and m['poc'] is not None and int(m['poc']) != poc_filter:
             continue
-        out[(int(m['mb']), int(m['part']))] = {
+        key = (int(m['mb']), int(m['part']))
+        occ = seen.get(key, 0)
+        seen[key] = occ + 1
+        if occ != occurrence:
+            continue
+        out[key] = {
             'poc': int(m['poc']) if m['poc'] is not None else None,
             'mbtype': int(m['mbtype']),
             'ref0': int(m['ref0']),
@@ -61,14 +69,16 @@ def main() -> None:
     ap.add_argument('--to-mb', type=int, dest='to_mb')
     ap.add_argument('--poc', type=int, help='only compare rows for this Go POC')
     ap.add_argument('--spatial', type=int, choices=(0, 1), help='only compare GODIRECT rows with this spatial flag')
+    ap.add_argument('--direct-occurrence', type=int, default=0, help='nth matching GODIRECT occurrence per MB after filters')
+    ap.add_argument('--write-occurrence', type=int, default=0, help='nth matching GOMOTWRITE occurrence per MB/part after filters')
     ap.add_argument('--mb-type', type=int, dest='mb_type', help='only compare write rows with this Go MB type')
     ap.add_argument('--ref0', type=int, help='only compare write rows with this ref0')
     ap.add_argument('--only-zero-direct', action='store_true', help='only compare parts whose direct sub-MV representative is zero')
     ap.add_argument('--limit', type=int, default=50)
     ap.add_argument('--fail-on-diff', action='store_true')
     args = ap.parse_args()
-    direct = load_direct(args.godirect, args.poc, args.spatial)
-    writes = load_write(args.gomotwrite, args.poc)
+    direct = load_direct(args.godirect, args.poc, args.spatial, args.direct_occurrence)
+    writes = load_write(args.gomotwrite, args.poc, args.write_occurrence)
     compared = diffs = 0
     for mb in sorted(direct):
         if args.mb is not None and mb != args.mb:
