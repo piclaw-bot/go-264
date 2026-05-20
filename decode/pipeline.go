@@ -262,7 +262,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 	for mbIdx := int(hdr.FirstMbInSlice); mbIdx < maxMBs; mbIdx++ {
 		mbX := mbIdx % mbWidth
 		mbY := mbIdx / mbWidth
-		predMV := predictSkipMV4x4(mv4Ctx, ref4Ctx, mv4Stride, mbX*4, mbY*4)
+		predMV := bmc.predictSkipL0(mbX*4, mbY*4)
 		directRefL0, directMVL0 := int8(0), predMV
 		directRefL1, directMVL1 := int8(-1), syntax.MotionVector{}
 		applyDirectSpatial := hdr.DirectSpatialMvPred && hdr.NumRefIdxL0Active <= 2
@@ -286,7 +286,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 				directRefL0 = 0
 				directRefL1 = 0
 			}
-		} else if hdr.DirectSpatialMvPred && predictBDirectSpatialL0Ref(mv4Ctx, ref4Ctx, mv4Stride, mbX*4, mbY*4) < 0 {
+		} else if hdr.DirectSpatialMvPred && bmc.directSpatialL0Ref(mbX*4, mbY*4) < 0 {
 			directRefL1 = 0
 		}
 

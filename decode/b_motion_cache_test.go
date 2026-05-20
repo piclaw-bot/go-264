@@ -22,7 +22,7 @@ func TestBMotionCacheInitializesSplitLists(t *testing.T) {
 }
 
 func TestBMotionCacheHelpersUseListState(t *testing.T) {
-	c := newBMotionCache(4, 1)
+	c := newBMotionCache(8, 2)
 	c.ref4(0)[0], c.mv4(0)[0] = 0, syntax.MotionVector{X: 1, Y: 2}
 	c.ref4(1)[0], c.mv4(1)[0] = 1, syntax.MotionVector{X: 3, Y: 4}
 	mv, ref := c.get(1, 0, 0)
@@ -32,6 +32,18 @@ func TestBMotionCacheHelpersUseListState(t *testing.T) {
 	ctx := c.refIdxCtxs(0, 0)
 	if ctx[0] != 0 {
 		t.Fatalf("top-left ref ctx=%d want 0", ctx[0])
+	}
+	// Put left/top neighbours around MB (1,1) so skip/direct predictors exercise
+	// cache-owned L0 state instead of raw pipeline arrays.
+	leftIdx := 4*8 + 3
+	topIdx := 3*8 + 4
+	c.ref4(0)[leftIdx], c.mv4(0)[leftIdx] = 0, syntax.MotionVector{X: 5, Y: 6}
+	c.ref4(0)[topIdx], c.mv4(0)[topIdx] = 0, syntax.MotionVector{X: 0, Y: 0}
+	if pred := c.predictSkipL0(4, 4); pred != (syntax.MotionVector{}) {
+		t.Fatalf("skip pred=%+v want zero because top neighbour is zero", pred)
+	}
+	if ref := c.directSpatialL0Ref(4, 4); ref != 0 {
+		t.Fatalf("direct spatial ref=%d want 0", ref)
 	}
 }
 
