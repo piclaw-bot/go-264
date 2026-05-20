@@ -79,6 +79,7 @@ def main() -> None:
     ap.add_argument('--go-curpoc', type=int, help='compare only Go rows emitted while decoding this current POC')
     ap.add_argument('--ff-ref0', type=int, help='compare only FF rows with this resolved direct ref0')
     ap.add_argument('--ff-ref1', type=int, help='compare only FF rows with this resolved direct ref1')
+    ap.add_argument('--only-diff', choices=['zero', 'motion'], help='report only zero-threshold disagreements or motion/ref disagreements')
     ap.add_argument('--match-any-occurrence', action='store_true', help='for duplicate rows, accept any Go occurrence with the same mb/part/ref_mv')
     ap.add_argument('--limit', type=int, default=20)
     ap.add_argument('--fail-on-diff', action='store_true')
@@ -110,12 +111,16 @@ def main() -> None:
             exact = [v for v in candidates if v['ref_mv'] == f['ref_mv']]
             g = exact[0] if exact else (candidates[0] if candidates else None)
         compared += 1
+        ff_zero = abs(f['ref_mv'][1]) <= 1 and abs(f['ref_mv'][2]) <= 1
         if g is None:
-            print(f'mb={mb:04d} part={part} occ={occ} missing_go ff_ref_mv={f["ref_mv"]} is_b8x8={f["is_b8x8"]} sub_type={f["sub_type"]} mb_type={f["mb_type"]}')
-            diffs += 1
-        elif f['ref_mv'] != g['ref_mv']:
-            print(f'mb={mb:04d} part={part} occ={occ} ref_mv ff={f["ref_mv"]} go={g["ref_mv"]} go_curpoc={g["curpoc"]} go_colpoc={g["colpoc"]} go_zero={g["zero"]}')
-            diffs += 1
+            if args.only_diff is None:
+                print(f'mb={mb:04d} part={part} occ={occ} missing_go ff_ref_mv={f["ref_mv"]} is_b8x8={f["is_b8x8"]} sub_type={f["sub_type"]} mb_type={f["mb_type"]}')
+                diffs += 1
+        elif f['ref_mv'] != g['ref_mv'] or ff_zero != g['zero']:
+            kind = 'zero' if ff_zero != g['zero'] else 'motion'
+            if args.only_diff is None or args.only_diff == kind:
+                print(f'mb={mb:04d} part={part} occ={occ} kind={kind} ff_ref_mv={f["ref_mv"]} ff_zero={ff_zero} go={g["ref_mv"]} go_curpoc={g["curpoc"]} go_colpoc={g["colpoc"]} go_zero={g["zero"]}')
+                diffs += 1
         if diffs >= args.limit:
             break
     print(f'compared={compared} diffs={diffs}')
