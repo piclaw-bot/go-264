@@ -80,6 +80,7 @@ def main() -> None:
     ap.add_argument('--ff-ref0', type=int, help='compare only FF rows with this resolved direct ref0')
     ap.add_argument('--ff-ref1', type=int, help='compare only FF rows with this resolved direct ref1')
     ap.add_argument('--only-diff', choices=['zero', 'motion'], help='report only zero-threshold disagreements or motion/ref disagreements')
+    ap.add_argument('--zero-eligible', action='store_true', help='compare only FF rows whose resolved direct MV could be zeroed (abs(mv)<=1)')
     ap.add_argument('--match-any-occurrence', action='store_true', help='for duplicate rows, accept any Go occurrence with the same mb/part/ref_mv')
     ap.add_argument('--limit', type=int, default=20)
     ap.add_argument('--fail-on-diff', action='store_true')
@@ -104,6 +105,8 @@ def main() -> None:
         if args.ff_ref0 is not None and f['ref0'] != args.ff_ref0:
             continue
         if args.ff_ref1 is not None and f['ref1'] != args.ff_ref1:
+            continue
+        if args.zero_eligible and (abs(f['ref_mv'][1]) > 1 or abs(f['ref_mv'][2]) > 1):
             continue
         g = go.get(key)
         if args.match_any_occurrence:
