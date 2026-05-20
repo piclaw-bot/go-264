@@ -14,24 +14,28 @@ DIRECT_RE = re.compile(
     r'submv2=\{(?P<x2>-?\d+),(?P<y2>-?\d+)\} submv3=\{(?P<x3>-?\d+),(?P<y3>-?\d+)\}'
 )
 WRITE_RE = re.compile(
-    r'GOMOTWRITE mb=(?P<mb>\d+).*?part=(?P<part>\d+) ref0=(?P<ref0>-?\d+) mv0=\{(?P<mvx>-?\d+),(?P<mvy>-?\d+)\}.*?'
+    r'GOMOTWRITE mb=(?P<mb>\d+).*?(?:poc=(?P<poc>-?\d+) )?type=.*?part=(?P<part>\d+) ref0=(?P<ref0>-?\d+) mv0=\{(?P<mvx>-?\d+),(?P<mvy>-?\d+)\}.*?'
     r'sub0=\{(?P<subx>-?\d+),(?P<suby>-?\d+)\}'
 )
 
-def load_direct(path: str) -> dict[int, tuple[tuple[int, int], ...]]:
+def load_direct(path: str, poc_filter: int | None = None) -> dict[int, tuple[tuple[int, int], ...]]:
     out = {}
     for line in open(path, errors='replace'):
         m = DIRECT_RE.search(line)
         if not m:
             continue
+        if poc_filter is not None and int(m['poc']) != poc_filter:
+            continue
         out[int(m['mb'])] = tuple((int(m[f'x{i}']), int(m[f'y{i}'])) for i in range(4))
     return out
 
-def load_write(path: str) -> dict[tuple[int, int], dict[str, object]]:
+def load_write(path: str, poc_filter: int | None = None) -> dict[tuple[int, int], dict[str, object]]:
     out = {}
     for line in open(path, errors='replace'):
         m = WRITE_RE.search(line)
         if not m:
+            continue
+        if poc_filter is not None and m['poc'] is not None and int(m['poc']) != poc_filter:
             continue
         out[(int(m['mb']), int(m['part']))] = {
             'ref0': int(m['ref0']),
@@ -47,13 +51,14 @@ def main() -> None:
     ap.add_argument('--mb', type=int)
     ap.add_argument('--from-mb', type=int, dest='from_mb')
     ap.add_argument('--to-mb', type=int, dest='to_mb')
+    ap.add_argument('--poc', type=int, help='only compare rows for this Go POC')
     ap.add_argument('--ref0', type=int, help='only compare write rows with this ref0')
     ap.add_argument('--only-zero-direct', action='store_true', help='only compare parts whose direct sub-MV representative is zero')
     ap.add_argument('--limit', type=int, default=50)
     ap.add_argument('--fail-on-diff', action='store_true')
     args = ap.parse_args()
-    direct = load_direct(args.godirect)
-    writes = load_write(args.gomotwrite)
+    direct = load_direct(args.godirect, args.poc)
+    writes = load_write(args.gomotwrite, args.poc)
     compared = diffs = 0
     for mb in sorted(direct):
         if args.mb is not None and mb != args.mb:

@@ -612,7 +612,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					nonSkipCtx[mbIdx] = false
 					transform8x8Ctx[mbIdx] = false
 					if applyDirectSpatial {
-						bmc.writeBackBidi(mbX, mbY, mbBidi)
+						bmc.writeBackBidi(mbX, mbY, f.POC, mbBidi)
 					}
 					mbQPCtx[mbIdx] = currentQP
 					if cabacDec.DecodeTerminate() == 1 {
@@ -656,7 +656,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					// Write back 4×4 MV/ref contexts for future MVP/ref_idx context. FFmpeg keeps
 					// separate list caches; B_8x8 and two-part B MBs must fill the same shaped
 					// regions, not just MVL0[0] over the whole macroblock.
-					bmc.writeBackBidi(mbX, mbY, mbBidi)
+					bmc.writeBackBidi(mbX, mbY, f.POC, mbBidi)
 				}
 				mbQPCtx[mbIdx] = currentQP
 				if cabacDec.DecodeTerminate() == 1 {

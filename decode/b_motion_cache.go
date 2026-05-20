@@ -159,13 +159,13 @@ func (c bMotionCache) writeBackInterL0(mbX, mbY int, mb *syntax.MBInter) {
 	writeBackInter4x4(c.mv[0], c.ref[0], c.stride4, mbX, mbY, mb)
 }
 
-func (c bMotionCache) writeBackBidi(mbX, mbY int, mb *syntax.MBBidi) {
+func (c bMotionCache) writeBackBidi(mbX, mbY, poc int, mb *syntax.MBBidi) {
 	writeBackBidiListContext(c.mv[0], c.ref[0], c.stride4, mbX, mbY, mb, 0)
 	writeBackBidiListContext(c.mv[1], c.ref[1], c.stride4, mbX, mbY, mb, 1)
-	c.traceBidiWriteBack(mbX, mbY, mb)
+	c.traceBidiWriteBack(mbX, mbY, poc, mb)
 }
 
-func (c bMotionCache) traceBidiWriteBack(mbX, mbY int, mb *syntax.MBBidi) {
+func (c bMotionCache) traceBidiWriteBack(mbX, mbY, poc int, mb *syntax.MBBidi) {
 	if os.Getenv("GO264_MOTION_WRITE_TRACE") == "" || mb == nil || c.stride4 <= 0 {
 		return
 	}
@@ -182,7 +182,7 @@ func (c bMotionCache) traceBidiWriteBack(mbX, mbY int, mb *syntax.MBBidi) {
 		}
 		mv0, mv1 := c.mv[0][idx], c.mv[1][idx]
 		sub0, sub1 := mb.SubMVL0[part*4], mb.SubMVL1[part*4]
-		fmt.Fprintf(os.Stderr, "GOMOTWRITE mb=%04d x=%02d y=%02d type=%d part=%d ref0=%d mv0={%d,%d} ref1=%d mv1={%d,%d} sub0={%d,%d} sub1={%d,%d}\n", mbAddr, mbX, mbY, mb.MBType, part, c.ref[0][idx], mv0.X, mv0.Y, c.ref[1][idx], mv1.X, mv1.Y, sub0.X, sub0.Y, sub1.X, sub1.Y)
+		fmt.Fprintf(os.Stderr, "GOMOTWRITE mb=%04d x=%02d y=%02d poc=%d type=%d part=%d ref0=%d mv0={%d,%d} ref1=%d mv1={%d,%d} sub0={%d,%d} sub1={%d,%d}\n", mbAddr, mbX, mbY, poc, mb.MBType, part, c.ref[0][idx], mv0.X, mv0.Y, c.ref[1][idx], mv1.X, mv1.Y, sub0.X, sub0.Y, sub1.X, sub1.Y)
 	}
 }
 

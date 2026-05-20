@@ -136,7 +136,7 @@ func TestBMotionCacheWriteBackKeepsListsSeparate(t *testing.T) {
 	mb := &syntax.MBBidi{MBType: syntax.BMBTypeBi16x16, RefIdxL0: [4]int8{0}, RefIdxL1: [4]int8{1}}
 	mb.MVL0[0] = syntax.MotionVector{X: 3, Y: 4}
 	mb.MVL1[0] = syntax.MotionVector{X: -2, Y: 1}
-	c.writeBackBidi(0, 0, mb)
+	c.writeBackBidi(0, 0, 6, mb)
 	for i := 0; i < 16; i++ {
 		if c.mv4(0)[i] != mb.MVL0[0] || c.ref4(0)[i] != 0 {
 			t.Fatalf("L0 idx=%d mv=%+v ref=%d", i, c.mv4(0)[i], c.ref4(0)[i])
