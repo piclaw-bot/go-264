@@ -458,6 +458,23 @@ func predictBPartMotion4x4(mv4 []syntax.MotionVector, ref4 []int8, stride4, x4, 
 	return predictMotion4x4(mv4, ref4, stride4, bx, by, pw, targetRef)
 }
 
+func applyBDirect16x16SpatialSubMVs(mb *syntax.MBBidi, colocated *frame.Frame, mbX, mbY int) {
+	if mb == nil || mb.MBType != syntax.BMBTypeDirect16x16 {
+		return
+	}
+	useColocatedZero := mb.RefIdxL0[0] == 0 && colocatedDirectUses8x8(colocated, mbX, mbY)
+	for part := 0; part < 4; part++ {
+		partMVL0 := mb.MVL0[0]
+		if useColocatedZero && colocatedDirect8x8Zero(colocated, mbX, mbY, part, -1) {
+			partMVL0 = syntax.MotionVector{}
+		}
+		for j := 0; j < 4; j++ {
+			mb.SubMVL0[part*4+j] = partMVL0
+			mb.SubMVL1[part*4+j] = mb.MVL1[0]
+		}
+	}
+}
+
 func applyB8x8DirectSpatial(mb *syntax.MBBidi, refL0 int8, mvL0 syntax.MotionVector, refL1 int8, mvL1 syntax.MotionVector, colocated *frame.Frame, mbX, mbY int) {
 	if mb == nil || mb.MBType != syntax.BMBTypeB8x8 {
 		return

@@ -832,11 +832,7 @@ func directTraceSubMVs(mb *syntax.MBBidi) (syntax.MotionVector, syntax.MotionVec
 		return syntax.MotionVector{}, syntax.MotionVector{}, syntax.MotionVector{}, syntax.MotionVector{}
 	}
 	if mb.MBType == syntax.BMBTypeDirect16x16 {
-		// FFmpeg fills all four 8×8 direct sub-block cache representatives from
-		// the resolved full-direct MV. Mirror that in trace output so submv
-		// mismatches mean the top-level direct MV is wrong, not that Go stores full
-		// direct syntax in MVL0 instead of SubMVL0.
-		return mb.MVL0[0], mb.MVL0[0], mb.MVL0[0], mb.MVL0[0]
+		return mb.SubMVL0[0], mb.SubMVL0[4], mb.SubMVL0[8], mb.SubMVL0[12]
 	}
 	return mb.SubMVL0[0], mb.SubMVL0[4], mb.SubMVL0[8], mb.SubMVL0[12]
 }

@@ -607,6 +607,9 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					mbBidi.RefIdxL1 = [4]int8{directRefL1, directRefL1, directRefL1, directRefL1}
 					mbBidi.MVL0[0] = directMVL0
 					mbBidi.MVL1[0] = directMVL1
+					if applyDirectSpatial {
+						applyBDirect16x16SpatialSubMVs(mbBidi, d.refBidiL1(0, f.POC), mbX, mbY)
+					}
 					d.reconstructMBBidi(f, mbBidi, mbX, mbY, currentQP)
 					nzCtx[mbIdx] = mbBidi.TotalCoeff
 					chromaNZCtx[mbIdx] = mbBidi.ChromaTotalCoeff
@@ -645,6 +648,9 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 						mbBidi.RefIdxL1 = [4]int8{directRefL1, directRefL1, directRefL1, directRefL1}
 						mbBidi.MVL0[0] = directMVL0
 						mbBidi.MVL1[0] = directMVL1
+						if applyDirectSpatial {
+							applyBDirect16x16SpatialSubMVs(mbBidi, d.refBidiL1(0, f.POC), mbX, mbY)
+						}
 					} else if applyDirectSpatial {
 						applyB8x8DirectSpatial(mbBidi, directRefL0, directMVL0, directRefL1, directMVL1, d.refBidiL1(0, f.POC), mbX, mbY)
 					}
@@ -707,6 +713,9 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					mbBidi.RefIdxL1 = [4]int8{directRefL1, directRefL1, directRefL1, directRefL1}
 					mbBidi.MVL0[0] = directMVL0
 					mbBidi.MVL1[0] = directMVL1
+					if applyDirectSpatial {
+						applyBDirect16x16SpatialSubMVs(mbBidi, d.refBidiL1(0, f.POC), mbX, mbY)
+					}
 				} else if applyDirectSpatial {
 					applyB8x8DirectSpatial(mbBidi, directRefL0, directMVL0, directRefL1, directMVL1, d.refBidiL1(0, f.POC), mbX, mbY)
 				}
