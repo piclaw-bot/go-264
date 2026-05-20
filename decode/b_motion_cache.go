@@ -131,11 +131,15 @@ func (c bMotionCache) initDirect16x16(mb *syntax.MBBidi, refL0 int8, mvL0 syntax
 	mb.MVL1[0] = mvL1
 }
 
-func (c bMotionCache) applyDirect16x16Spatial(mbX, mbY int, mb *syntax.MBBidi, colocated *frame.Frame) {
-	applyBDirect16x16SpatialSubMVs(mb, colocated, mbX, mbY)
-}
-
-func (c bMotionCache) applyDirect8x8Spatial(mbX, mbY int, mb *syntax.MBBidi, refL0 int8, mvL0 syntax.MotionVector, refL1 int8, mvL1 syntax.MotionVector, colocated *frame.Frame) {
+func (c bMotionCache) applyDirectSpatial(mbX, mbY int, mb *syntax.MBBidi, refL0 int8, mvL0 syntax.MotionVector, refL1 int8, mvL1 syntax.MotionVector, colocated *frame.Frame) {
+	if mb == nil {
+		return
+	}
+	if mb.MBType == syntax.BMBTypeDirect16x16 {
+		c.initDirect16x16(mb, refL0, mvL0, refL1, mvL1)
+		applyBDirect16x16SpatialSubMVs(mb, colocated, mbX, mbY)
+		return
+	}
 	applyB8x8DirectSpatial(mb, refL0, mvL0, refL1, mvL1, colocated, mbX, mbY)
 }
 

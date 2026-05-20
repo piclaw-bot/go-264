@@ -61,6 +61,17 @@ func TestBMotionCacheSaveL0ToFrame(t *testing.T) {
 	}
 }
 
+func TestBMotionCacheApplyDirectSpatialInitializesDirect16x16(t *testing.T) {
+	c := newBMotionCache(4, 1)
+	mb := &syntax.MBBidi{MBType: syntax.BMBTypeDirect16x16}
+	mv0 := syntax.MotionVector{X: 1, Y: 2}
+	mv1 := syntax.MotionVector{X: -3, Y: 4}
+	c.applyDirectSpatial(0, 0, mb, 1, mv0, 0, mv1, nil)
+	if mb.RefIdxL0[0] != 1 || mb.MVL0[0] != mv0 || mb.MVL1[0] != mv1 {
+		t.Fatalf("direct spatial init mismatch: %+v", mb)
+	}
+}
+
 func TestBMotionCacheInitDirect16x16(t *testing.T) {
 	c := newBMotionCache(4, 1)
 	mb := &syntax.MBBidi{MBType: syntax.BMBTypeDirect16x16}

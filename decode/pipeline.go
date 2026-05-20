@@ -592,9 +592,10 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					// B_Direct_16x16 skip: QP unchanged, lastQScaleDiff resets to 0.
 					cabacLastQScaleDiff = 0
 					mbBidi.DirectSpatial = hdr.DirectSpatialMvPred
-					bmc.initDirect16x16(mbBidi, directRefL0, directMVL0, directRefL1, directMVL1)
 					if applyDirectSpatial {
-						bmc.applyDirect16x16Spatial(mbX, mbY, mbBidi, d.refBidiL1(0, f.POC))
+						bmc.applyDirectSpatial(mbX, mbY, mbBidi, directRefL0, directMVL0, directRefL1, directMVL1, d.refBidiL1(0, f.POC))
+					} else {
+						bmc.initDirect16x16(mbBidi, directRefL0, directMVL0, directRefL1, directMVL1)
 					}
 					d.reconstructMBBidi(f, mbBidi, mbX, mbY, currentQP)
 					nzCtx[mbIdx] = mbBidi.TotalCoeff
@@ -629,12 +630,13 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					currentQP = updateQP(currentQP, int(mbBidi.QPDelta))
 					mbBidi.DirectSpatial = hdr.DirectSpatialMvPred
 					if mbBidi.MBType == syntax.BMBTypeDirect16x16 {
-						bmc.initDirect16x16(mbBidi, directRefL0, directMVL0, directRefL1, directMVL1)
 						if applyDirectSpatial {
-							bmc.applyDirect16x16Spatial(mbX, mbY, mbBidi, d.refBidiL1(0, f.POC))
+							bmc.applyDirectSpatial(mbX, mbY, mbBidi, directRefL0, directMVL0, directRefL1, directMVL1, d.refBidiL1(0, f.POC))
+						} else {
+							bmc.initDirect16x16(mbBidi, directRefL0, directMVL0, directRefL1, directMVL1)
 						}
 					} else if applyDirectSpatial {
-						bmc.applyDirect8x8Spatial(mbX, mbY, mbBidi, directRefL0, directMVL0, directRefL1, directMVL1, d.refBidiL1(0, f.POC))
+						bmc.applyDirectSpatial(mbX, mbY, mbBidi, directRefL0, directMVL0, directRefL1, directMVL1, d.refBidiL1(0, f.POC))
 					}
 					d.reconstructMBBidi(f, mbBidi, mbX, mbY, currentQP)
 					nzCtx[mbIdx] = mbBidi.TotalCoeff
@@ -690,12 +692,13 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 				currentQP = updateQP(currentQP, int(mbBidi.QPDelta))
 				mbBidi.DirectSpatial = hdr.DirectSpatialMvPred
 				if mbBidi.MBType == syntax.BMBTypeDirect16x16 {
-					bmc.initDirect16x16(mbBidi, directRefL0, directMVL0, directRefL1, directMVL1)
 					if applyDirectSpatial {
-						bmc.applyDirect16x16Spatial(mbX, mbY, mbBidi, d.refBidiL1(0, f.POC))
+						bmc.applyDirectSpatial(mbX, mbY, mbBidi, directRefL0, directMVL0, directRefL1, directMVL1, d.refBidiL1(0, f.POC))
+					} else {
+						bmc.initDirect16x16(mbBidi, directRefL0, directMVL0, directRefL1, directMVL1)
 					}
 				} else if applyDirectSpatial {
-					bmc.applyDirect8x8Spatial(mbX, mbY, mbBidi, directRefL0, directMVL0, directRefL1, directMVL1, d.refBidiL1(0, f.POC))
+					bmc.applyDirectSpatial(mbX, mbY, mbBidi, directRefL0, directMVL0, directRefL1, directMVL1, d.refBidiL1(0, f.POC))
 				}
 				d.reconstructMBBidi(f, mbBidi, mbX, mbY, currentQP)
 				mbFFTypeCtx[mbIdx] = ffBidiMBType(mbBidi)
