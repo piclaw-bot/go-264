@@ -77,6 +77,18 @@ func TestBMotionCacheInitDirect16x16(t *testing.T) {
 	}
 }
 
+func TestBMotionCacheApplyInterMVPredictors(t *testing.T) {
+	c := newBMotionCache(8, 1)
+	// Left neighbour at x4=3,y4=0 predicts the current MB at x4=4,y4=0.
+	c.ref4(0)[3] = 0
+	c.mv4(0)[3] = syntax.MotionVector{X: 2, Y: 3}
+	mb := &syntax.MBInter{MBType: syntax.PMBTypeP16x16, RefIdx: [4]int8{0}}
+	c.applyInterMVPredictors(mb, 1, 0)
+	if mb.MV[0] != (syntax.MotionVector{X: 2, Y: 3}) {
+		t.Fatalf("predicted MV=%+v want {2,3}", mb.MV[0])
+	}
+}
+
 func TestBMotionCacheWriteBackInterL0(t *testing.T) {
 	c := newBMotionCache(4, 1)
 	mb := &syntax.MBInter{MBType: syntax.PMBTypeP16x16, RefIdx: [4]int8{0}, MV: [4]syntax.MotionVector{{X: 2, Y: -1}}}
