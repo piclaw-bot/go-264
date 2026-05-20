@@ -23,6 +23,7 @@ GO_RE = re.compile(
     r'mv0=\{(?P<mv0x>-?\d+),(?P<mv0y>-?\d+)\} mv1=\{(?P<mv1x>-?\d+),(?P<mv1y>-?\d+)\}'
     r'(?: mv0p1=\{(?P<mv0p1x>-?\d+),(?P<mv0p1y>-?\d+)\} mv1p1=\{(?P<mv1p1x>-?\d+),(?P<mv1p1y>-?\d+)\})?.*?'
     r'sub0=(?P<sub0>\d+) sub1=(?P<sub1>\d+) sub2=(?P<sub2>\d+) sub3=(?P<sub3>\d+)'
+    r'(?: submv0=\{(?P<submv0x>-?\d+),(?P<submv0y>-?\d+)\} submv1=\{(?P<submv1x>-?\d+),(?P<submv1y>-?\d+)\} submv2=\{(?P<submv2x>-?\d+),(?P<submv2y>-?\d+)\} submv3=\{(?P<submv3x>-?\d+),(?P<submv3y>-?\d+)\})?'
 )
 
 def row(m: re.Match[str]) -> dict[str, object]:
