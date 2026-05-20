@@ -15,6 +15,7 @@ FF_RE = re.compile(
     r'mv0=\{(?P<mv0x>-?\d+),(?P<mv0y>-?\d+)\} mv1=\{(?P<mv1x>-?\d+),(?P<mv1y>-?\d+)\}'
     r'(?: mv0p1=\{(?P<mv0p1x>-?\d+),(?P<mv0p1y>-?\d+)\} mv1p1=\{(?P<mv1p1x>-?\d+),(?P<mv1p1y>-?\d+)\})?.*?'
     r'sub0=(?P<sub0>\d+) sub1=(?P<sub1>\d+) sub2=(?P<sub2>\d+) sub3=(?P<sub3>\d+)'
+    r'(?: submv0=\{(?P<submv0x>-?\d+),(?P<submv0y>-?\d+)\} submv1=\{(?P<submv1x>-?\d+),(?P<submv1y>-?\d+)\} submv2=\{(?P<submv2x>-?\d+),(?P<submv2y>-?\d+)\} submv3=\{(?P<submv3x>-?\d+),(?P<submv3y>-?\d+)\})?'
 )
 GO_RE = re.compile(
     r'GOBIDI mb=(?P<mb>\d+).*?poc=(?P<frame>\d+)\b.*?mb_type=(?P<mbtype>-?\d+) '
@@ -34,6 +35,7 @@ def row(m: re.Match[str]) -> dict[str, object]:
         'ref_mv': (iv('ref0'), iv('ref1'), iv('mv0x'), iv('mv0y'), iv('mv1x'), iv('mv1y')),
         'p1': (iv('mv0p1x'), iv('mv0p1y'), iv('mv1p1x'), iv('mv1p1y')),
         'sub': (iv('sub0'), iv('sub1'), iv('sub2'), iv('sub3')),
+        'submv': ((iv('submv0x'), iv('submv0y')), (iv('submv1x'), iv('submv1y')), (iv('submv2x'), iv('submv2y')), (iv('submv3x'), iv('submv3y'))),
     }
 
 def load(path: str, regex: re.Pattern[str]) -> dict[tuple[int, int, int], dict[str, object]]:
@@ -167,8 +169,12 @@ def main() -> None:
             go_8x8_like = int(g['mbtype']) == 22
             if (ff_8x8_like or go_8x8_like) and f['sub'] != g['sub']:
                 fields.append('sub')
+            direct_flags = {12552, 61704}
+            direct_idxs = [i for i, (fs, gs) in enumerate(zip(f['sub'], g['sub'])) if fs in direct_flags and gs in direct_flags]
+            if any(f['submv'][i] != g['submv'][i] for i in direct_idxs):
+                fields.append('submv')
             if fields:
-                print(f'mb={mb:04d} fields={",".join(fields)} ff_ref_mv={f["ref_mv"]} go_ref_mv={g["ref_mv"]} ff_p1={f["p1"]} go_p1={g["p1"]} ff_sub={f["sub"]} go_sub={g["sub"]}')
+                print(f'mb={mb:04d} fields={",".join(fields)} ff_ref_mv={f["ref_mv"]} go_ref_mv={g["ref_mv"]} ff_p1={f["p1"]} go_p1={g["p1"]} ff_sub={f["sub"]} go_sub={g["sub"]} ff_submv={f["submv"]} go_submv={g["submv"]}')
                 diffs += 1
         if diffs >= args.limit:
             break
