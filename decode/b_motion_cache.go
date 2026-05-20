@@ -45,6 +45,14 @@ func (c bMotionCache) ref4(list int) []int8 {
 	return c.ref[list]
 }
 
+func (c bMotionCache) refIdxCtxs(mbX, mbY int) [4]int {
+	return cabacRefIdxCtxsForMB(c.ref[0], c.stride4, mbX, mbY)
+}
+
+func (c bMotionCache) get(list, x4, y4 int) (syntax.MotionVector, int8) {
+	return getMV4(c.mv4(list), c.ref4(list), c.stride4, x4, y4)
+}
+
 func (c bMotionCache) predictDirectSpatial(list, x4, y4 int) (int8, syntax.MotionVector) {
 	return predictBDirectSpatialL0ForSimpleRefs(c.mv4(list), c.ref4(list), c.stride4, x4, y4)
 }
