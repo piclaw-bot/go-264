@@ -62,7 +62,21 @@ func TestGetMV4HandlesInvalidInputs(t *testing.T) {
 	}
 }
 
-func TestWriteBackBidiDirectPreservesChosenL0MV(t *testing.T) {
+func TestP16x8PredictsBottomFromCurrentTopPartition(t *testing.T) {
+	mv4 := make([]syntax.MotionVector, 16)
+	ref4 := make([]int8, 16)
+	mb := &syntax.MBInter{
+		MBType: syntax.PMBTypeP16x8,
+		RefIdx: [4]int8{0, 0},
+		MV:     [4]syntax.MotionVector{{X: 3, Y: 3}, {X: 0, Y: -1}},
+	}
+	applyMVPredictors(mb, mv4, ref4, 4, 0, 0)
+	if got, want := mb.MV[1], (syntax.MotionVector{X: 3, Y: 2}); got != want {
+		t.Fatalf("bottom P16x8 MV=%+v want %+v", got, want)
+	}
+}
+
+func TestWriteBackBidiDirectPreservesZeroSubMV(t *testing.T) {
 	mv4 := make([]syntax.MotionVector, 16)
 	ref4 := make([]int8, 16)
 	mb := &syntax.MBBidi{
@@ -72,8 +86,8 @@ func TestWriteBackBidiDirectPreservesChosenL0MV(t *testing.T) {
 	}
 	writeBackBidiL0Context(mv4, ref4, 4, 0, 0, mb)
 	for i := 0; i < 16; i++ {
-		if mv4[i] != mb.MVL0[0] || ref4[i] != 0 {
-			t.Fatalf("direct writeback idx=%d mv=%+v ref=%d, want %+v/ref0", i, mv4[i], ref4[i], mb.MVL0[0])
+		if mv4[i] != (syntax.MotionVector{}) || ref4[i] != 0 {
+			t.Fatalf("direct writeback idx=%d mv=%+v ref=%d, want zero/ref0", i, mv4[i], ref4[i])
 		}
 	}
 }

@@ -307,9 +307,14 @@ func applyMVPredictors(mb *syntax.MBInter, mv4 []syntax.MotionVector, ref4 []int
 	case syntax.PMBTypeP16x16:
 		addMV(&mb.MV[0], predictMotion4x4(mv4, ref4, stride4, mbX*4, mbY*4, 4, mb.RefIdx[0]))
 	case syntax.PMBTypeP16x8:
-		pred0 := predict16x8Motion4x4(mv4, ref4, stride4, mbX*4, mbY*4, 0, mb.RefIdx[0])
-		pred1 := predict16x8Motion4x4(mv4, ref4, stride4, mbX*4, mbY*4, 1, mb.RefIdx[1])
+		x4, y4 := mbX*4, mbY*4
+		pred0 := predict16x8Motion4x4(mv4, ref4, stride4, x4, y4, 0, mb.RefIdx[0])
 		addMV(&mb.MV[0], pred0)
+		// The lower 16x8 partition predicts after the upper partition is available
+		// in the current-MB MV cache. Without this write-through, left-edge MBs fall
+		// back to unavailable neighbours instead of the just-decoded top half.
+		fillMV4(mv4, ref4, stride4, x4, y4, 4, 2, mb.MV[0], mb.RefIdx[0])
+		pred1 := predict16x8Motion4x4(mv4, ref4, stride4, x4, y4, 1, mb.RefIdx[1])
 		addMV(&mb.MV[1], pred1)
 	case syntax.PMBTypeP8x16:
 		// Predict the right 8x16 partition against the left partition just decoded,
@@ -434,13 +439,8 @@ func writeBackBidiListContext(mv4 []syntax.MotionVector, ref4 []int8, stride4, m
 
 func direct16x16PartMotion(mb *syntax.MBBidi, list, part int) (syntax.MotionVector, int8) {
 	mv, ref := mb.SubMVL0[part*4], mb.RefIdxL0[0]
-	fallback := mb.MVL0[0]
 	if list == 1 {
 		mv, ref = mb.SubMVL1[part*4], mb.RefIdxL1[0]
-		fallback = mb.MVL1[0]
-	}
-	if mv == (syntax.MotionVector{}) && fallback != (syntax.MotionVector{}) {
-		mv = fallback
 	}
 	return mv, ref
 }
