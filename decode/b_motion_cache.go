@@ -181,7 +181,8 @@ func (c bMotionCache) traceBidiWriteBack(mbX, mbY int, mb *syntax.MBBidi) {
 			continue
 		}
 		mv0, mv1 := c.mv[0][idx], c.mv[1][idx]
-		fmt.Fprintf(os.Stderr, "GOMOTWRITE mb=%04d x=%02d y=%02d type=%d part=%d ref0=%d mv0={%d,%d} ref1=%d mv1={%d,%d}\n", mbAddr, mbX, mbY, mb.MBType, part, c.ref[0][idx], mv0.X, mv0.Y, c.ref[1][idx], mv1.X, mv1.Y)
+		sub0, sub1 := mb.SubMVL0[part*4], mb.SubMVL1[part*4]
+		fmt.Fprintf(os.Stderr, "GOMOTWRITE mb=%04d x=%02d y=%02d type=%d part=%d ref0=%d mv0={%d,%d} ref1=%d mv1={%d,%d} sub0={%d,%d} sub1={%d,%d}\n", mbAddr, mbX, mbY, mb.MBType, part, c.ref[0][idx], mv0.X, mv0.Y, c.ref[1][idx], mv1.X, mv1.Y, sub0.X, sub0.Y, sub1.X, sub1.Y)
 	}
 }
 
