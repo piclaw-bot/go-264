@@ -1,6 +1,9 @@
 package decode
 
 import (
+	"fmt"
+	"os"
+
 	"github.com/rcarmo/go-264/entropy/cabac"
 	"github.com/rcarmo/go-264/frame"
 	"github.com/rcarmo/go-264/syntax"
@@ -159,6 +162,27 @@ func (c bMotionCache) writeBackInterL0(mbX, mbY int, mb *syntax.MBInter) {
 func (c bMotionCache) writeBackBidi(mbX, mbY int, mb *syntax.MBBidi) {
 	writeBackBidiListContext(c.mv[0], c.ref[0], c.stride4, mbX, mbY, mb, 0)
 	writeBackBidiListContext(c.mv[1], c.ref[1], c.stride4, mbX, mbY, mb, 1)
+	c.traceBidiWriteBack(mbX, mbY, mb)
+}
+
+func (c bMotionCache) traceBidiWriteBack(mbX, mbY int, mb *syntax.MBBidi) {
+	if os.Getenv("GO264_MOTION_WRITE_TRACE") == "" || mb == nil || c.stride4 <= 0 {
+		return
+	}
+	mbAddr := 0
+	if c.stride4 >= 4 {
+		mbAddr = mbY*(c.stride4/4) + mbX
+	}
+	for part := 0; part < 4; part++ {
+		x4 := mbX*4 + (part&1)*2
+		y4 := mbY*4 + (part>>1)*2
+		idx := y4*c.stride4 + x4
+		if idx < 0 || idx >= len(c.mv[0]) || idx >= len(c.ref[0]) || idx >= len(c.mv[1]) || idx >= len(c.ref[1]) {
+			continue
+		}
+		mv0, mv1 := c.mv[0][idx], c.mv[1][idx]
+		fmt.Fprintf(os.Stderr, "GOMOTWRITE mb=%04d x=%02d y=%02d type=%d part=%d ref0=%d mv0={%d,%d} ref1=%d mv1={%d,%d}\n", mbAddr, mbX, mbY, mb.MBType, part, c.ref[0][idx], mv0.X, mv0.Y, c.ref[1][idx], mv1.X, mv1.Y)
+	}
 }
 
 func (c bMotionCache) saveL0ToFrame(f *frame.Frame, mbFFTypes []uint32) {
