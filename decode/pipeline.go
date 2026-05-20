@@ -238,12 +238,8 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 	}
 	mv4Stride := mbWidth * 4
 	bmc := newBMotionCache(mv4Stride, mbHeight)
-	mv4Ctx := bmc.mv4(0)
-	mv4L1Ctx := bmc.mv4(1)
 	mvd4Ctx := bmc.mvd4(0)
-	mvd4L1Ctx := bmc.mvd4(1)
 	ref4Ctx := bmc.ref4(0)
-	ref4L1Ctx := bmc.ref4(1)
 	mbFFTypeCtx := make([]uint32, maxMBs)
 	skipRun := 0
 	decodeAfterSkipRun := false
@@ -581,8 +577,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 						topE8B[bc] = -1
 					}
 				}
-				refIdxCtxsB := bmc.refIdxCtxs(mbX, mbY)
-				mbBidi, mbIntra, skipped := decodeCABACBidiMB(
+				mbBidi, mbIntra, skipped := bmc.decodeCABACBidiMB(
 					cabacDec, cabacModels,
 					hdr.NumRefIdxL0Active, hdr.NumRefIdxL1Active,
 					cabacLastQScaleDiff,
@@ -590,7 +585,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					leftCBP, topCBP,
 					leftNonSkip, topNonSkip,
 					!leftNonSkip, !topNonSkip, // leftIsDirect/topIsDirect
-					refIdxCtxsB, mv4Ctx, ref4Ctx, mv4L1Ctx, ref4L1Ctx, mvd4Ctx, mvd4L1Ctx, mv4Stride, mbX, mbY,
+					mbX, mbY,
 					pps.Transform8x8Mode, transform8x8CABACCtx,
 					leftMBType, topMBType,
 					leftChromaPred, topChromaPred,

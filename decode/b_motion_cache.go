@@ -1,6 +1,7 @@
 package decode
 
 import (
+	"github.com/rcarmo/go-264/entropy/cabac"
 	"github.com/rcarmo/go-264/frame"
 	"github.com/rcarmo/go-264/syntax"
 )
@@ -56,6 +57,31 @@ func (c bMotionCache) ref4(list int) []int8 {
 
 func (c bMotionCache) refIdxCtxs(mbX, mbY int) [4]int {
 	return cabacRefIdxCtxsForMB(c.ref[0], c.stride4, mbX, mbY)
+}
+
+func (c bMotionCache) decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
+	numRefL0, numRefL1 uint32, lastQScaleDiff int,
+	leftNZ, topNZ *[16]int, leftChromaNZ, topChromaNZ *[2][4]int,
+	leftCBP, topCBP uint32,
+	leftNonSkip, topNonSkip bool,
+	leftIsDirect, topIsDirect bool,
+	mbX, mbY int,
+	transform8x8Mode bool, transform8x8Ctx int,
+	leftMBType, topMBType uint32,
+	leftChromaPred, topChromaPred int8,
+	leftEdge8x8, topEdge8x8 [2]int8,
+) (*syntax.MBBidi, *syntax.MBIntra, bool) {
+	return decodeCABACBidiMB(dec, models,
+		numRefL0, numRefL1, lastQScaleDiff,
+		leftNZ, topNZ, leftChromaNZ, topChromaNZ,
+		leftCBP, topCBP,
+		leftNonSkip, topNonSkip,
+		leftIsDirect, topIsDirect,
+		c.refIdxCtxs(mbX, mbY), c.mv[0], c.ref[0], c.mv[1], c.ref[1], c.mvd[0], c.mvd[1], c.stride4, mbX, mbY,
+		transform8x8Mode, transform8x8Ctx,
+		leftMBType, topMBType,
+		leftChromaPred, topChromaPred,
+		leftEdge8x8, topEdge8x8)
 }
 
 func (c bMotionCache) predictSkipL0(x4, y4 int) syntax.MotionVector {
