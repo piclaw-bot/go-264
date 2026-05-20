@@ -9,8 +9,8 @@ import (
 
 func TestBMotionCacheInitializesSplitLists(t *testing.T) {
 	c := newBMotionCache(8, 2)
-	if len(c.mv4(0)) != 64 || len(c.mv4(1)) != 64 || len(c.ref4(0)) != 64 || len(c.ref4(1)) != 64 {
-		t.Fatalf("unexpected cache sizes: mv0=%d mv1=%d ref0=%d ref1=%d", len(c.mv4(0)), len(c.mv4(1)), len(c.ref4(0)), len(c.ref4(1)))
+	if len(c.mv4(0)) != 64 || len(c.mv4(1)) != 64 || len(c.mvd4(0)) != 64 || len(c.mvd4(1)) != 64 || len(c.ref4(0)) != 64 || len(c.ref4(1)) != 64 {
+		t.Fatalf("unexpected cache sizes: mv0=%d mv1=%d mvd0=%d mvd1=%d ref0=%d ref1=%d", len(c.mv4(0)), len(c.mv4(1)), len(c.mvd4(0)), len(c.mvd4(1)), len(c.ref4(0)), len(c.ref4(1)))
 	}
 	for list := 0; list < 2; list++ {
 		for i, ref := range c.ref4(list) {

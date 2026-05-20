@@ -13,6 +13,7 @@ import (
 type bMotionCache struct {
 	stride4 int
 	mv      [2][]syntax.MotionVector
+	mvd     [2][]syntax.MotionVector
 	ref     [2][]int8
 }
 
@@ -21,6 +22,7 @@ func newBMotionCache(stride4, mbHeight int) bMotionCache {
 	c := bMotionCache{
 		stride4: stride4,
 		mv:      [2][]syntax.MotionVector{make([]syntax.MotionVector, n), make([]syntax.MotionVector, n)},
+		mvd:     [2][]syntax.MotionVector{make([]syntax.MotionVector, n), make([]syntax.MotionVector, n)},
 		ref:     [2][]int8{make([]int8, n), make([]int8, n)},
 	}
 	for list := 0; list < 2; list++ {
@@ -36,6 +38,13 @@ func (c bMotionCache) mv4(list int) []syntax.MotionVector {
 		return nil
 	}
 	return c.mv[list]
+}
+
+func (c bMotionCache) mvd4(list int) []syntax.MotionVector {
+	if list < 0 || list > 1 {
+		return nil
+	}
+	return c.mvd[list]
 }
 
 func (c bMotionCache) ref4(list int) []int8 {
