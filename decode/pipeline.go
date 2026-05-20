@@ -237,17 +237,14 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 		intra8x8BottomCtx[i] = -1
 	}
 	mv4Stride := mbWidth * 4
-	mv4Ctx := make([]syntax.MotionVector, mv4Stride*mbHeight*4)
-	mv4L1Ctx := make([]syntax.MotionVector, mv4Stride*mbHeight*4)
+	bmc := newBMotionCache(mv4Stride, mbHeight)
+	mv4Ctx := bmc.mv4(0)
+	mv4L1Ctx := bmc.mv4(1)
 	mvd4Ctx := make([]syntax.MotionVector, mv4Stride*mbHeight*4)
 	mvd4L1Ctx := make([]syntax.MotionVector, mv4Stride*mbHeight*4)
-	ref4Ctx := make([]int8, mv4Stride*mbHeight*4)
-	ref4L1Ctx := make([]int8, mv4Stride*mbHeight*4)
+	ref4Ctx := bmc.ref4(0)
+	ref4L1Ctx := bmc.ref4(1)
 	mbFFTypeCtx := make([]uint32, maxMBs)
-	for i := range ref4Ctx {
-		ref4Ctx[i] = -2
-		ref4L1Ctx[i] = -2
-	}
 	skipRun := 0
 	decodeAfterSkipRun := false
 	var cabacDec *cabac.CABACDecoder
@@ -270,8 +267,8 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 		directRefL1, directMVL1 := int8(-1), syntax.MotionVector{}
 		applyDirectSpatial := hdr.DirectSpatialMvPred && hdr.NumRefIdxL0Active <= 2
 		if applyDirectSpatial {
-			directRefL0, directMVL0 = predictBDirectSpatialL0ForSimpleRefs(mv4Ctx, ref4Ctx, mv4Stride, mbX*4, mbY*4)
-			directRefL1, directMVL1 = predictBDirectSpatialL0ForSimpleRefs(mv4L1Ctx, ref4L1Ctx, mv4Stride, mbX*4, mbY*4)
+			directRefL0, directMVL0 = bmc.predictDirectSpatial(0, mbX*4, mbY*4)
+			directRefL1, directMVL1 = bmc.predictDirectSpatial(1, mbX*4, mbY*4)
 			if os.Getenv("GO264_DIRECT_CTX_TRACE") != "" {
 				a1, ar1 := getMV4(mv4L1Ctx, ref4L1Ctx, mv4Stride, mbX*4-1, mbY*4)
 				b1, br1 := getMV4(mv4L1Ctx, ref4L1Ctx, mv4Stride, mbX*4, mbY*4-1)
@@ -619,8 +616,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					nonSkipCtx[mbIdx] = false
 					transform8x8Ctx[mbIdx] = false
 					if applyDirectSpatial {
-						writeBackBidiL0Context(mv4Ctx, ref4Ctx, mv4Stride, mbX, mbY, mbBidi)
-						writeBackBidiL1Context(mv4L1Ctx, ref4L1Ctx, mv4Stride, mbX, mbY, mbBidi)
+						bmc.writeBackBidi(mbX, mbY, mbBidi)
 					}
 					mbQPCtx[mbIdx] = currentQP
 					if cabacDec.DecodeTerminate() == 1 {
@@ -666,8 +662,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					// Write back 4×4 MV/ref contexts for future MVP/ref_idx context. FFmpeg keeps
 					// separate list caches; B_8x8 and two-part B MBs must fill the same shaped
 					// regions, not just MVL0[0] over the whole macroblock.
-					writeBackBidiL0Context(mv4Ctx, ref4Ctx, mv4Stride, mbX, mbY, mbBidi)
-					writeBackBidiL1Context(mv4L1Ctx, ref4L1Ctx, mv4Stride, mbX, mbY, mbBidi)
+					bmc.writeBackBidi(mbX, mbY, mbBidi)
 				}
 				mbQPCtx[mbIdx] = currentQP
 				if cabacDec.DecodeTerminate() == 1 {
