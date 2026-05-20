@@ -3,6 +3,7 @@ package decode
 import (
 	"testing"
 
+	"github.com/rcarmo/go-264/frame"
 	"github.com/rcarmo/go-264/syntax"
 )
 
@@ -31,6 +32,20 @@ func TestBMotionCacheHelpersUseListState(t *testing.T) {
 	ctx := c.refIdxCtxs(0, 0)
 	if ctx[0] != 0 {
 		t.Fatalf("top-left ref ctx=%d want 0", ctx[0])
+	}
+}
+
+func TestBMotionCacheSaveL0ToFrame(t *testing.T) {
+	c := newBMotionCache(4, 1)
+	c.mv4(0)[0] = syntax.MotionVector{X: 7, Y: -2}
+	c.ref4(0)[0] = 1
+	f := &frame.Frame{}
+	c.saveL0ToFrame(f, []uint32{123})
+	if f.MotionStride4 != 4 || len(f.MotionL0) != 16 || len(f.RefIdxL0) != 16 || len(f.MBType) != 1 {
+		t.Fatalf("unexpected saved frame sizes/stride: stride=%d motion=%d ref=%d mbtype=%d", f.MotionStride4, len(f.MotionL0), len(f.RefIdxL0), len(f.MBType))
+	}
+	if f.MotionL0[0] != [2]int16{7, -2} || f.RefIdxL0[0] != 1 || f.MBType[0] != 123 {
+		t.Fatalf("unexpected saved frame values: mv=%v ref=%d mbtype=%d", f.MotionL0[0], f.RefIdxL0[0], f.MBType[0])
 	}
 }
 

@@ -715,13 +715,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 		mbQPCtx[mbIdx] = currentQP
 	}
 
-	f.MotionStride4 = mv4Stride
-	f.MotionL0 = make([][2]int16, len(mv4Ctx))
-	f.RefIdxL0 = append(f.RefIdxL0[:0], ref4Ctx...)
-	f.MBType = append(f.MBType[:0], mbFFTypeCtx...)
-	for i, mv := range mv4Ctx {
-		f.MotionL0[i] = [2]int16{mv.X, mv.Y}
-	}
+	bmc.saveL0ToFrame(f, mbFFTypeCtx)
 	traceSavedMotion(f, mbWidth)
 
 	// In-loop deblocking filter (H.264 §8.7), applied in a second pass over all

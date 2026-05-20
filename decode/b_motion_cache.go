@@ -84,3 +84,16 @@ func (c bMotionCache) writeBackBidi(mbX, mbY int, mb *syntax.MBBidi) {
 	writeBackBidiListContext(c.mv[0], c.ref[0], c.stride4, mbX, mbY, mb, 0)
 	writeBackBidiListContext(c.mv[1], c.ref[1], c.stride4, mbX, mbY, mb, 1)
 }
+
+func (c bMotionCache) saveL0ToFrame(f *frame.Frame, mbFFTypes []uint32) {
+	if f == nil {
+		return
+	}
+	f.MotionStride4 = c.stride4
+	f.MotionL0 = make([][2]int16, len(c.mv[0]))
+	f.RefIdxL0 = append(f.RefIdxL0[:0], c.ref[0]...)
+	f.MBType = append(f.MBType[:0], mbFFTypes...)
+	for i, mv := range c.mv[0] {
+		f.MotionL0[i] = [2]int16{mv.X, mv.Y}
+	}
+}
