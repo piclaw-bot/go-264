@@ -14,7 +14,7 @@ DIRECT_RE = re.compile(
     r'submv2=\{(?P<x2>-?\d+),(?P<y2>-?\d+)\} submv3=\{(?P<x3>-?\d+),(?P<y3>-?\d+)\}'
 )
 WRITE_RE = re.compile(
-    r'GOMOTWRITE mb=(?P<mb>\d+).*?(?:poc=(?P<poc>-?\d+) )?type=.*?part=(?P<part>\d+) ref0=(?P<ref0>-?\d+) mv0=\{(?P<mvx>-?\d+),(?P<mvy>-?\d+)\}.*?'
+    r'GOMOTWRITE mb=(?P<mb>\d+).*?(?:poc=(?P<poc>-?\d+) )?type=(?P<mbtype>\d+) part=(?P<part>\d+) ref0=(?P<ref0>-?\d+) mv0=\{(?P<mvx>-?\d+),(?P<mvy>-?\d+)\}.*?'
     r'sub0=\{(?P<subx>-?\d+),(?P<suby>-?\d+)\}'
 )
 
@@ -38,6 +38,8 @@ def load_write(path: str, poc_filter: int | None = None) -> dict[tuple[int, int]
         if poc_filter is not None and m['poc'] is not None and int(m['poc']) != poc_filter:
             continue
         out[(int(m['mb']), int(m['part']))] = {
+            'poc': int(m['poc']) if m['poc'] is not None else None,
+            'mbtype': int(m['mbtype']),
             'ref0': int(m['ref0']),
             'mv0': (int(m['mvx']), int(m['mvy'])),
             'sub0': (int(m['subx']), int(m['suby'])),
@@ -52,6 +54,7 @@ def main() -> None:
     ap.add_argument('--from-mb', type=int, dest='from_mb')
     ap.add_argument('--to-mb', type=int, dest='to_mb')
     ap.add_argument('--poc', type=int, help='only compare rows for this Go POC')
+    ap.add_argument('--mb-type', type=int, dest='mb_type', help='only compare write rows with this Go MB type')
     ap.add_argument('--ref0', type=int, help='only compare write rows with this ref0')
     ap.add_argument('--only-zero-direct', action='store_true', help='only compare parts whose direct sub-MV representative is zero')
     ap.add_argument('--limit', type=int, default=50)
@@ -71,13 +74,15 @@ def main() -> None:
             w = writes.get((mb, part))
             if w is None:
                 continue
+            if args.mb_type is not None and w['mbtype'] != args.mb_type:
+                continue
             if args.ref0 is not None and w['ref0'] != args.ref0:
                 continue
             if args.only_zero_direct and dmv != (0, 0):
                 continue
             compared += 1
             if w['mv0'] != dmv or w['sub0'] != dmv:
-                print(f'mb={mb:04d} part={part} direct_sub={dmv} write_sub={w["sub0"]} write_mv={w["mv0"]} ref0={w["ref0"]}')
+                print(f'mb={mb:04d} poc={w["poc"]} type={w["mbtype"]} part={part} direct_sub={dmv} write_sub={w["sub0"]} write_mv={w["mv0"]} ref0={w["ref0"]}')
                 diffs += 1
                 if diffs >= args.limit:
                     print(f'compared={compared} diffs={diffs}')
