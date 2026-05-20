@@ -264,13 +264,19 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 			directRefL0, directMVL0 = bmc.predictDirectSpatial(0, mbX*4, mbY*4)
 			directRefL1, directMVL1 = bmc.predictDirectSpatial(1, mbX*4, mbY*4)
 			if os.Getenv("GO264_DIRECT_CTX_TRACE") != "" {
+				a0, ar0 := bmc.get(0, mbX*4-1, mbY*4)
+				b0, br0 := bmc.get(0, mbX*4, mbY*4-1)
+				c0, cr0 := bmc.get(0, mbX*4+4, mbY*4-1)
+				if cr0 == -2 {
+					c0, cr0 = bmc.get(0, mbX*4-1, mbY*4-1)
+				}
 				a1, ar1 := bmc.get(1, mbX*4-1, mbY*4)
 				b1, br1 := bmc.get(1, mbX*4, mbY*4-1)
 				c1, cr1 := bmc.get(1, mbX*4+4, mbY*4-1)
 				if cr1 == -2 {
 					c1, cr1 = bmc.get(1, mbX*4-1, mbY*4-1)
 				}
-				fmt.Fprintf(os.Stderr, "GODIRECTCTX mb=%04d x=%02d y=%02d ref1=%d mv1={%d,%d} A1=%d/{%d,%d} B1=%d/{%d,%d} C1=%d/{%d,%d}\n", mbIdx, mbX, mbY, directRefL1, directMVL1.X, directMVL1.Y, ar1, a1.X, a1.Y, br1, b1.X, b1.Y, cr1, c1.X, c1.Y)
+				fmt.Fprintf(os.Stderr, "GODIRECTCTX mb=%04d x=%02d y=%02d ref0=%d mv0={%d,%d} ref1=%d mv1={%d,%d} A0=%d/{%d,%d} B0=%d/{%d,%d} C0=%d/{%d,%d} A1=%d/{%d,%d} B1=%d/{%d,%d} C1=%d/{%d,%d}\n", mbIdx, mbX, mbY, directRefL0, directMVL0.X, directMVL0.Y, directRefL1, directMVL1.X, directMVL1.Y, ar0, a0.X, a0.Y, br0, b0.X, b0.Y, cr0, c0.X, c0.Y, ar1, a1.X, a1.Y, br1, b1.X, b1.Y, cr1, c1.X, c1.Y)
 			}
 			if directRefL1 < 0 {
 				directMVL1 = syntax.MotionVector{}
