@@ -12,7 +12,7 @@ import re
 
 FF_RE = re.compile(
     r'FFCOLZERO(?P<kind>8?) mb=(?P<mb>\d+)(?: i8=(?P<i8>\d+))?(?: i4=(?P<i4>\d+))?.*?'
-    r'colref0=(?P<ref>-?\d+).*?colmv=\{(?P<x>-?\d+),(?P<y>-?\d+)\}.*?'
+    r'colref0=(?P<ref>-?\d+).*?colmv=\{(?P<x>-?\d+),(?P<y>-?\d+)\} ref0=(?P<ref0>-?\d+) ref1=(?P<ref1>-?\d+).*?'
     r'is_b8x8=(?P<is_b8x8>\d+) sub_type=(?P<sub_type>\d+) mb_type=(?P<mb_type>-?\d+)'
 )
 GO_RE = re.compile(
@@ -35,6 +35,8 @@ def load_ff(path: str, width: int) -> dict[tuple[int, int, int], dict[str, objec
         occurrence[key_base] = occ + 1
         rows[(mb, i8, occ)] = {
             'ref_mv': (int(m['ref']), int(m['x']), int(m['y'])),
+            'ref0': int(m['ref0']),
+            'ref1': int(m['ref1']),
             'is_b8x8': int(m['is_b8x8']),
             'sub_type': int(m['sub_type']),
             'mb_type': int(m['mb_type']),
@@ -75,6 +77,8 @@ def main() -> None:
     ap.add_argument('--occurrence', type=int, help='compare only one per-macroblock/part occurrence')
     ap.add_argument('--go-colpoc', type=int, help='compare only Go colocated rows that used this reference POC')
     ap.add_argument('--go-curpoc', type=int, help='compare only Go rows emitted while decoding this current POC')
+    ap.add_argument('--ff-ref0', type=int, help='compare only FF rows with this resolved direct ref0')
+    ap.add_argument('--ff-ref1', type=int, help='compare only FF rows with this resolved direct ref1')
     ap.add_argument('--match-any-occurrence', action='store_true', help='for duplicate rows, accept any Go occurrence with the same mb/part/ref_mv')
     ap.add_argument('--limit', type=int, default=20)
     ap.add_argument('--fail-on-diff', action='store_true')
@@ -96,6 +100,10 @@ def main() -> None:
         if args.occurrence is not None and occ != args.occurrence:
             continue
         f = ff[key]
+        if args.ff_ref0 is not None and f['ref0'] != args.ff_ref0:
+            continue
+        if args.ff_ref1 is not None and f['ref1'] != args.ff_ref1:
+            continue
         g = go.get(key)
         if args.match_any_occurrence:
             candidates = [v for (gmb, gpart, _), v in go.items() if gmb == mb and gpart == part]
