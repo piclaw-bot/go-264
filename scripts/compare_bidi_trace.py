@@ -142,6 +142,9 @@ def main() -> None:
     ap.add_argument('--ff-occurrence', type=int, default=0)
     ap.add_argument('--go-poc', type=int, required=True)
     ap.add_argument('--go-occurrence', type=int, default=0)
+    ap.add_argument('--mb', type=int, help='compare only one absolute macroblock index')
+    ap.add_argument('--from-mb', type=int, dest='from_mb', help='start comparison at this absolute macroblock index')
+    ap.add_argument('--to-mb', type=int, dest='to_mb', help='stop comparison after this absolute macroblock index')
     ap.add_argument('--limit', type=int, default=50)
     ap.add_argument('--fail-on-diff', action='store_true')
     args = ap.parse_args()
@@ -150,6 +153,12 @@ def main() -> None:
     keys = sorted(k for k in ff if k[0] == args.ff_frame and k[1] == args.ff_occurrence)
     rows = diffs = 0
     for _, _, mb in keys:
+        if args.mb is not None and mb != args.mb:
+            continue
+        if args.from_mb is not None and mb < args.from_mb:
+            continue
+        if args.to_mb is not None and mb > args.to_mb:
+            continue
         f = ff[(args.ff_frame, args.ff_occurrence, mb)]
         g = go.get((args.go_poc, args.go_occurrence, mb))
         rows += 1
