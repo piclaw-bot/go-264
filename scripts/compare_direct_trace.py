@@ -93,6 +93,7 @@ def main():
     ap.add_argument('--ff-occurrence', type=int, default=0, help='which repeated frame_num group to compare')
     ap.add_argument('--go-poc', type=int, required=True)
     ap.add_argument('--go-occurrence', type=int, default=0, help='which repeated Go POC group to compare')
+    ap.add_argument('--spatial', type=int, choices=[0, 1], help='compare only rows with this direct_spatial flag on both sides')
     ap.add_argument('--limit', type=int, default=50)
     ap.add_argument('--compare-subtypes', action='store_true', help='also report direct sub-type shape differences; off by default because FFDIRECT is pre-explicit-MVD for mixed B_8x8 rows')
     ap.add_argument('--fail-on-diff', action='store_true', help='exit non-zero when any compared row differs or is missing')
@@ -110,7 +111,11 @@ def main():
         return
     for _, _, mb in frame_keys:
         f = ff[(args.ff_frame, args.ff_occurrence, mb)]
+        if args.spatial is not None and f.get('spatial', -1) != args.spatial:
+            continue
         g = go.get((args.go_poc, args.go_occurrence, mb))
+        if args.spatial is not None and g is not None and g.get('spatial', -1) != args.spatial:
+            continue
         rows += 1
         if g is None:
             print(f'mb={mb:04d} missing_go')
