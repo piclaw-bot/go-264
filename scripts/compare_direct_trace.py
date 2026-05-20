@@ -24,7 +24,7 @@ FF_RE = re.compile(
     r'submv3=\{(?P<submv3x>-?\d+),(?P<submv3y>-?\d+)\})?'
 )
 GO_RE = re.compile(
-    r'GODIRECT mb=(?P<mb>\d+).*?poc=(?P<frame>\d+)\b.*?mb_type=(?P<mbtype>\d+) '
+    r'GODIRECT mb=(?P<mb>\d+).*?poc=(?P<frame>\d+)\b(?:.*?spatial=(?P<spatial>\d+))?.*?mb_type=(?P<mbtype>\d+) '
     r'ref0=(?P<ref0>-?\d+) ref1=(?P<ref1>-?\d+) '
     r'mv0=\{(?P<mv0x>-?\d+),(?P<mv0y>-?\d+)\} mv1=\{(?P<mv1x>-?\d+),(?P<mv1y>-?\d+)\}.*?'
     r'sub0=(?P<sub0>\d+) sub1=(?P<sub1>\d+) sub2=(?P<sub2>\d+) sub3=(?P<sub3>\d+)'
@@ -42,6 +42,7 @@ def row_from_match(m: re.Match[str]) -> dict[str, object]:
     return {
         'mb': iv('mb'),
         'frame': iv('frame'),
+        'spatial': iv('spatial', -1),
         'ref_mv': (iv('ref0'), iv('ref1'), iv('mv0x'), iv('mv0y'), iv('mv1x'), iv('mv1y')),
         'sub': (iv('sub0'), iv('sub1'), iv('sub2'), iv('sub3')),
         'submv': (
@@ -126,6 +127,8 @@ def main():
         # decode overwrites non-direct cache cells. Top-level ref/mv fields are
         # therefore stale unless the whole row is direct; compare direct sub-MVs
         # below instead.
+        if g.get('spatial', -1) >= 0 and f.get('spatial', -1) >= 0 and f['spatial'] != g['spatial']:
+            mismatch.append('spatial')
         if all_direct and f['ref_mv'] != g['ref_mv']:
             mismatch.append('ref_mv')
         if args.compare_subtypes and any((fs not in direct_flags or gs not in direct_flags) and fs != gs for fs, gs in zip(f['sub'], g['sub'])):

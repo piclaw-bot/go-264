@@ -27,6 +27,7 @@ const (
 // MBBidi describes a decoded B-slice macroblock.
 type MBBidi struct {
 	MBType           uint32
+	DirectSpatial    bool // slice direct_spatial_mv_pred_flag, filled by decoder for diagnostics/reconstruction
 	RefIdxL0         [4]int8
 	RefIdxL1         [4]int8
 	MVL0             [4]MotionVector

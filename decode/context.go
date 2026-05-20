@@ -154,6 +154,13 @@ func cabacTraceEdgeChromaNZ(mbX, mbY int, leftNZ, topNZ *[2][4]int) (*[2][4]int,
 	return leftNZ, topNZ
 }
 
+func boolInt(v bool) int {
+	if v {
+		return 1
+	}
+	return 0
+}
+
 func clampInt(v, lo, hi int) int {
 	if v < lo {
 		return lo

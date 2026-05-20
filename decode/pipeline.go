@@ -602,6 +602,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 				if skipped {
 					// B_Direct_16x16 skip: QP unchanged, lastQScaleDiff resets to 0.
 					cabacLastQScaleDiff = 0
+					mbBidi.DirectSpatial = hdr.DirectSpatialMvPred
 					mbBidi.RefIdxL0[0] = directRefL0
 					mbBidi.RefIdxL1 = [4]int8{directRefL1, directRefL1, directRefL1, directRefL1}
 					mbBidi.MVL0[0] = directMVL0
@@ -638,6 +639,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 				} else {
 					cabacLastQScaleDiff = int(mbBidi.QPDelta)
 					currentQP = updateQP(currentQP, int(mbBidi.QPDelta))
+					mbBidi.DirectSpatial = hdr.DirectSpatialMvPred
 					if mbBidi.MBType == syntax.BMBTypeDirect16x16 {
 						mbBidi.RefIdxL0[0] = directRefL0
 						mbBidi.RefIdxL1 = [4]int8{directRefL1, directRefL1, directRefL1, directRefL1}
@@ -673,7 +675,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					skipRun = int(r.ReadUE())
 				}
 				if skipRun > 0 {
-					d.reconstructMBBidi(f, &syntax.MBBidi{MBType: syntax.BMBTypeDirect16x16, RefIdxL1: [4]int8{-1, -1, -1, -1}}, mbX, mbY, currentQP)
+					d.reconstructMBBidi(f, &syntax.MBBidi{MBType: syntax.BMBTypeDirect16x16, DirectSpatial: hdr.DirectSpatialMvPred, RefIdxL1: [4]int8{-1, -1, -1, -1}}, mbX, mbY, currentQP)
 					skipRun--
 					decodeAfterSkipRun = skipRun == 0
 					continue
@@ -699,6 +701,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 				mbFFTypeCtx[mbIdx] = ffBidiMBType(mbBidi)
 			} else {
 				currentQP = updateQP(currentQP, int(mbBidi.QPDelta))
+				mbBidi.DirectSpatial = hdr.DirectSpatialMvPred
 				if mbBidi.MBType == syntax.BMBTypeDirect16x16 {
 					mbBidi.RefIdxL0[0] = directRefL0
 					mbBidi.RefIdxL1 = [4]int8{directRefL1, directRefL1, directRefL1, directRefL1}
