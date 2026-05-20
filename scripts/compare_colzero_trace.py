@@ -17,7 +17,7 @@ FF_RE = re.compile(
 )
 GO_RE = re.compile(
     r'GOCOLZERO mbx=(?P<mbx>\d+) mby=(?P<mby>\d+) part=(?P<part>\d+).*?'
-    r'colref0=(?P<ref>-?\d+) colmv=\{(?P<x>-?\d+),(?P<y>-?\d+)\} zero=(?P<zero>true|false)'
+    r'colpoc=(?P<colpoc>-?\d+) colref0=(?P<ref>-?\d+) colmv=\{(?P<x>-?\d+),(?P<y>-?\d+)\} zero=(?P<zero>true|false)'
 )
 
 
@@ -58,6 +58,7 @@ def load_go(path: str, width: int) -> dict[tuple[int, int, int], dict[str, objec
         occurrence[key_base] = occ + 1
         rows[(mb, part, occ)] = {
             'ref_mv': (int(m['ref']), int(m['x']), int(m['y'])),
+            'colpoc': int(m['colpoc']),
             'zero': m['zero'] == 'true',
         }
     return rows
@@ -70,11 +71,14 @@ def main() -> None:
     ap.add_argument('--width', type=int, default=40, help='macroblock width for bbb 640px fixture')
     ap.add_argument('--mb', type=int, help='compare only one absolute macroblock index')
     ap.add_argument('--part', type=int, help='compare only one 8x8 partition index')
+    ap.add_argument('--go-colpoc', type=int, help='compare only Go colocated rows that used this reference POC')
     ap.add_argument('--limit', type=int, default=20)
     ap.add_argument('--fail-on-diff', action='store_true')
     args = ap.parse_args()
     ff = load_ff(args.ffcolzero, args.width)
     go = load_go(args.gocolzero, args.width)
+    if args.go_colpoc is not None:
+        go = {k: v for k, v in go.items() if v['colpoc'] == args.go_colpoc}
     diffs = 0
     compared = 0
     for key in sorted(ff):
@@ -90,7 +94,7 @@ def main() -> None:
             print(f'mb={mb:04d} part={part} occ={occ} missing_go ff_ref_mv={f["ref_mv"]} is_b8x8={f["is_b8x8"]} sub_type={f["sub_type"]} mb_type={f["mb_type"]}')
             diffs += 1
         elif f['ref_mv'] != g['ref_mv']:
-            print(f'mb={mb:04d} part={part} occ={occ} ref_mv ff={f["ref_mv"]} go={g["ref_mv"]} go_zero={g["zero"]}')
+            print(f'mb={mb:04d} part={part} occ={occ} ref_mv ff={f["ref_mv"]} go={g["ref_mv"]} go_colpoc={g["colpoc"]} go_zero={g["zero"]}')
             diffs += 1
         if diffs >= args.limit:
             break
