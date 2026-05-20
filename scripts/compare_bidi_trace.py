@@ -171,7 +171,14 @@ def main() -> None:
             if (ff_8x8_like or go_8x8_like) and f['sub'] != g['sub']:
                 fields.append('sub')
             direct_flags = {12552, 61704}
-            direct_idxs = [i for i, (fs, gs) in enumerate(zip(f['sub'], g['sub'])) if fs in direct_flags and gs in direct_flags]
+            # submv fields trace list0 representatives. Ignore direct-looking
+            # sub flags when the resolved MB/partition does not use list0;
+            # FFmpeg can leave direct sub flags in L1-only rows where list0
+            # cache contents are intentionally stale/noisy.
+            direct_idxs = [
+                i for i, (fs, gs) in enumerate(zip(f['sub'], g['sub']))
+                if fs in direct_flags and gs in direct_flags and ff_uses(f, 0, i) and go_uses(g, 0, i)
+            ]
             if any(f['submv'][i] != g['submv'][i] for i in direct_idxs):
                 fields.append('submv')
             if fields:
