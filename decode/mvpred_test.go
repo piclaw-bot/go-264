@@ -101,14 +101,14 @@ func TestColocatedDirect8x8ZeroUsesFFmpegRepresentative(t *testing.T) {
 	idx := 7*col.MotionStride4 + 7
 	col.RefIdxL0[idx] = 0
 	col.MotionL0[idx] = [2]int16{-1, 1}
-	if !colocatedDirect8x8Zero(col, 1, 1, 3) {
+	if !colocatedDirect8x8Zero(col, 1, 1, 3, 6) {
 		t.Fatalf("expected FFmpeg representative {-1,1}/ref0 to trigger direct zero")
 	}
 	col.MotionL0[idx] = [2]int16{-1, 2}
-	if colocatedDirect8x8Zero(col, 1, 1, 3) {
+	if colocatedDirect8x8Zero(col, 1, 1, 3, 6) {
 		t.Fatalf("expected y magnitude > 1 not to trigger direct zero")
 	}
-	if colocatedDirect8x8Zero(col, -1, 1, 3) || colocatedDirect8x8Zero(col, 1, -1, 3) || colocatedDirect8x8Zero(col, 1, 1, 4) {
+	if colocatedDirect8x8Zero(col, -1, 1, 3, 6) || colocatedDirect8x8Zero(col, 1, -1, 3, 6) || colocatedDirect8x8Zero(col, 1, 1, 4, 6) {
 		t.Fatalf("invalid macroblock coordinates or partition must not sample wrapped cache positions")
 	}
 }

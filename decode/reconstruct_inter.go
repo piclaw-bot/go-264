@@ -696,7 +696,7 @@ func (d *Decoder) reconstructMBBidi(f *frame.Frame, mb *syntax.MBBidi, mbX, mbY,
 	if os.Getenv("GO264_DIRECT_COL_TRACE") != "" && mb.MBType == syntax.BMBTypeDirect16x16 {
 		if colocated := d.refBidiL1(0, f.POC); colocatedDirectUses8x8(colocated, mbX, mbY) {
 			for part := 0; part < 4; part++ {
-				_ = colocatedDirect8x8Zero(colocated, mbX, mbY, part)
+				_ = colocatedDirect8x8Zero(colocated, mbX, mbY, part, f.POC)
 			}
 		}
 	}

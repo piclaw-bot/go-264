@@ -471,7 +471,7 @@ func applyB8x8DirectSpatial(mb *syntax.MBBidi, refL0 int8, mvL0 syntax.MotionVec
 		mb.MVL0[part] = mvL0
 		mb.MVL1[part] = mvL1
 		partMVL0 := mvL0
-		if refL0 == 0 && colocatedDirect8x8Zero(colocated, mbX, mbY, part) {
+		if refL0 == 0 && colocatedDirect8x8Zero(colocated, mbX, mbY, part, -1) {
 			partMVL0 = syntax.MotionVector{}
 		}
 		for j := 0; j < 4; j++ {
@@ -498,7 +498,7 @@ func colocatedDirectUses8x8(colocated *frame.Frame, mbX, mbY int) bool {
 	return colocated.MBType[idx]&ffMBType16x16OrIntra == 0
 }
 
-func colocatedDirect8x8Zero(colocated *frame.Frame, mbX, mbY, part int) bool {
+func colocatedDirect8x8Zero(colocated *frame.Frame, mbX, mbY, part, currentPOC int) bool {
 	if colocated == nil || colocated.MotionStride4 <= 0 || len(colocated.MotionL0) == 0 || len(colocated.RefIdxL0) != len(colocated.MotionL0) || part < 0 || part > 3 {
 		return false
 	}
@@ -517,7 +517,7 @@ func colocatedDirect8x8Zero(colocated *frame.Frame, mbX, mbY, part int) bool {
 	mv := colocated.MotionL0[idx]
 	zero := colocated.RefIdxL0[idx] == 0 && mv[0] >= -1 && mv[0] <= 1 && mv[1] >= -1 && mv[1] <= 1
 	if os.Getenv("GO264_DIRECT_COL_TRACE") != "" {
-		fmt.Fprintf(os.Stderr, "GOCOLZERO mbx=%02d mby=%02d part=%d colpoc=%d colref0=%d colmv={%d,%d} zero=%t\n", mbX, mbY, part, colocated.POC, colocated.RefIdxL0[idx], mv[0], mv[1], zero)
+		fmt.Fprintf(os.Stderr, "GOCOLZERO mbx=%02d mby=%02d part=%d curpoc=%d colpoc=%d colref0=%d colmv={%d,%d} zero=%t\n", mbX, mbY, part, currentPOC, colocated.POC, colocated.RefIdxL0[idx], mv[0], mv[1], zero)
 	}
 	return zero
 }
