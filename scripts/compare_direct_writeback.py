@@ -9,7 +9,7 @@ import argparse
 import re
 
 DIRECT_RE = re.compile(
-    r'GODIRECT mb=(?P<mb>\d+).*?poc=(?P<poc>-?\d+)\b.*?'
+    r'GODIRECT mb=(?P<mb>\d+).*?poc=(?P<poc>-?\d+)\b.*?spatial=(?P<spatial>\d+)\b.*?'
     r'submv0=\{(?P<x0>-?\d+),(?P<y0>-?\d+)\} submv1=\{(?P<x1>-?\d+),(?P<y1>-?\d+)\} '
     r'submv2=\{(?P<x2>-?\d+),(?P<y2>-?\d+)\} submv3=\{(?P<x3>-?\d+),(?P<y3>-?\d+)\}'
 )
@@ -18,7 +18,7 @@ WRITE_RE = re.compile(
     r'sub0=\{(?P<subx>-?\d+),(?P<suby>-?\d+)\}'
 )
 
-def load_direct(path: str, poc_filter: int | None = None) -> dict[int, tuple[tuple[int, int], ...]]:
+def load_direct(path: str, poc_filter: int | None = None, spatial_filter: int | None = None) -> dict[int, tuple[tuple[int, int], ...]]:
     out = {}
     for line in open(path, errors='replace'):
         m = DIRECT_RE.search(line)
@@ -26,7 +26,13 @@ def load_direct(path: str, poc_filter: int | None = None) -> dict[int, tuple[tup
             continue
         if poc_filter is not None and int(m['poc']) != poc_filter:
             continue
-        out[int(m['mb'])] = tuple((int(m[f'x{i}']), int(m[f'y{i}'])) for i in range(4))
+        if spatial_filter is not None and int(m['spatial']) != spatial_filter:
+            continue
+        # Keep the first matching occurrence for a macroblock. Later rows with the
+        # same POC/MB are usually repeated diagnostic emissions (or temporal-direct
+        # probes when --spatial is omitted) and would otherwise hide the row that
+        # produced the write-back trace.
+        out.setdefault(int(m['mb']), tuple((int(m[f'x{i}']), int(m[f'y{i}'])) for i in range(4)))
     return out
 
 def load_write(path: str, poc_filter: int | None = None) -> dict[tuple[int, int], dict[str, object]]:
@@ -54,13 +60,14 @@ def main() -> None:
     ap.add_argument('--from-mb', type=int, dest='from_mb')
     ap.add_argument('--to-mb', type=int, dest='to_mb')
     ap.add_argument('--poc', type=int, help='only compare rows for this Go POC')
+    ap.add_argument('--spatial', type=int, choices=(0, 1), help='only compare GODIRECT rows with this spatial flag')
     ap.add_argument('--mb-type', type=int, dest='mb_type', help='only compare write rows with this Go MB type')
     ap.add_argument('--ref0', type=int, help='only compare write rows with this ref0')
     ap.add_argument('--only-zero-direct', action='store_true', help='only compare parts whose direct sub-MV representative is zero')
     ap.add_argument('--limit', type=int, default=50)
     ap.add_argument('--fail-on-diff', action='store_true')
     args = ap.parse_args()
-    direct = load_direct(args.godirect, args.poc)
+    direct = load_direct(args.godirect, args.poc, args.spatial)
     writes = load_write(args.gomotwrite, args.poc)
     compared = diffs = 0
     for mb in sorted(direct):
