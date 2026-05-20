@@ -73,6 +73,7 @@ def main() -> None:
     ap.add_argument('--part', type=int, help='compare only one 8x8 partition index')
     ap.add_argument('--occurrence', type=int, help='compare only one per-macroblock/part occurrence')
     ap.add_argument('--go-colpoc', type=int, help='compare only Go colocated rows that used this reference POC')
+    ap.add_argument('--match-any-occurrence', action='store_true', help='for duplicate rows, accept any Go occurrence with the same mb/part/ref_mv')
     ap.add_argument('--limit', type=int, default=20)
     ap.add_argument('--fail-on-diff', action='store_true')
     args = ap.parse_args()
@@ -92,6 +93,10 @@ def main() -> None:
             continue
         f = ff[key]
         g = go.get(key)
+        if args.match_any_occurrence:
+            candidates = [v for (gmb, gpart, _), v in go.items() if gmb == mb and gpart == part]
+            exact = [v for v in candidates if v['ref_mv'] == f['ref_mv']]
+            g = exact[0] if exact else (candidates[0] if candidates else None)
         compared += 1
         if g is None:
             print(f'mb={mb:04d} part={part} occ={occ} missing_go ff_ref_mv={f["ref_mv"]} is_b8x8={f["is_b8x8"]} sub_type={f["sub_type"]} mb_type={f["mb_type"]}')
