@@ -238,7 +238,6 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 	}
 	mv4Stride := mbWidth * 4
 	bmc := newBMotionCache(mv4Stride, mbHeight)
-	ref4Ctx := bmc.ref4(0)
 	mbFFTypeCtx := make([]uint32, maxMBs)
 	skipRun := 0
 	decodeAfterSkipRun := false
@@ -434,7 +433,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					intra8x8BottomCtx[idx8] = bottomMode
 				}
 			}
-			writeBackIntra4x4(ref4Ctx, mv4Stride, mbX, mbY)
+			bmc.writeBackIntra(mbX, mbY)
 			d.traceMB(MBTraceEvent{NALType: unit.Type, FrameNum: int(hdr.FrameNum), SliceType: hdr.SliceType, MBAddr: mbIdx, MBX: mbX, MBY: mbY, EntropyCABAC: pps.EntropyCodingMode == 1, Kind: "I", MBType: mb.MBType, CBP: mb.CodedBlockPattern, QPDelta: mb.QPDelta, QP: currentQP, Use8x8: mb.Use8x8Transform, ChromaPred: mb.ChromaPredMode, Intra4x4Mode: mb.IntraPredMode, Intra4x4PredMode: d.traceIntra4x4PredMode, Intra4x4FinalMode: finalIntra4x4Modes(d.intraModes, d.mbW, mbX, mbY), Intra8x8Mode: mb.I8x8PredMode, Intra8x8PredMode: traceI8x8Pred, Intra8x8LeftEdge: leftEdge8x8, Intra8x8TopEdge: topEdge8x8, TotalCoeff: traceTotalCoeffFFmpegOrder(mb.TotalCoeff), ChromaCoeff: mb.ChromaTotalCoeff})
 			if pps.EntropyCodingMode == 1 && cabacDec.DecodeTerminate() == 1 {
 				break
@@ -485,7 +484,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					nonSkipCtx[mbIdx] = true
 					transform8x8Ctx[mbIdx] = mbIntra.Use8x8Transform
 					chromaPredModeCtx[mbIdx] = mbIntra.ChromaPredMode
-					writeBackIntra4x4(ref4Ctx, mv4Stride, mbX, mbY)
+					bmc.writeBackIntra(mbX, mbY)
 					d.traceMB(MBTraceEvent{NALType: unit.Type, FrameNum: int(hdr.FrameNum), SliceType: hdr.SliceType, MBAddr: mbIdx, MBX: mbX, MBY: mbY, EntropyCABAC: true, Kind: "P_INTRA", MBType: mbIntra.MBType, CBP: mbIntra.CodedBlockPattern, QPDelta: mbIntra.QPDelta, QP: currentQP, Use8x8: mbIntra.Use8x8Transform, ChromaPred: mbIntra.ChromaPredMode, Intra4x4Mode: mbIntra.IntraPredMode, Intra4x4FinalMode: finalIntra4x4Modes(d.intraModes, d.mbW, mbX, mbY), Intra8x8Mode: mbIntra.I8x8PredMode, TotalCoeff: traceTotalCoeffFFmpegOrder(mbIntra.TotalCoeff), ChromaCoeff: mbIntra.ChromaTotalCoeff})
 					if cabacDec.DecodeTerminate() == 1 {
 						break
@@ -546,7 +545,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 				mbIsIntraCtx[mbIdx] = true
 				nzCtx[mbIdx] = mb.TotalCoeff
 				chromaNZCtx[mbIdx] = mb.ChromaTotalCoeff
-				writeBackIntra4x4(ref4Ctx, mv4Stride, mbX, mbY)
+				bmc.writeBackIntra(mbX, mbY)
 			} else {
 				bmc.applyInterMVPredictors(&mbInter, mbX, mbY)
 				currentQP = updateQP(currentQP, int(mbInter.QPDelta))
