@@ -77,6 +77,20 @@ func TestBMotionCacheInitDirect16x16(t *testing.T) {
 	}
 }
 
+func TestBMotionCacheWriteBackInterL0(t *testing.T) {
+	c := newBMotionCache(4, 1)
+	mb := &syntax.MBInter{MBType: syntax.PMBTypeP16x16, RefIdx: [4]int8{0}, MV: [4]syntax.MotionVector{{X: 2, Y: -1}}}
+	c.writeBackInterL0(0, 0, mb)
+	for i := 0; i < 16; i++ {
+		if c.mv4(0)[i] != mb.MV[0] || c.ref4(0)[i] != 0 {
+			t.Fatalf("L0 idx=%d mv=%+v ref=%d", i, c.mv4(0)[i], c.ref4(0)[i])
+		}
+		if c.ref4(1)[i] != -2 {
+			t.Fatalf("L1 idx=%d ref=%d should remain unavailable", i, c.ref4(1)[i])
+		}
+	}
+}
+
 func TestBMotionCacheWriteBackIntraMarksBothLists(t *testing.T) {
 	c := newBMotionCache(4, 1)
 	for list := 0; list < 2; list++ {
