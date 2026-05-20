@@ -113,6 +113,34 @@ func TestColocatedDirect8x8ZeroUsesFFmpegRepresentative(t *testing.T) {
 	}
 }
 
+func TestApplyBDirect16x16SpatialSubMVsCopiesAndZerosRepresentatives(t *testing.T) {
+	col := &frame.Frame{MotionStride4: 8, MBType: []uint32{0, ffMBType8x8}, MotionL0: make([][2]int16, 64), RefIdxL0: make([]int8, 64)}
+	for i := range col.RefIdxL0 {
+		col.RefIdxL0[i] = -2
+	}
+	// mb=(1,0), parts 0/1 have large colocated MVs, part 2 is zero-eligible.
+	for _, p := range []int{0, 1, 3} {
+		x := 4 + (p&1)*3
+		y := (p >> 1) * 3
+		idx := y*col.MotionStride4 + x
+		col.RefIdxL0[idx] = 0
+		col.MotionL0[idx] = [2]int16{3, 2}
+	}
+	idx2 := 3*col.MotionStride4 + 4
+	col.RefIdxL0[idx2] = 0
+	col.MotionL0[idx2] = [2]int16{1, 1}
+
+	mb := &syntax.MBBidi{MBType: syntax.BMBTypeDirect16x16, RefIdxL0: [4]int8{0}, RefIdxL1: [4]int8{-1, -1, -1, -1}}
+	mb.MVL0[0] = syntax.MotionVector{X: 0, Y: 1}
+	applyBDirect16x16SpatialSubMVs(mb, col, 1, 0)
+	if mb.SubMVL0[0] != mb.MVL0[0] || mb.SubMVL0[4] != mb.MVL0[0] || mb.SubMVL0[12] != mb.MVL0[0] {
+		t.Fatalf("non-zero-eligible parts should retain full direct MV: %+v", mb.SubMVL0)
+	}
+	if mb.SubMVL0[8] != (syntax.MotionVector{}) {
+		t.Fatalf("zero-eligible part should be cleared, got %+v", mb.SubMVL0[8])
+	}
+}
+
 func TestBSubPartOffset4x4MatchesSubPartitionShapes(t *testing.T) {
 	tests := []struct {
 		typ        uint32
