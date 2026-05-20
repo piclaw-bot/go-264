@@ -78,6 +78,19 @@ func TestWriteBackBidiDirectPreservesChosenL0MV(t *testing.T) {
 	}
 }
 
+func TestColocatedDirectUses8x8ShapeMetadata(t *testing.T) {
+	col := &frame.Frame{MotionStride4: 8, MBType: []uint32{ffMBType16x16, ffMBType8x8}}
+	if colocatedDirectUses8x8(col, 0, 0) {
+		t.Fatalf("16x16 colocated shape must not use 8x8 direct derivation")
+	}
+	if !colocatedDirectUses8x8(col, 1, 0) {
+		t.Fatalf("8x8 colocated shape should use 8x8 direct derivation")
+	}
+	if colocatedDirectUses8x8(col, -1, 0) || colocatedDirectUses8x8(col, 2, 0) {
+		t.Fatalf("invalid colocated coordinates must be unavailable")
+	}
+}
+
 func TestColocatedDirect8x8ZeroUsesFFmpegRepresentative(t *testing.T) {
 	col := &frame.Frame{POC: 14, MotionStride4: 8, MotionL0: make([][2]int16, 64), RefIdxL0: make([]int8, 64)}
 	for i := range col.RefIdxL0 {

@@ -482,6 +482,22 @@ func applyB8x8DirectSpatial(mb *syntax.MBBidi, refL0 int8, mvL0 syntax.MotionVec
 	}
 }
 
+func colocatedDirectUses8x8(colocated *frame.Frame, mbX, mbY int) bool {
+	if colocated == nil || len(colocated.MBType) == 0 || colocated.MotionStride4 <= 0 || mbX < 0 || mbY < 0 {
+		return false
+	}
+	mbWidth := colocated.MotionStride4 / 4
+	if mbWidth <= 0 || mbX >= mbWidth {
+		return false
+	}
+	idx := mbY*mbWidth + mbX
+	if idx < 0 || idx >= len(colocated.MBType) {
+		return false
+	}
+	const ffMBType16x16OrIntra = ffMBType16x16 | ffMBTypeIntra4x4 | ffMBTypeIntra16x16 | ffMBTypeIntraPCM
+	return colocated.MBType[idx]&ffMBType16x16OrIntra == 0
+}
+
 func colocatedDirect8x8Zero(colocated *frame.Frame, mbX, mbY, part int) bool {
 	if colocated == nil || colocated.MotionStride4 <= 0 || len(colocated.MotionL0) == 0 || len(colocated.RefIdxL0) != len(colocated.MotionL0) || part < 0 || part > 3 {
 		return false
