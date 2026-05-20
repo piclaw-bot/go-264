@@ -71,6 +71,7 @@ def main() -> None:
     ap.add_argument('--width', type=int, default=40, help='macroblock width for bbb 640px fixture')
     ap.add_argument('--mb', type=int, help='compare only one absolute macroblock index')
     ap.add_argument('--part', type=int, help='compare only one 8x8 partition index')
+    ap.add_argument('--occurrence', type=int, help='compare only one per-macroblock/part occurrence')
     ap.add_argument('--go-colpoc', type=int, help='compare only Go colocated rows that used this reference POC')
     ap.add_argument('--limit', type=int, default=20)
     ap.add_argument('--fail-on-diff', action='store_true')
@@ -86,6 +87,8 @@ def main() -> None:
         if args.mb is not None and mb != args.mb:
             continue
         if args.part is not None and part != args.part:
+            continue
+        if args.occurrence is not None and occ != args.occurrence:
             continue
         f = ff[key]
         g = go.get(key)
