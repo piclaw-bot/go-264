@@ -11,6 +11,7 @@ FFMPEG="${FFMPEG:-$FFSRC/ffmpeg}"
 patch_ffmpeg_bidi_trace() {
   python3 - "$FFSRC/libavcodec/h264_cabac.c" "$MB_LIMIT" <<'PY'
 from pathlib import Path
+import re
 import sys
 p = Path(sys.argv[1])
 mb_limit = sys.argv[2]
@@ -77,6 +78,7 @@ s = s.replace('"FF_BPART_MVD mb=%04d part=%d list=%d ', '"FF_BPART_MVD mb=%04d f
 s = s.replace('sl->mb_x + sl->mb_y*h->mb_width, i, list, mpx, mpy,', 'sl->mb_x + sl->mb_y*h->mb_width, h->poc.frame_num, i, list, mpx, mpy,')
 s = s.replace('sl->mb_x + sl->mb_y*h->mb_width, list, mpx, mpy,', 'sl->mb_x + sl->mb_y*h->mb_width, h->poc.frame_num, list, mpx, mpy,')
 s = s.replace('sl->mb_x + sl->mb_y*h->mb_width, i, j, list,\n                                _amvdX', 'sl->mb_x + sl->mb_y*h->mb_width, h->poc.frame_num, i, j, list,\n                                _amvdX')
+s = re.sub(r'(GO264_FFMPEG_CABAC_TRACE"\) && sl->slice_type_nos == AV_PICTURE_TYPE_B && \(sl->mb_x \+ sl->mb_y \* h->mb_width\) < )\d+(\)\n\s*fprintf\(stderr, "FF_B(?:8x8|PART)_MVD)', rf'\g<1>{mb_limit}\g<2>', s)
 p.write_text(s)
 PY
 }
