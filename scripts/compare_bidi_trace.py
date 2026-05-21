@@ -130,10 +130,16 @@ def ref_mv_mismatch(f: dict[str, object], g: dict[str, object]) -> bool:
             return True
         if not fu:
             continue
-        if list_idx == 0 and (fr[0], fr[2], fr[3]) != (gr[0], gr[2], gr[3]):
-            return True
-        if list_idx == 1 and (fr[1], fr[4], fr[5]) != (gr[1], gr[4], gr[5]):
-            return True
+        if list_idx == 0:
+            if fr[0] < 0 and gr[0] < 0:
+                continue
+            if (fr[0], fr[2], fr[3]) != (gr[0], gr[2], gr[3]):
+                return True
+        if list_idx == 1:
+            if fr[1] < 0 and gr[1] < 0:
+                continue
+            if (fr[1], fr[4], fr[5]) != (gr[1], gr[4], gr[5]):
+                return True
     return False
 
 def p1_mismatch(f: dict[str, object], g: dict[str, object]) -> bool:
@@ -149,10 +155,18 @@ def p1_mismatch(f: dict[str, object], g: dict[str, object]) -> bool:
             return True
         if not fu:
             continue
-        if list_idx == 0 and (fp[0], fp[1]) != (gp[0], gp[1]):
-            return True
-        if list_idx == 1 and (fp[2], fp[3]) != (gp[2], gp[3]):
-            return True
+        if list_idx == 0:
+            fr = f['ref_mv']; gr = g['ref_mv']
+            if fr[0] < 0 and gr[0] < 0:
+                continue
+            if (fp[0], fp[1]) != (gp[0], gp[1]):
+                return True
+        if list_idx == 1:
+            fr = f['ref_mv']; gr = g['ref_mv']
+            if fr[1] < 0 and gr[1] < 0:
+                continue
+            if (fp[2], fp[3]) != (gp[2], gp[3]):
+                return True
     return False
 
 def main() -> None:
