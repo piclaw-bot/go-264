@@ -124,12 +124,16 @@ def main():
         if args.spatial is not None and f.get('spatial', -1) != args.spatial:
             continue
         g = go.get((args.go_poc, args.go_occurrence, mb))
-        if args.spatial is not None and g is not None and g.get('spatial', -1) != args.spatial:
-            continue
         rows += 1
         if g is None:
             print(f'mb={mb:04d} missing_go')
             diffs += 1
+            continue
+        if args.spatial is not None and g.get('spatial', -1) != args.spatial:
+            print(f'mb={mb:04d} fields=spatial ff_spatial={f.get("spatial", -1)} go_spatial={g.get("spatial", -1)}')
+            diffs += 1
+            if diffs >= args.limit:
+                break
             continue
         mismatch = []
         # FFmpeg may report Direct+Bi internal flags (61704) for resolved direct
