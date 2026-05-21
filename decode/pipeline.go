@@ -252,6 +252,13 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 		cabacDec = cabac.NewCABACDecoder(r)
 		cabacModels = cabac.InitContextModels(currentQP, int(hdr.CabacInitIDC), isIntra)
 	}
+	traceBState := func(mbIdx, mbX, mbY int, kind string) {
+		if os.Getenv("GO264_B_STATE_TRACE") == "" || cabacDec == nil {
+			return
+		}
+		low, rng, _ := cabacDec.DebugState()
+		fmt.Fprintf(os.Stderr, "GOBSTATE mb=%04d x=%02d y=%02d poc=%d kind=%s low=%d range=%d\n", mbIdx, mbX, mbY, f.POC, kind, low, rng)
+	}
 
 	for mbIdx := int(hdr.FirstMbInSlice); mbIdx < maxMBs; mbIdx++ {
 		mbX := mbIdx % mbWidth
@@ -615,6 +622,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 						bmc.writeBackBidi(mbX, mbY, f.POC, mbBidi)
 					}
 					mbQPCtx[mbIdx] = currentQP
+					traceBState(mbIdx, mbX, mbY, "skip")
 					if cabacDec.DecodeTerminate() == 1 {
 						if os.Getenv("GO264_CABAC_TERMINATE_TRACE") != "" {
 							fmt.Fprintf(os.Stderr, "GOTERMINATE mb=%04d x=%02d y=%02d poc=%d skipped=1\n", mbIdx, mbX, mbY, f.POC)
@@ -662,6 +670,13 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					bmc.writeBackBidi(mbX, mbY, f.POC, mbBidi)
 				}
 				mbQPCtx[mbIdx] = currentQP
+				if mbIntra != nil {
+					traceBState(mbIdx, mbX, mbY, "intra")
+				} else if mbBidi != nil && mbBidi.MBType == syntax.BMBTypeDirect16x16 {
+					traceBState(mbIdx, mbX, mbY, "direct")
+				} else {
+					traceBState(mbIdx, mbX, mbY, "inter")
+				}
 				if cabacDec.DecodeTerminate() == 1 {
 					if os.Getenv("GO264_CABAC_TERMINATE_TRACE") != "" {
 						fmt.Fprintf(os.Stderr, "GOTERMINATE mb=%04d x=%02d y=%02d poc=%d skipped=0\n", mbIdx, mbX, mbY, f.POC)
