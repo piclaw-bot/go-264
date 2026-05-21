@@ -30,8 +30,12 @@ def load_ff(path: str, frame_filter: int | None, occurrence: int) -> dict[tuple[
         m = FF_RE.search(line)
         if not m:
             continue
-        if frame_filter is not None and m.group('frame') is not None and iv(m, 'frame') != frame_filter:
-            continue
+        if frame_filter is not None:
+            # Frame-qualified FF rows are required for reliable comparison because
+            # H.264 frame_num repeats across B pictures. Older artifacts without
+            # frame= are ambiguous, so skip them instead of silently mixing frames.
+            if m.group('frame') is None or iv(m, 'frame') != frame_filter:
+                continue
         key = (iv(m, 'mb'), iv(m, 'part'), iv(m, 'list'))
         occ = seen[key]; seen[key] += 1
         if occ != occurrence:
