@@ -230,7 +230,7 @@ def main() -> None:
         if diffs >= args.limit:
             break
     print(f'compared={rows} diffs={diffs}')
-    if args.fail_on_diff and diffs:
+    if args.fail_on_diff and (diffs or rows == 0):
         raise SystemExit(1)
 
 if __name__ == '__main__':

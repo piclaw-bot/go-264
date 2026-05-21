@@ -147,7 +147,7 @@ def main() -> None:
                         raise SystemExit(1)
                     return
     print(f'compared={compared} diffs={diffs}')
-    if args.fail_on_diff and diffs:
+    if args.fail_on_diff and (diffs or compared == 0):
         raise SystemExit(1)
 
 if __name__ == '__main__':
