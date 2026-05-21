@@ -7,7 +7,7 @@ from collections import defaultdict
 
 FF_RE = re.compile(
     r'FF_BPART_MVD mb=(?P<mb>\d+)(?: frame=(?P<frame>\d+))? part=(?P<part>\d+) list=(?P<list>\d+) '
-    r'mvd_abs=\{(?P<absx>-?\d+),(?P<absy>-?\d+)\} mvd=\{(?P<mvdx>-?\d+),(?P<mvdy>-?\d+)\} '
+    r'(?:amvd=\{(?P<amvdx>-?\d+),(?P<amvdy>-?\d+)\} )?mvd_abs=\{(?P<absx>-?\d+),(?P<absy>-?\d+)\} mvd=\{(?P<mvdx>-?\d+),(?P<mvdy>-?\d+)\} '
     r'mvp=\{(?P<mvpx>-?\d+),(?P<mvpy>-?\d+)\} final=\{(?P<finalx>-?\d+),(?P<finaly>-?\d+)\}'
 )
 GO_RE = re.compile(
@@ -41,6 +41,7 @@ def load_ff(path: str, frame_filter: int | None, occurrence: int) -> dict[tuple[
         if occ != occurrence:
             continue
         out[key] = {
+            'amvd': (int(m.group('amvdx') or 0), int(m.group('amvdy') or 0)),
             'mvd': (iv(m, 'mvdx'), iv(m, 'mvdy')),
             'mvp': (iv(m, 'mvpx'), iv(m, 'mvpy')),
             'final': (iv(m, 'finalx'), iv(m, 'finaly')),
@@ -107,7 +108,7 @@ def main() -> None:
             compared += 1
             fields = [name for name in ('mvd', 'mvp', 'final') if ff[key][name] != g[name]]
             if fields:
-                print(f'mb={mb:04d} part={part} list={list_idx} fields={",".join(fields)} ff_mvd={ff[key]["mvd"]} go_mvd={g["mvd"]} go_amvd={g["amvd"]} ff_mvp={ff[key]["mvp"]} go_mvp={g["mvp"]} ff_final={ff[key]["final"]} go_final={g["final"]}')
+                print(f'mb={mb:04d} part={part} list={list_idx} fields={",".join(fields)} ff_amvd={ff[key]["amvd"]} go_amvd={g["amvd"]} ff_mvd={ff[key]["mvd"]} go_mvd={g["mvd"]} ff_mvp={ff[key]["mvp"]} go_mvp={g["mvp"]} ff_final={ff[key]["final"]} go_final={g["final"]}')
                 diffs += 1
         if diffs >= args.limit:
             break
