@@ -85,6 +85,11 @@ def main() -> None:
     args = ap.parse_args()
     ff = load_ff(args.ffbpart_mvd, args.ff_frame, args.ff_occurrence)
     go = load_go(args.gobidi, args.go_poc, args.go_occurrence)
+    if not ff:
+        print(f'no_ff_mvd_rows frame={args.ff_frame} occurrence={args.ff_occurrence}')
+        if args.fail_on_diff:
+            raise SystemExit(1)
+        return
     compared = diffs = 0
     for key in sorted(ff):
         mb, part, list_idx = key
