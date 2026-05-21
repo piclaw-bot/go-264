@@ -29,8 +29,10 @@ def row(m: re.Match[str]) -> dict[str, tuple[int, int]]:
     return {
         'amvd': (iv(m, 'amvdx'), iv(m, 'amvdy')),
         'mvd': (iv(m, 'mvdx'), iv(m, 'mvdy')),
-        'pre': (iv(m, 'prelow'), iv(m, 'prerange')),
-        'post': (iv(m, 'postlow'), iv(m, 'postrange')),
+        'pre_low': (iv(m, 'prelow'),),
+        'pre_range': (iv(m, 'prerange'),),
+        'post_low': (iv(m, 'postlow'),),
+        'post_range': (iv(m, 'postrange'),),
     }
 
 def load_ff(path: str, frame: int, occurrence: int) -> dict[tuple[int, int, int], dict[str, tuple[int, int]]]:
@@ -70,6 +72,7 @@ def main() -> None:
     ap.add_argument('--from-mb', type=int, dest='from_mb')
     ap.add_argument('--to-mb', type=int, dest='to_mb')
     ap.add_argument('--limit', type=int, default=50)
+    ap.add_argument('--compare-low', action='store_true', help='also compare raw codILow values; off by default because FFmpeg and Go use different low normalizations')
     ap.add_argument('--fail-on-diff', action='store_true')
     args = ap.parse_args()
     ff = load_ff(args.ffbpart_mvd, args.ff_frame, args.ff_occurrence)
@@ -94,9 +97,13 @@ def main() -> None:
             diffs += 1
         else:
             compared += 1
-            fields = [name for name in ('amvd', 'pre', 'mvd', 'post') if ff[key][name] != g[name]]
+            names = ['amvd', 'pre_range', 'mvd', 'post_range']
+            if args.compare_low:
+                names[1:1] = ['pre_low']
+                names.append('post_low')
+            fields = [name for name in names if ff[key][name] != g[name]]
             if fields:
-                print(f'mb={mb:04d} part={part} list={list_idx} fields={",".join(fields)} ff_amvd={ff[key]["amvd"]} go_amvd={g["amvd"]} ff_pre={ff[key]["pre"]} go_pre={g["pre"]} ff_mvd={ff[key]["mvd"]} go_mvd={g["mvd"]} ff_post={ff[key]["post"]} go_post={g["post"]}')
+                print(f'mb={mb:04d} part={part} list={list_idx} fields={",".join(fields)} ff_amvd={ff[key]["amvd"]} go_amvd={g["amvd"]} ff_pre_low={ff[key]["pre_low"][0]} go_pre_low={g["pre_low"][0]} ff_pre_range={ff[key]["pre_range"][0]} go_pre_range={g["pre_range"][0]} ff_mvd={ff[key]["mvd"]} go_mvd={g["mvd"]} ff_post_low={ff[key]["post_low"][0]} go_post_low={g["post_low"][0]} ff_post_range={ff[key]["post_range"][0]} go_post_range={g["post_range"][0]}')
                 diffs += 1
         if diffs >= args.limit:
             break
