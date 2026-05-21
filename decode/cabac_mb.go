@@ -922,6 +922,8 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 				}
 				mvd := mb.MVL0[i]
 				mvp := predictBPartMotion4x4(mv4, ref4, stride4, x4, y4, bMBType, i, mb.RefIdxL0[i])
+				mb.MVDL0[i] = mvd
+				mb.MVPL0[i] = mvp
 				mb.MVL0[i].X += mvp.X
 				mb.MVL0[i].Y += mvp.Y
 				if os.Getenv("GO264_B_MVD_TRACE") != "" {
@@ -940,6 +942,8 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 				}
 				mvd := mb.MVL1[i]
 				mvp := predictBPartMotion4x4(mv4L1, ref4L1, stride4, x4, y4, bMBType, i, mb.RefIdxL1[i])
+				mb.MVDL1[i] = mvd
+				mb.MVPL1[i] = mvp
 				mb.MVL1[i].X += mvp.X
 				mb.MVL1[i].Y += mvp.Y
 				if os.Getenv("GO264_B_MVD_TRACE") != "" {
