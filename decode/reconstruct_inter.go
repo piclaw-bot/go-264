@@ -672,6 +672,20 @@ func coeff8x8NonZero(block [64]int16) bool {
 	return false
 }
 
+func (d *Decoder) traceDirectMB(f *frame.Frame, mb *syntax.MBBidi, mbX, mbY int) {
+	if os.Getenv("GO264_DIRECT_TRACE") == "" || d == nil || f == nil || mb == nil || (mb.MBType != syntax.BMBTypeDirect16x16 && mb.MBType != syntax.BMBTypeB8x8) {
+		return
+	}
+	sub0, sub1, sub2, sub3 := directTraceSubTypes(mb)
+	smv0, smv1, smv2, smv3 := directTraceSubMVs(mb)
+	fmt.Fprintf(os.Stderr,
+		"GODIRECT mb=%04d x=%02d y=%02d poc=%d spatial=%d mb_type=%d ref0=%d ref1=%d mv0={%d,%d} mv1={%d,%d} sub0=%d sub1=%d sub2=%d sub3=%d submv0={%d,%d} submv1={%d,%d} submv2={%d,%d} submv3={%d,%d}\n",
+		mbY*d.mbW+mbX, mbX, mbY, f.POC, boolInt(mb.DirectSpatial), mb.MBType,
+		mb.RefIdxL0[0], mb.RefIdxL1[0], mb.MVL0[0].X, mb.MVL0[0].Y, mb.MVL1[0].X, mb.MVL1[0].Y,
+		sub0, sub1, sub2, sub3,
+		smv0.X, smv0.Y, smv1.X, smv1.Y, smv2.X, smv2.Y, smv3.X, smv3.Y)
+}
+
 func (d *Decoder) traceBidiMB(f *frame.Frame, mb *syntax.MBBidi, mbX, mbY int) {
 	if os.Getenv("GO264_B_MB_TRACE") == "" || d == nil || f == nil || mb == nil {
 		return
@@ -693,6 +707,7 @@ func (d *Decoder) reconstructMBBidi(f *frame.Frame, mb *syntax.MBBidi, mbX, mbY,
 	if d == nil || f == nil || mb == nil {
 		return
 	}
+	d.traceDirectMB(f, mb, mbX, mbY)
 	d.traceBidiMB(f, mb, mbX, mbY)
 	dstBaseX := mbX * 16
 	dstBaseY := mbY * 16
@@ -717,16 +732,6 @@ func (d *Decoder) reconstructMBBidi(f *frame.Frame, mb *syntax.MBBidi, mbX, mbY,
 				_ = colocatedDirect8x8Zero(colocated, mbX, mbY, part, f.POC)
 			}
 		}
-	}
-	if os.Getenv("GO264_DIRECT_TRACE") != "" && (mb.MBType == syntax.BMBTypeDirect16x16 || mb.MBType == syntax.BMBTypeB8x8) {
-		sub0, sub1, sub2, sub3 := directTraceSubTypes(mb)
-		smv0, smv1, smv2, smv3 := directTraceSubMVs(mb)
-		fmt.Fprintf(os.Stderr,
-			"GODIRECT mb=%04d x=%02d y=%02d poc=%d spatial=%d mb_type=%d ref0=%d ref1=%d mv0={%d,%d} mv1={%d,%d} sub0=%d sub1=%d sub2=%d sub3=%d submv0={%d,%d} submv1={%d,%d} submv2={%d,%d} submv3={%d,%d}\n",
-			mbY*d.mbW+mbX, mbX, mbY, f.POC, boolInt(mb.DirectSpatial), mb.MBType,
-			mb.RefIdxL0[0], mb.RefIdxL1[0], mb.MVL0[0].X, mb.MVL0[0].Y, mb.MVL1[0].X, mb.MVL1[0].Y,
-			sub0, sub1, sub2, sub3,
-			smv0.X, smv0.Y, smv1.X, smv1.Y, smv2.X, smv2.Y, smv3.X, smv3.Y)
 	}
 	var blended [256]uint8
 	if mb.MBType == syntax.BMBTypeB8x8 {
