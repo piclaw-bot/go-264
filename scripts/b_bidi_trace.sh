@@ -138,6 +138,7 @@ python3 scripts/compare_bidi_trace.py "$OUTDIR/ffbidi.rows" "$OUTDIR/gobidi.rows
   "${bidi_args[@]}" || true
 
 : >"$OUTDIR/bpart_mvd.diff"
+: >"$OUTDIR/bpart_mvd_raw.diff"
 if [[ -s "$OUTDIR/ffbpart_mvd.rows" && -s "$OUTDIR/gobidi.rows" ]]; then
   bpart_args=(
     --ff-frame "${FF_FRAME:-2}"
@@ -150,6 +151,18 @@ if [[ -s "$OUTDIR/ffbpart_mvd.rows" && -s "$OUTDIR/gobidi.rows" ]]; then
   [[ -n "${TO_MB:-}" ]] && bpart_args+=(--to-mb "$TO_MB")
   python3 scripts/compare_bpart_mvd.py "$OUTDIR/ffbpart_mvd.rows" "$OUTDIR/gobidi.rows" \
     "${bpart_args[@]}" >"$OUTDIR/bpart_mvd.diff" || true
+  if [[ -s "$OUTDIR/gobpart_mvd.rows" ]]; then
+    raw_args=(
+      --ff-frame "${FF_FRAME:-2}"
+      --ff-occurrence "${FF_OCCURRENCE:-0}"
+      --go-occurrence "${GO_OCCURRENCE:-0}"
+      --limit "${LIMIT:-20}"
+    )
+    [[ -n "${FROM_MB:-}" ]] && raw_args+=(--from-mb "$FROM_MB")
+    [[ -n "${TO_MB:-}" ]] && raw_args+=(--to-mb "$TO_MB")
+    python3 scripts/compare_bpart_mvd_raw.py "$OUTDIR/ffbpart_mvd.rows" "$OUTDIR/gobpart_mvd.rows" \
+      "${raw_args[@]}" >"$OUTDIR/bpart_mvd_raw.diff" || true
+  fi
 fi
 
 echo "ffbidi=$OUTDIR/ffbidi.rows"
@@ -157,4 +170,5 @@ echo "ffbpart_mvd=$OUTDIR/ffbpart_mvd.rows"
 echo "gobidi=$OUTDIR/gobidi.rows"
 echo "gobpart_mvd=$OUTDIR/gobpart_mvd.rows"
 echo "bpart_mvd_diff=$OUTDIR/bpart_mvd.diff"
+echo "bpart_mvd_raw_diff=$OUTDIR/bpart_mvd_raw.diff"
 echo "goterminate=$OUTDIR/goterminate.rows"
