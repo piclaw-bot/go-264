@@ -119,6 +119,7 @@ bidi_args=(
 python3 scripts/compare_bidi_trace.py "$OUTDIR/ffbidi.rows" "$OUTDIR/gobidi.rows" \
   "${bidi_args[@]}" || true
 
+: >"$OUTDIR/bpart_mvd.diff"
 if [[ -s "$OUTDIR/ffbpart_mvd.rows" && -s "$OUTDIR/gobidi.rows" ]]; then
   bpart_args=(
     --ff-frame "${FF_FRAME:-2}"
