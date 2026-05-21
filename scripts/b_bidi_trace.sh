@@ -95,6 +95,14 @@ s = s.replace('list, mpx, mpy, mx-_pmx, my-_pmy, _pmx, _pmy, mx, my);', 'list, _
 s = s.replace('i, list, mpx, mpy, mx-_pmx, my-_pmy, _pmx, _pmy, mx, my);', 'i, list, _amvdX, _amvdY, mpx, mpy, mx-_pmx, my-_pmy, _pmx, _pmy, mx, my, _pre_low, _pre_range, (unsigned)sl->cabac.low >> 1, (unsigned)sl->cabac.range);')
 s = s.replace('list, _amvdX, _amvdY, mpx, mpy, mx-_pmx, my-_pmy, _pmx, _pmy, mx, my);', 'list, _amvdX, _amvdY, mpx, mpy, mx-_pmx, my-_pmy, _pmx, _pmy, mx, my, _pre_low, _pre_range, (unsigned)sl->cabac.low >> 1, (unsigned)sl->cabac.range);')
 s = s.replace('i, list, _amvdX, _amvdY, mpx, mpy, mx-_pmx, my-_pmy, _pmx, _pmy, mx, my);', 'i, list, _amvdX, _amvdY, mpx, mpy, mx-_pmx, my-_pmy, _pmx, _pmy, mx, my, _pre_low, _pre_range, (unsigned)sl->cabac.low >> 1, (unsigned)sl->cabac.range);')
+if 'FFBSTATE mb=' not in s:
+    skip_state = '''            if (getenv("GO264_FFMPEG_B_STATE_TRACE") && sl->slice_type_nos == AV_PICTURE_TYPE_B)\n                fprintf(stderr, "FFBSTATE mb=%04d x=%02d y=%02d frame=%d kind=skip low=%u range=%u\\n",\n                        sl->mb_x + sl->mb_y * h->mb_width, sl->mb_x, sl->mb_y, h->poc.frame_num,\n                        (unsigned)sl->cabac.low >> 1, (unsigned)sl->cabac.range);\n\n'''
+    final_state = '''    if (getenv("GO264_FFMPEG_B_STATE_TRACE") && sl->slice_type_nos == AV_PICTURE_TYPE_B)\n        fprintf(stderr, "FFBSTATE mb=%04d x=%02d y=%02d frame=%d kind=%s low=%u range=%u\\n",\n                sl->mb_x + sl->mb_y * h->mb_width, sl->mb_x, sl->mb_y, h->poc.frame_num,\n                IS_INTRA(mb_type) ? "intra" : (IS_DIRECT(mb_type) ? "direct" : "inter"),\n                (unsigned)sl->cabac.low >> 1, (unsigned)sl->cabac.range);\n\n'''
+    if 'FFCABAC mb=%04d x=%02d y=%02d frame=%d kind=%c_SKIP' in s:
+        s = s.replace('''\n            return 0;\n\n        }\n    }\n    if (FRAME_MBAFF(h)) {''', '\n' + skip_state + '''            return 0;\n\n        }\n    }\n    if (FRAME_MBAFF(h)) {''', 1)
+    else:
+        s = s.replace('''            sl->last_qscale_diff = 0;\n\n            return 0;\n''', '''            sl->last_qscale_diff = 0;\n\n''' + skip_state + '''            return 0;\n''')
+    s = s.replace('''\n    return 0;\n}\n''', '\n' + final_state + '''    return 0;\n}\n''', 1)
 p.write_text(s)
 PY
 }
@@ -108,12 +116,14 @@ ff_env=(GO264_FFMPEG_B_MB_TRACE=1)
 if [[ -n "${GO264_FFMPEG_B_MVD_TRACE:-}" ]]; then
   ff_env+=(GO264_FFMPEG_CABAC_TRACE=1)
 fi
+[[ -n "${GO264_B_STATE_TRACE:-}" ]] && ff_env+=(GO264_FFMPEG_B_STATE_TRACE=1)
 env "${ff_env[@]}" "$FFMPEG" -y -threads 1 -hide_banner \
   -i "$INPUT" -frames:v "$FRAMES" -pix_fmt yuv420p -f rawvideo /dev/null \
   >"$OUTDIR/ffmpeg/stdout.log" 2>"$OUTDIR/ffmpeg/bidi.log" || true
 
 grep '^FFBIDI' "$OUTDIR/ffmpeg/bidi.log" >"$OUTDIR/ffbidi.rows" || true
 grep '^FF_BPART_MVD' "$OUTDIR/ffmpeg/bidi.log" >"$OUTDIR/ffbpart_mvd.rows" || true
+grep '^FFBSTATE' "$OUTDIR/ffmpeg/bidi.log" >"$OUTDIR/ffbstate.rows" || true
 rm -rf "$OUTDIR/go/frames"
 mkdir -p "$OUTDIR/go/frames" "${GOTMPDIR:-/workspace/tmp/gotmp}"
 go_env=(GOTMPDIR="${GOTMPDIR:-/workspace/tmp/gotmp}" GO264_B_MB_TRACE=1)
@@ -169,6 +179,7 @@ fi
 
 echo "ffbidi=$OUTDIR/ffbidi.rows"
 echo "ffbpart_mvd=$OUTDIR/ffbpart_mvd.rows"
+echo "ffbstate=$OUTDIR/ffbstate.rows"
 echo "gobidi=$OUTDIR/gobidi.rows"
 echo "gobpart_mvd=$OUTDIR/gobpart_mvd.rows"
 echo "bpart_mvd_diff=$OUTDIR/bpart_mvd.diff"
