@@ -68,6 +68,15 @@ else:
     if needle not in s:
         raise SystemExit('FFBIDI write_back_motion hook target not found')
     s = s.replace(needle, trace, 1)
+# Keep optional FF_BPART_MVD diagnostics frame-qualified. Older local patches
+# emitted rows keyed only by mb/part/list, which made repeated B-picture groups
+# ambiguous for compare_bpart_mvd.py.
+s = s.replace('"FF_B8x8_MVD mb=%04d sub=%d j=%d list=%d ', '"FF_B8x8_MVD mb=%04d frame=%d sub=%d j=%d list=%d ')
+s = s.replace('"FF_BPART_MVD mb=%04d part=0 list=%d ', '"FF_BPART_MVD mb=%04d frame=%d part=0 list=%d ')
+s = s.replace('"FF_BPART_MVD mb=%04d part=%d list=%d ', '"FF_BPART_MVD mb=%04d frame=%d part=%d list=%d ')
+s = s.replace('sl->mb_x + sl->mb_y*h->mb_width, i, list, mpx, mpy,', 'sl->mb_x + sl->mb_y*h->mb_width, h->poc.frame_num, i, list, mpx, mpy,')
+s = s.replace('sl->mb_x + sl->mb_y*h->mb_width, list, mpx, mpy,', 'sl->mb_x + sl->mb_y*h->mb_width, h->poc.frame_num, list, mpx, mpy,')
+s = s.replace('sl->mb_x + sl->mb_y*h->mb_width, i, j, list,\n                                _amvdX', 'sl->mb_x + sl->mb_y*h->mb_width, h->poc.frame_num, i, j, list,\n                                _amvdX')
 p.write_text(s)
 PY
 }
@@ -95,6 +104,7 @@ python3 scripts/compare_bidi_trace.py "$OUTDIR/ffbidi.rows" "$OUTDIR/gobidi.rows
 
 if [[ -s "$OUTDIR/ffbpart_mvd.rows" && -s "$OUTDIR/gobidi.rows" ]]; then
   bpart_args=(
+    --ff-frame "${FF_FRAME:-2}"
     --go-poc "${GO_POC:-6}"
     --ff-occurrence "${FF_OCCURRENCE:-0}"
     --go-occurrence "${GO_OCCURRENCE:-0}"
