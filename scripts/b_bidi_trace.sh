@@ -84,7 +84,13 @@ PY
 mkdir -p "$OUTDIR/go" "$OUTDIR/ffmpeg"
 patch_ffmpeg_bidi_trace
 (cd "$FFSRC" && make -j"${MAKE_JOBS:-$(nproc 2>/dev/null || echo 2)}" ffmpeg >/tmp/go264-ffmpeg-bidi-build.log)
-GO264_FFMPEG_B_MB_TRACE=1 GO264_FFMPEG_CABAC_TRACE="${GO264_FFMPEG_B_MVD_TRACE:-}" "$FFMPEG" -y -threads 1 -hide_banner \
+ff_env=(GO264_FFMPEG_B_MB_TRACE=1)
+# FFmpeg's C-side getenv() treats an empty environment variable as enabled, so
+# only pass GO264_FFMPEG_CABAC_TRACE when the caller explicitly requests MVD rows.
+if [[ -n "${GO264_FFMPEG_B_MVD_TRACE:-}" ]]; then
+  ff_env+=(GO264_FFMPEG_CABAC_TRACE=1)
+fi
+env "${ff_env[@]}" "$FFMPEG" -y -threads 1 -hide_banner \
   -i "$INPUT" -frames:v "$FRAMES" -pix_fmt yuv420p -f rawvideo /dev/null \
   >"$OUTDIR/ffmpeg/stdout.log" 2>"$OUTDIR/ffmpeg/bidi.log" || true
 
