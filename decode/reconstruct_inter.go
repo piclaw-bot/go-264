@@ -672,10 +672,28 @@ func coeff8x8NonZero(block [64]int16) bool {
 	return false
 }
 
+func (d *Decoder) traceBidiMB(f *frame.Frame, mb *syntax.MBBidi, mbX, mbY int) {
+	if os.Getenv("GO264_B_MB_TRACE") == "" || d == nil || f == nil || mb == nil {
+		return
+	}
+	sub0, sub1, sub2, sub3 := directTraceSubTypes(mb)
+	smv0, smv1, smv2, smv3 := directTraceSubMVs(mb)
+	p0L0, p0L1 := bTracePart0MVs(mb)
+	p1L0, p1L1 := bTracePart1MVs(mb)
+	fmt.Fprintf(os.Stderr,
+		"GOBIDI mb=%04d x=%02d y=%02d poc=%d spatial=%d mb_type=%d ref0=%d ref1=%d mv0={%d,%d} mv1={%d,%d} mv0p1={%d,%d} mv1p1={%d,%d} cbp=%02x qpd=%d sub0=%d sub1=%d sub2=%d sub3=%d submv0={%d,%d} submv1={%d,%d} submv2={%d,%d} submv3={%d,%d}\n",
+		mbY*d.mbW+mbX, mbX, mbY, f.POC, boolInt(mb.DirectSpatial), mb.MBType,
+		mb.RefIdxL0[0], mb.RefIdxL1[0], p0L0.X, p0L0.Y, p0L1.X, p0L1.Y,
+		p1L0.X, p1L0.Y, p1L1.X, p1L1.Y,
+		mb.CBP, mb.QPDelta, sub0, sub1, sub2, sub3,
+		smv0.X, smv0.Y, smv1.X, smv1.Y, smv2.X, smv2.Y, smv3.X, smv3.Y)
+}
+
 func (d *Decoder) reconstructMBBidi(f *frame.Frame, mb *syntax.MBBidi, mbX, mbY, qp int) {
 	if d == nil || f == nil || mb == nil {
 		return
 	}
+	d.traceBidiMB(f, mb, mbX, mbY)
 	dstBaseX := mbX * 16
 	dstBaseY := mbY * 16
 	if dstBaseX < 0 || dstBaseY < 0 || dstBaseX+16 > f.Width || dstBaseY+16 > f.Height {
@@ -710,20 +728,6 @@ func (d *Decoder) reconstructMBBidi(f *frame.Frame, mb *syntax.MBBidi, mbX, mbY,
 			sub0, sub1, sub2, sub3,
 			smv0.X, smv0.Y, smv1.X, smv1.Y, smv2.X, smv2.Y, smv3.X, smv3.Y)
 	}
-	if os.Getenv("GO264_B_MB_TRACE") != "" {
-		sub0, sub1, sub2, sub3 := directTraceSubTypes(mb)
-		smv0, smv1, smv2, smv3 := directTraceSubMVs(mb)
-		p0L0, p0L1 := bTracePart0MVs(mb)
-		p1L0, p1L1 := bTracePart1MVs(mb)
-		fmt.Fprintf(os.Stderr,
-			"GOBIDI mb=%04d x=%02d y=%02d poc=%d spatial=%d mb_type=%d ref0=%d ref1=%d mv0={%d,%d} mv1={%d,%d} mv0p1={%d,%d} mv1p1={%d,%d} cbp=%02x qpd=%d sub0=%d sub1=%d sub2=%d sub3=%d submv0={%d,%d} submv1={%d,%d} submv2={%d,%d} submv3={%d,%d}\n",
-			mbY*d.mbW+mbX, mbX, mbY, f.POC, boolInt(mb.DirectSpatial), mb.MBType,
-			mb.RefIdxL0[0], mb.RefIdxL1[0], p0L0.X, p0L0.Y, p0L1.X, p0L1.Y,
-			p1L0.X, p1L0.Y, p1L1.X, p1L1.Y,
-			mb.CBP, mb.QPDelta, sub0, sub1, sub2, sub3,
-			smv0.X, smv0.Y, smv1.X, smv1.Y, smv2.X, smv2.Y, smv3.X, smv3.Y)
-	}
-
 	var blended [256]uint8
 	if mb.MBType == syntax.BMBTypeB8x8 {
 		for part := 0; part < 4; part++ {
