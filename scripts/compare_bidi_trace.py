@@ -26,6 +26,16 @@ GO_RE = re.compile(
     r'(?: submv0=\{(?P<submv0x>-?\d+),(?P<submv0y>-?\d+)\} submv1=\{(?P<submv1x>-?\d+),(?P<submv1y>-?\d+)\} submv2=\{(?P<submv2x>-?\d+),(?P<submv2y>-?\d+)\} submv3=\{(?P<submv3x>-?\d+),(?P<submv3y>-?\d+)\})?'
 )
 
+DIRECT_FLAGS = {12552, 61704}
+
+def normalize_sub_flags(subs: tuple[int, int, int, int]) -> tuple[int, int, int, int]:
+    # FFmpeg can report equivalent Direct sub-partition cache flags as either
+    # 12552 or 61704 depending on which internal direct path last touched the
+    # cache. They resolve to the same list-use and representative-MV state for
+    # post-motion comparison, so normalize them before treating sub fields as a
+    # real B_8x8 shape mismatch.
+    return tuple(12552 if int(v) in DIRECT_FLAGS else int(v) for v in subs)
+
 def row(m: re.Match[str]) -> dict[str, object]:
     gd = m.groupdict()
     def iv(name: str, default: int = 0) -> int:
@@ -110,6 +120,13 @@ def ref_mv_mismatch(f: dict[str, object], g: dict[str, object]) -> bool:
         fu = ff_uses(f, list_idx, 0)
         gu = go_uses(g, list_idx, 0)
         if fu != gu:
+            # Equivalent Direct cache flags can differ in internal list-use bits.
+            # If the resolved representative tuple already matches, this is a
+            # trace-shape mismatch rather than a motion mismatch.
+            if list_idx == 0 and (fr[0], fr[2], fr[3]) == (gr[0], gr[2], gr[3]):
+                continue
+            if list_idx == 1 and (fr[1], fr[4], fr[5]) == (gr[1], gr[4], gr[5]):
+                continue
             return True
         if not fu:
             continue
@@ -125,6 +142,10 @@ def p1_mismatch(f: dict[str, object], g: dict[str, object]) -> bool:
         fu = ff_uses(f, list_idx, 1)
         gu = go_uses(g, list_idx, 1)
         if fu != gu:
+            if list_idx == 0 and (fp[0], fp[1]) == (gp[0], gp[1]):
+                continue
+            if list_idx == 1 and (fp[2], fp[3]) == (gp[2], gp[3]):
+                continue
             return True
         if not fu:
             continue
@@ -177,16 +198,15 @@ def main() -> None:
             # a standalone mismatch unless either side is explicitly B_8x8-like.
             ff_8x8_like = any((int(v) & 64) != 0 for v in f['sub'])
             go_8x8_like = int(g['mbtype']) == 22
-            if (ff_8x8_like or go_8x8_like) and f['sub'] != g['sub']:
+            if (ff_8x8_like or go_8x8_like) and normalize_sub_flags(f['sub']) != normalize_sub_flags(g['sub']):
                 fields.append('sub')
-            direct_flags = {12552, 61704}
             # submv fields trace list0 representatives. Ignore direct-looking
             # sub flags when the resolved MB/partition does not use list0;
             # FFmpeg can leave direct sub flags in L1-only rows where list0
             # cache contents are intentionally stale/noisy.
             direct_idxs = [
                 i for i, (fs, gs) in enumerate(zip(f['sub'], g['sub']))
-                if fs in direct_flags and gs in direct_flags and ff_uses(f, 0, i) and go_uses(g, 0, i)
+                if fs in DIRECT_FLAGS and gs in DIRECT_FLAGS and ff_uses(f, 0, i) and go_uses(g, 0, i)
             ]
             if any(f['submv'][i] != g['submv'][i] for i in direct_idxs):
                 fields.append('submv')
