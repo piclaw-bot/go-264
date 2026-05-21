@@ -75,16 +75,18 @@ PY
 mkdir -p "$OUTDIR/go" "$OUTDIR/ffmpeg"
 patch_ffmpeg_bidi_trace
 (cd "$FFSRC" && make -j"${MAKE_JOBS:-$(nproc 2>/dev/null || echo 2)}" ffmpeg >/tmp/go264-ffmpeg-bidi-build.log)
-GO264_FFMPEG_B_MB_TRACE=1 "$FFMPEG" -y -threads 1 -hide_banner \
+GO264_FFMPEG_B_MB_TRACE=1 GO264_FFMPEG_CABAC_TRACE="${GO264_FFMPEG_B_MVD_TRACE:-}" "$FFMPEG" -y -threads 1 -hide_banner \
   -i "$INPUT" -frames:v "$FRAMES" -pix_fmt yuv420p -f rawvideo /dev/null \
   >"$OUTDIR/ffmpeg/stdout.log" 2>"$OUTDIR/ffmpeg/bidi.log" || true
 
 grep '^FFBIDI' "$OUTDIR/ffmpeg/bidi.log" >"$OUTDIR/ffbidi.rows" || true
+grep '^FF_BPART_MVD' "$OUTDIR/ffmpeg/bidi.log" >"$OUTDIR/ffbpart_mvd.rows" || true
 rm -rf "$OUTDIR/go/frames"
 mkdir -p "$OUTDIR/go/frames"
-GO264_B_MB_TRACE=1 GO264_CABAC_TERMINATE_TRACE="${GO264_CABAC_TERMINATE_TRACE:-}" go run ./cmd/decode264 -f yuv -i "$INPUT" -o "$OUTDIR/go/frames" \
+GO264_B_MB_TRACE=1 GO264_B_MVD_TRACE="${GO264_B_MVD_TRACE:-}" GO264_CABAC_TERMINATE_TRACE="${GO264_CABAC_TERMINATE_TRACE:-}" go run ./cmd/decode264 -f yuv -i "$INPUT" -o "$OUTDIR/go/frames" \
   >"$OUTDIR/go/stdout.log" 2>"$OUTDIR/go/bidi.log"
 grep '^GOBIDI' "$OUTDIR/go/bidi.log" >"$OUTDIR/gobidi.rows" || true
+grep '^GOBPART_MVD' "$OUTDIR/go/bidi.log" >"$OUTDIR/gobpart_mvd.rows" || true
 grep '^GOTERMINATE' "$OUTDIR/go/bidi.log" >"$OUTDIR/goterminate.rows" || true
 
 python3 scripts/compare_bidi_trace.py "$OUTDIR/ffbidi.rows" "$OUTDIR/gobidi.rows" \
@@ -92,5 +94,7 @@ python3 scripts/compare_bidi_trace.py "$OUTDIR/ffbidi.rows" "$OUTDIR/gobidi.rows
   --go-poc "${GO_POC:-6}" --go-occurrence "${GO_OCCURRENCE:-0}" --limit "${LIMIT:-20}" || true
 
 echo "ffbidi=$OUTDIR/ffbidi.rows"
+echo "ffbpart_mvd=$OUTDIR/ffbpart_mvd.rows"
 echo "gobidi=$OUTDIR/gobidi.rows"
+echo "gobpart_mvd=$OUTDIR/gobpart_mvd.rows"
 echo "goterminate=$OUTDIR/goterminate.rows"
