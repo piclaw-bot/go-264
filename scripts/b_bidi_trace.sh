@@ -104,9 +104,17 @@ grep '^GOBIDI' "$OUTDIR/go/bidi.log" >"$OUTDIR/gobidi.rows" || true
 grep '^GOBPART_MVD' "$OUTDIR/go/bidi.log" >"$OUTDIR/gobpart_mvd.rows" || true
 grep '^GOTERMINATE' "$OUTDIR/go/bidi.log" >"$OUTDIR/goterminate.rows" || true
 
+bidi_args=(
+  --ff-frame "${FF_FRAME:-2}"
+  --ff-occurrence "${FF_OCCURRENCE:-0}"
+  --go-poc "${GO_POC:-6}"
+  --go-occurrence "${GO_OCCURRENCE:-0}"
+  --limit "${LIMIT:-20}"
+)
+[[ -n "${FROM_MB:-}" ]] && bidi_args+=(--from-mb "$FROM_MB")
+[[ -n "${TO_MB:-}" ]] && bidi_args+=(--to-mb "$TO_MB")
 python3 scripts/compare_bidi_trace.py "$OUTDIR/ffbidi.rows" "$OUTDIR/gobidi.rows" \
-  --ff-frame "${FF_FRAME:-2}" --ff-occurrence "${FF_OCCURRENCE:-0}" \
-  --go-poc "${GO_POC:-6}" --go-occurrence "${GO_OCCURRENCE:-0}" --limit "${LIMIT:-20}" || true
+  "${bidi_args[@]}" || true
 
 if [[ -s "$OUTDIR/ffbpart_mvd.rows" && -s "$OUTDIR/gobidi.rows" ]]; then
   bpart_args=(
