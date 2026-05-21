@@ -73,8 +73,11 @@ def load_write(path: str, poc_filter: int | None = None, occurrence: int = 0) ->
         m = WRITE_RE.search(line)
         if not m:
             continue
-        if poc_filter is not None and m['poc'] is not None and int(m['poc']) != poc_filter:
-            continue
+        if poc_filter is not None:
+            # POC-qualified comparisons must not consume older GOMOTWRITE rows
+            # that predate poc= tracing; MB addresses repeat across pictures.
+            if m['poc'] is None or int(m['poc']) != poc_filter:
+                continue
         key = (int(m['mb']), int(m['part']))
         occ = seen.get(key, 0)
         seen[key] = occ + 1
