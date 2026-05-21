@@ -82,9 +82,10 @@ GO264_FFMPEG_B_MB_TRACE=1 "$FFMPEG" -y -threads 1 -hide_banner \
 grep '^FFBIDI' "$OUTDIR/ffmpeg/bidi.log" >"$OUTDIR/ffbidi.rows" || true
 rm -rf "$OUTDIR/go/frames"
 mkdir -p "$OUTDIR/go/frames"
-GO264_B_MB_TRACE=1 go run ./cmd/decode264 -f yuv -i "$INPUT" -o "$OUTDIR/go/frames" \
+GO264_B_MB_TRACE=1 GO264_CABAC_TERMINATE_TRACE="${GO264_CABAC_TERMINATE_TRACE:-}" go run ./cmd/decode264 -f yuv -i "$INPUT" -o "$OUTDIR/go/frames" \
   >"$OUTDIR/go/stdout.log" 2>"$OUTDIR/go/bidi.log"
 grep '^GOBIDI' "$OUTDIR/go/bidi.log" >"$OUTDIR/gobidi.rows" || true
+grep '^GOTERMINATE' "$OUTDIR/go/bidi.log" >"$OUTDIR/goterminate.rows" || true
 
 python3 scripts/compare_bidi_trace.py "$OUTDIR/ffbidi.rows" "$OUTDIR/gobidi.rows" \
   --ff-frame "${FF_FRAME:-2}" --ff-occurrence "${FF_OCCURRENCE:-0}" \
@@ -92,3 +93,4 @@ python3 scripts/compare_bidi_trace.py "$OUTDIR/ffbidi.rows" "$OUTDIR/gobidi.rows
 
 echo "ffbidi=$OUTDIR/ffbidi.rows"
 echo "gobidi=$OUTDIR/gobidi.rows"
+echo "goterminate=$OUTDIR/goterminate.rows"

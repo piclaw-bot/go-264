@@ -616,6 +616,9 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					}
 					mbQPCtx[mbIdx] = currentQP
 					if cabacDec.DecodeTerminate() == 1 {
+						if os.Getenv("GO264_CABAC_TERMINATE_TRACE") != "" {
+							fmt.Fprintf(os.Stderr, "GOTERMINATE mb=%04d x=%02d y=%02d poc=%d skipped=1\n", mbIdx, mbX, mbY, f.POC)
+						}
 						break
 					}
 					continue
@@ -660,6 +663,9 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 				}
 				mbQPCtx[mbIdx] = currentQP
 				if cabacDec.DecodeTerminate() == 1 {
+					if os.Getenv("GO264_CABAC_TERMINATE_TRACE") != "" {
+						fmt.Fprintf(os.Stderr, "GOTERMINATE mb=%04d x=%02d y=%02d poc=%d skipped=0\n", mbIdx, mbX, mbY, f.POC)
+					}
 					break
 				}
 				continue
