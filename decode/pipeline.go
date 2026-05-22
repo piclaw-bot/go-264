@@ -477,6 +477,10 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					transform8x8Ctx[mbIdx] = false
 					bmc.writeBackInterL0(mbX, mbY, mbInter)
 					mbFFTypeCtx[mbIdx] = ffInterMBType(mbInter)
+					if os.Getenv("GO264_P_STATE_TRACE") != "" {
+						low, rng, _ := cabacDec.DebugState()
+						fmt.Fprintf(os.Stderr, "GOPSTATE mb=%04d x=%02d y=%02d poc=%d kind=skip low=%d range=%d\n", mbIdx, mbX, mbY, f.POC, low, rng)
+					}
 					d.traceMB(MBTraceEvent{NALType: unit.Type, FrameNum: int(hdr.FrameNum), SliceType: hdr.SliceType, MBAddr: mbIdx, MBX: mbX, MBY: mbY, EntropyCABAC: true, Kind: "P_SKIP", MBType: mbInter.MBType, QP: currentQP, Skipped: true, RefIdx: mbInter.RefIdx, MV: mbInter.MV})
 					if cabacDec.DecodeTerminate() == 1 {
 						break
@@ -514,6 +518,10 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 				transform8x8Ctx[mbIdx] = mbInter.Use8x8Transform
 				bmc.writeBackInterL0(mbX, mbY, mbInter)
 				mbFFTypeCtx[mbIdx] = ffInterMBType(mbInter)
+				if os.Getenv("GO264_P_STATE_TRACE") != "" {
+					low, rng, _ := cabacDec.DebugState()
+					fmt.Fprintf(os.Stderr, "GOPSTATE mb=%04d x=%02d y=%02d poc=%d kind=inter low=%d range=%d\n", mbIdx, mbX, mbY, f.POC, low, rng)
+				}
 				d.traceMB(MBTraceEvent{NALType: unit.Type, FrameNum: int(hdr.FrameNum), SliceType: hdr.SliceType, MBAddr: mbIdx, MBX: mbX, MBY: mbY, EntropyCABAC: true, Kind: "P", MBType: mbInter.MBType, SubMBType: mbInter.SubMBType, CBP: mbInter.CBP, QPDelta: mbInter.QPDelta, QP: currentQP, Use8x8: mbInter.Use8x8Transform, RefIdx: mbInter.RefIdx, MV: mbInter.MV, SubMV: mbInter.SubMV, TotalCoeff: traceTotalCoeffFFmpegOrder(mbInter.TotalCoeff), ChromaCoeff: mbInter.ChromaTotalCoeff})
 				if cabacDec.DecodeTerminate() == 1 {
 					break
