@@ -696,7 +696,7 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 	leftNonSkip, topNonSkip bool,
 	leftIsDirect, topIsDirect bool,
 	refCtxs [4]int,
-	mv4 []syntax.MotionVector, ref4 []int8, mv4L1 []syntax.MotionVector, ref4L1 []int8, mvd4 []syntax.MotionVector, mvd4L1 []syntax.MotionVector, stride4, mbX, mbY int,
+	mv4 []syntax.MotionVector, ref4 []int8, direct4 []bool, mv4L1 []syntax.MotionVector, ref4L1 []int8, mvd4 []syntax.MotionVector, mvd4L1 []syntax.MotionVector, stride4, mbX, mbY int,
 	currentPOC int,
 	transform8x8Mode bool, transform8x8Ctx int,
 	leftMBType, topMBType uint32,
@@ -888,7 +888,14 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 		if numRefL0 > 1 && usesL0 {
 			for i := 0; i < parts; i++ {
 				if cabacBPartUsesL0(bMBType, i) {
-					mb.RefIdxL0[i] = int8(syntax.DecodeCABACRef(dec, models, refCtxs[i]))
+					pw, ph := cabacBPartDims(bMBType, i)
+					bx, by := x4+cabacBPartX(bMBType, i, parts), y4+cabacBPartY(bMBType, i, parts)
+					ctx := refCtxs[i]
+					if i > 0 {
+						ctx = cabacBRefIdxCtx(ref4, direct4, stride4, bx, by)
+					}
+					mb.RefIdxL0[i] = int8(syntax.DecodeCABACRef(dec, models, ctx))
+					fillRef4(ref4, stride4, bx, by, pw, ph, mb.RefIdxL0[i])
 				}
 			}
 		}
