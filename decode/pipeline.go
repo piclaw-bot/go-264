@@ -248,6 +248,9 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 		// FFmpeg realigns the parsed slice-header bitstream before CABAC init.
 		// CABAC arithmetic bytes are byte-aligned after cabac_alignment_one_bit;
 		// starting the arithmetic decoder mid-byte desynchronizes every bin.
+		if os.Getenv("GO264_HEADER_TRACE") != "" {
+			fmt.Fprintf(os.Stderr, "GOHEADER_CABAC_INIT pos=%d poc=%d slice=%d qp=%d initIDC=%d\n", r.Position(), f.POC, hdr.SliceType, currentQP, hdr.CabacInitIDC)
+		}
 		r.ByteAlign()
 		cabacDec = cabac.NewCABACDecoder(r)
 		cabacModels = cabac.InitContextModels(currentQP, int(hdr.CabacInitIDC), isIntra)

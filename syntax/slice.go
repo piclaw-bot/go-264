@@ -1,6 +1,11 @@
 package syntax
 
-import "github.com/rcarmo/go-264/nal"
+import (
+	"fmt"
+	"os"
+
+	"github.com/rcarmo/go-264/nal"
+)
 
 const (
 	SliceTypeP  = 0
@@ -190,7 +195,13 @@ func ParseHeaderWithRefIDC(payload []byte, nalType uint8, nalRefIDC uint8, sps *
 	// are read from the wrong bit position on Main/High weighted streams.
 	if (pps.WeightedPred && (h.SliceType == SliceTypeP || h.SliceType == SliceTypeSP)) ||
 		(pps.WeightedBipredIDC == 1 && h.SliceType == SliceTypeB) {
+		if os.Getenv("GO264_HEADER_TRACE") != "" {
+			fmt.Fprintf(os.Stderr, "GOHEADER_PRE_WEIGHT pos=%d numL0=%d slice_type=%d\n", r.Position(), h.NumRefIdxL0Active, h.SliceType)
+		}
 		skipPredWeightTable(r, h, sps)
+		if os.Getenv("GO264_HEADER_TRACE") != "" {
+			fmt.Fprintf(os.Stderr, "GOHEADER_POST_WEIGHT pos=%d\n", r.Position())
+		}
 	}
 
 	// dec_ref_pic_marking is present only for reference slices (nal_ref_idc != 0).
