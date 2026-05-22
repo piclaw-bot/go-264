@@ -11,7 +11,7 @@ from collections import defaultdict
 
 FF_RE = re.compile(
     r'FFBIDI mb=(?P<mb>\d+).*?frame=(?P<frame>\d+)\b(?:.*?poc=(?P<poc>-?\d+)\b)?.*?type=(?P<mbtype>-?\d+) '
-    r'ref0=(?P<ref0>-?\d+) ref1=(?P<ref1>-?\d+) '
+    r'ref0=(?P<ref0>-?\d+) ref1=(?P<ref1>-?\d+)(?: ref0p1=(?P<ref0p1>-?\d+) ref1p1=(?P<ref1p1>-?\d+))? '
     r'mv0=\{(?P<mv0x>-?\d+),(?P<mv0y>-?\d+)\} mv1=\{(?P<mv1x>-?\d+),(?P<mv1y>-?\d+)\}'
     r'(?: mv0p1=\{(?P<mv0p1x>-?\d+),(?P<mv0p1y>-?\d+)\} mv1p1=\{(?P<mv1p1x>-?\d+),(?P<mv1p1y>-?\d+)\})?.*?'
     r'sub0=(?P<sub0>\d+) sub1=(?P<sub1>\d+) sub2=(?P<sub2>\d+) sub3=(?P<sub3>\d+)'
@@ -19,7 +19,7 @@ FF_RE = re.compile(
 )
 GO_RE = re.compile(
     r'GOBIDI mb=(?P<mb>\d+).*?poc=(?P<frame>\d+)\b.*?mb_type=(?P<mbtype>-?\d+) '
-    r'ref0=(?P<ref0>-?\d+) ref1=(?P<ref1>-?\d+) '
+    r'ref0=(?P<ref0>-?\d+) ref1=(?P<ref1>-?\d+)(?: ref0p1=(?P<ref0p1>-?\d+) ref1p1=(?P<ref1p1>-?\d+))? '
     r'mv0=\{(?P<mv0x>-?\d+),(?P<mv0y>-?\d+)\} mv1=\{(?P<mv1x>-?\d+),(?P<mv1y>-?\d+)\}'
     r'(?: mv0p1=\{(?P<mv0p1x>-?\d+),(?P<mv0p1y>-?\d+)\} mv1p1=\{(?P<mv1p1x>-?\d+),(?P<mv1p1y>-?\d+)\})?.*?'
     r'sub0=(?P<sub0>\d+) sub1=(?P<sub1>\d+) sub2=(?P<sub2>\d+) sub3=(?P<sub3>\d+)'
@@ -44,7 +44,7 @@ def row(m: re.Match[str]) -> dict[str, object]:
     return {
         'mb': iv('mb'), 'frame': iv('frame'), 'poc': iv('poc', -1), 'mbtype': iv('mbtype'),
         'ref_mv': (iv('ref0'), iv('ref1'), iv('mv0x'), iv('mv0y'), iv('mv1x'), iv('mv1y')),
-        'p1': (iv('mv0p1x'), iv('mv0p1y'), iv('mv1p1x'), iv('mv1p1y')),
+        'p1': (iv('ref0p1', iv('ref0')), iv('ref1p1', iv('ref1')), iv('mv0p1x'), iv('mv0p1y'), iv('mv1p1x'), iv('mv1p1y')),
         'sub': (iv('sub0'), iv('sub1'), iv('sub2'), iv('sub3')),
         'submv': ((iv('submv0x'), iv('submv0y')), (iv('submv1x'), iv('submv1y')), (iv('submv2x'), iv('submv2y')), (iv('submv3x'), iv('submv3y'))),
     }
@@ -148,24 +148,22 @@ def p1_mismatch(f: dict[str, object], g: dict[str, object]) -> bool:
         fu = ff_uses(f, list_idx, 1)
         gu = go_uses(g, list_idx, 1)
         if fu != gu:
-            if list_idx == 0 and (fp[0], fp[1]) == (gp[0], gp[1]):
+            if list_idx == 0 and (fp[0], fp[2], fp[3]) == (gp[0], gp[2], gp[3]):
                 continue
-            if list_idx == 1 and (fp[2], fp[3]) == (gp[2], gp[3]):
+            if list_idx == 1 and (fp[1], fp[4], fp[5]) == (gp[1], gp[4], gp[5]):
                 continue
             return True
         if not fu:
             continue
         if list_idx == 0:
-            fr = f['ref_mv']; gr = g['ref_mv']
-            if fr[0] < 0 and gr[0] < 0:
+            if fp[0] < 0 and gp[0] < 0:
                 continue
-            if (fp[0], fp[1]) != (gp[0], gp[1]):
+            if (fp[0], fp[2], fp[3]) != (gp[0], gp[2], gp[3]):
                 return True
         if list_idx == 1:
-            fr = f['ref_mv']; gr = g['ref_mv']
-            if fr[1] < 0 and gr[1] < 0:
+            if fp[1] < 0 and gp[1] < 0:
                 continue
-            if (fp[2], fp[3]) != (gp[2], gp[3]):
+            if (fp[1], fp[4], fp[5]) != (gp[1], gp[4], gp[5]):
                 return True
     return False
 

@@ -694,10 +694,14 @@ func (d *Decoder) traceBidiMB(f *frame.Frame, mb *syntax.MBBidi, mbX, mbY int) {
 	smv0, smv1, smv2, smv3 := directTraceSubMVs(mb)
 	p0L0, p0L1 := bTracePart0MVs(mb)
 	p1L0, p1L1 := bTracePart1MVs(mb)
+	ref0p1, ref1p1 := mb.RefIdxL0[0], mb.RefIdxL1[0]
+	if cabacBPartsForType(mb.MBType) == 2 {
+		ref0p1, ref1p1 = mb.RefIdxL0[1], mb.RefIdxL1[1]
+	}
 	fmt.Fprintf(os.Stderr,
-		"GOBIDI mb=%04d x=%02d y=%02d poc=%d spatial=%d mb_type=%d ref0=%d ref1=%d mv0={%d,%d} mv1={%d,%d} mv0p1={%d,%d} mv1p1={%d,%d} cbp=%02x qpd=%d amvd0={%d,%d} mvd0={%d,%d} mvp0={%d,%d} amvd0p1={%d,%d} mvd0p1={%d,%d} mvp0p1={%d,%d} amvd1={%d,%d} mvd1={%d,%d} mvp1={%d,%d} amvd1p1={%d,%d} mvd1p1={%d,%d} mvp1p1={%d,%d} sub0=%d sub1=%d sub2=%d sub3=%d submv0={%d,%d} submv1={%d,%d} submv2={%d,%d} submv3={%d,%d}\n",
+		"GOBIDI mb=%04d x=%02d y=%02d poc=%d spatial=%d mb_type=%d ref0=%d ref1=%d ref0p1=%d ref1p1=%d mv0={%d,%d} mv1={%d,%d} mv0p1={%d,%d} mv1p1={%d,%d} cbp=%02x qpd=%d amvd0={%d,%d} mvd0={%d,%d} mvp0={%d,%d} amvd0p1={%d,%d} mvd0p1={%d,%d} mvp0p1={%d,%d} amvd1={%d,%d} mvd1={%d,%d} mvp1={%d,%d} amvd1p1={%d,%d} mvd1p1={%d,%d} mvp1p1={%d,%d} sub0=%d sub1=%d sub2=%d sub3=%d submv0={%d,%d} submv1={%d,%d} submv2={%d,%d} submv3={%d,%d}\n",
 		mbY*d.mbW+mbX, mbX, mbY, f.POC, boolInt(mb.DirectSpatial), mb.MBType,
-		mb.RefIdxL0[0], mb.RefIdxL1[0], p0L0.X, p0L0.Y, p0L1.X, p0L1.Y,
+		mb.RefIdxL0[0], mb.RefIdxL1[0], ref0p1, ref1p1, p0L0.X, p0L0.Y, p0L1.X, p0L1.Y,
 		p1L0.X, p1L0.Y, p1L1.X, p1L1.Y,
 		mb.CBP, mb.QPDelta,
 		mb.AMVDL0[0].X, mb.AMVDL0[0].Y, mb.MVDL0[0].X, mb.MVDL0[0].Y, mb.MVPL0[0].X, mb.MVPL0[0].Y,

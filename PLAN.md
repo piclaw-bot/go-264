@@ -102,7 +102,7 @@ Still gated:
 | `bbb_annexb.h264` frame 0 | Y=59.85 U=56.14 V=57.08 dB |
 | `bbb_annexb.h264` B POC=2 / POC=6 | Y≈21.8 / 21.5 dB |
 | `bbb_annexb.h264` later B POC=14 / POC=20 | Y≈19.6 / 19.3 dB |
-| `bbb_annexb.h264` 300-frame average PSNR | Y=8.84 U=19.25 V=29.01 dB |
+| `bbb_annexb.h264` 300-frame average PSNR | Y=8.98 U=19.25 V=29.01 dB |
 | BBB baseline decode allocations | ~10.9 MB/op, ~1.3k allocs/op |
 | BBB baseline decode sample | ~44-52 ms/op typical recent sample |
 

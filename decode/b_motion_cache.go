@@ -108,7 +108,7 @@ func (c bMotionCache) decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.
 		leftCBP, topCBP,
 		leftNonSkip, topNonSkip,
 		leftIsDirect, topIsDirect,
-		c.refIdxCtxsB(mbX, mbY), c.mv[0], c.ref[0], c.mv[1], c.ref[1], c.mvd[0], c.mvd[1], c.stride4, mbX, mbY,
+		c.refIdxCtxsB(mbX, mbY), c.mv[0], c.ref[0], c.direct, c.mv[1], c.ref[1], c.mvd[0], c.mvd[1], c.stride4, mbX, mbY,
 		currentPOC,
 		transform8x8Mode, transform8x8Ctx,
 		leftMBType, topMBType,

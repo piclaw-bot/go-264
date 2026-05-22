@@ -32,9 +32,9 @@ trace = f'''   if( IS_INTER( mb_type ) ) {{
         int s1 = (mb_type & 16) ? scan8[8] : scan8[4];
         int s2 = scan8[8];
         int s3 = scan8[12];
-        fprintf(stderr, "FFBIDI mb=%04d x=%02d y=%02d frame=%d type=%d ref0=%d ref1=%d mv0={{%d,%d}} mv1={{%d,%d}} mv0p1={{%d,%d}} mv1p1={{%d,%d}} sub0=%d sub1=%d sub2=%d sub3=%d submv0={{%d,%d}} submv1={{%d,%d}} submv2={{%d,%d}} submv3={{%d,%d}}\\n",
+        fprintf(stderr, "FFBIDI mb=%04d x=%02d y=%02d frame=%d type=%d ref0=%d ref1=%d ref0p1=%d ref1p1=%d mv0={{%d,%d}} mv1={{%d,%d}} mv0p1={{%d,%d}} mv1p1={{%d,%d}} sub0=%d sub1=%d sub2=%d sub3=%d submv0={{%d,%d}} submv1={{%d,%d}} submv2={{%d,%d}} submv3={{%d,%d}}\\n",
                 sl->mb_x + sl->mb_y * h->mb_width, sl->mb_x, sl->mb_y, h->poc.frame_num, mb_type,
-                sl->ref_cache[0][s0], sl->ref_cache[1][s0],
+                sl->ref_cache[0][s0], sl->ref_cache[1][s0], sl->ref_cache[0][s1], sl->ref_cache[1][s1],
                 sl->mv_cache[0][s0][0], sl->mv_cache[0][s0][1],
                 sl->mv_cache[1][s0][0], sl->mv_cache[1][s0][1],
                 sl->mv_cache[0][s1][0], sl->mv_cache[0][s1][1],
