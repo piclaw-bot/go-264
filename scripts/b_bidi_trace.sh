@@ -79,6 +79,18 @@ s = s.replace('sl->mb_x + sl->mb_y*h->mb_width, i, list, mpx, mpy,', 'sl->mb_x +
 s = s.replace('sl->mb_x + sl->mb_y*h->mb_width, list, mpx, mpy,', 'sl->mb_x + sl->mb_y*h->mb_width, h->poc.frame_num, list, mpx, mpy,')
 s = s.replace('sl->mb_x + sl->mb_y*h->mb_width, i, j, list,\n                                _amvdX', 'sl->mb_x + sl->mb_y*h->mb_width, h->poc.frame_num, i, j, list,\n                                _amvdX')
 s = re.sub(r'(GO264_FFMPEG_CABAC_TRACE"\) && sl->slice_type_nos == AV_PICTURE_TYPE_B && \(sl->mb_x \+ sl->mb_y \* h->mb_width\) < )\d+(\)\n\s*fprintf\(stderr, "FF_B(?:8x8|PART)_MVD)', rf'\g<1>{mb_limit}\g<2>', s)
+if 'FFMVD_COMP mb=' not in s:
+    s = s.replace('''    int mxd = decode_cabac_mb_mvd(sl, 40, amvd0, &mpx);\\
+    int myd = decode_cabac_mb_mvd(sl, 47, amvd1, &mpy);\\
+''', '''    unsigned _mvdx_pre_low = (unsigned)sl->cabac.low >> 1, _mvdx_pre_range = (unsigned)sl->cabac.range;\\
+    int mxd = decode_cabac_mb_mvd(sl, 40, amvd0, &mpx);\\
+    if (getenv("GO264_FFMPEG_CABAC_TRACE") && sl->slice_type_nos == AV_PICTURE_TYPE_B && (sl->mb_x + sl->mb_y * h->mb_width) < ''' + mb_limit + ''')\\
+        fprintf(stderr, "FFMVD_COMP mb=%04d frame=%d poc=%d n=%d list=%d comp=x amvd=%d mvd=%d pre=%u/%u post=%u/%u\\n", sl->mb_x + sl->mb_y*h->mb_width, h->poc.frame_num, h->poc.poc_lsb, n, list, amvd0, mxd, _mvdx_pre_low, _mvdx_pre_range, (unsigned)sl->cabac.low >> 1, (unsigned)sl->cabac.range);\\
+    unsigned _mvdy_pre_low = (unsigned)sl->cabac.low >> 1, _mvdy_pre_range = (unsigned)sl->cabac.range;\\
+    int myd = decode_cabac_mb_mvd(sl, 47, amvd1, &mpy);\\
+    if (getenv("GO264_FFMPEG_CABAC_TRACE") && sl->slice_type_nos == AV_PICTURE_TYPE_B && (sl->mb_x + sl->mb_y * h->mb_width) < ''' + mb_limit + ''')\\
+        fprintf(stderr, "FFMVD_COMP mb=%04d frame=%d poc=%d n=%d list=%d comp=y amvd=%d mvd=%d pre=%u/%u post=%u/%u\\n", sl->mb_x + sl->mb_y*h->mb_width, h->poc.frame_num, h->poc.poc_lsb, n, list, amvd1, myd, _mvdy_pre_low, _mvdy_pre_range, (unsigned)sl->cabac.low >> 1, (unsigned)sl->cabac.range);\\
+''')
 # Add AMVD context sums to the non-B_8x8 B-partition diagnostics. The old
 # mvd_abs field is the decoded absolute MVD, not the CABAC neighbour context.
 s = s.replace('{ int _pmx = mx, _pmy = my; DECODE_CABAC_MB_MVD(sl, list, 0)\n', '{ int _pmx = mx, _pmy = my; unsigned _pre_low = (unsigned)sl->cabac.low >> 1, _pre_range = (unsigned)sl->cabac.range; int _amvdX = sl->mvd_cache[list][scan8[0]-1][0] + sl->mvd_cache[list][scan8[0]-8][0]; int _amvdY = sl->mvd_cache[list][scan8[0]-1][1] + sl->mvd_cache[list][scan8[0]-8][1]; DECODE_CABAC_MB_MVD(sl, list, 0)\n')
