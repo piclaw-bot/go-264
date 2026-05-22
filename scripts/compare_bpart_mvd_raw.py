@@ -12,7 +12,7 @@ import re
 from collections import defaultdict
 
 FF_RE = re.compile(
-    r'FF_BPART_MVD mb=(?P<mb>\d+) frame=(?P<frame>\d+) part=(?P<part>\d+) list=(?P<list>\d+) '
+    r'FF_BPART_MVD mb=(?P<mb>\d+) frame=(?P<frame>\d+)(?: poc=(?P<poc>-?\d+))? part=(?P<part>\d+) list=(?P<list>\d+) '
     r'amvd=\{(?P<amvdx>-?\d+),(?P<amvdy>-?\d+)\} mvd_abs=\{(?P<absx>-?\d+),(?P<absy>-?\d+)\} '
     r'mvd=\{(?P<mvdx>-?\d+),(?P<mvdy>-?\d+)\}.*?pre=(?P<prelow>\d+)/(?P<prerange>\d+) post=(?P<postlow>\d+)/(?P<postrange>\d+)'
 )
@@ -35,12 +35,14 @@ def row(m: re.Match[str]) -> dict[str, tuple[int, int]]:
         'post_range': (iv(m, 'postrange'),),
     }
 
-def load_ff(path: str, frame: int, occurrence: int) -> dict[tuple[int, int, int], dict[str, tuple[int, int]]]:
+def load_ff(path: str, frame: int, poc_filter: int | None, occurrence: int) -> dict[tuple[int, int, int], dict[str, tuple[int, int]]]:
     out = {}
     seen: defaultdict[tuple[int, int, int], int] = defaultdict(int)
     for line in open(path, errors='replace'):
         m = FF_RE.search(line)
         if not m or iv(m, 'frame') != frame:
+            continue
+        if poc_filter is not None and (m.group('poc') is None or iv(m, 'poc') != poc_filter):
             continue
         key = (iv(m, 'mb'), iv(m, 'part'), iv(m, 'list'))
         occ = seen[key]; seen[key] += 1
@@ -67,6 +69,7 @@ def main() -> None:
     ap.add_argument('gobpart_mvd')
     ap.add_argument('--ff-frame', type=int, required=True)
     ap.add_argument('--ff-occurrence', type=int, default=0)
+    ap.add_argument('--ff-poc', type=int, help='optional FF picture POC filter when rows include poc=')
     ap.add_argument('--go-occurrence', type=int, default=0)
     ap.add_argument('--mb', type=int)
     ap.add_argument('--from-mb', type=int, dest='from_mb')
@@ -75,7 +78,7 @@ def main() -> None:
     ap.add_argument('--compare-low', action='store_true', help='also compare raw codILow values; off by default because FFmpeg and Go use different low normalizations')
     ap.add_argument('--fail-on-diff', action='store_true')
     args = ap.parse_args()
-    ff = load_ff(args.ffbpart_mvd, args.ff_frame, args.ff_occurrence)
+    ff = load_ff(args.ffbpart_mvd, args.ff_frame, args.ff_poc, args.ff_occurrence)
     go = load_go(args.gobpart_mvd, args.go_occurrence)
     compared = diffs = 0
     if not ff:

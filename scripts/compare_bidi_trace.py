@@ -10,7 +10,7 @@ import argparse, re
 from collections import defaultdict
 
 FF_RE = re.compile(
-    r'FFBIDI mb=(?P<mb>\d+).*?frame=(?P<frame>\d+)\b.*?type=(?P<mbtype>-?\d+) '
+    r'FFBIDI mb=(?P<mb>\d+).*?frame=(?P<frame>\d+)\b(?:.*?poc=(?P<poc>-?\d+)\b)?.*?type=(?P<mbtype>-?\d+) '
     r'ref0=(?P<ref0>-?\d+) ref1=(?P<ref1>-?\d+) '
     r'mv0=\{(?P<mv0x>-?\d+),(?P<mv0y>-?\d+)\} mv1=\{(?P<mv1x>-?\d+),(?P<mv1y>-?\d+)\}'
     r'(?: mv0p1=\{(?P<mv0p1x>-?\d+),(?P<mv0p1y>-?\d+)\} mv1p1=\{(?P<mv1p1x>-?\d+),(?P<mv1p1y>-?\d+)\})?.*?'
@@ -42,7 +42,7 @@ def row(m: re.Match[str]) -> dict[str, object]:
         v = gd.get(name)
         return default if v is None else int(v)
     return {
-        'mb': iv('mb'), 'frame': iv('frame'), 'mbtype': iv('mbtype'),
+        'mb': iv('mb'), 'frame': iv('frame'), 'poc': iv('poc', -1), 'mbtype': iv('mbtype'),
         'ref_mv': (iv('ref0'), iv('ref1'), iv('mv0x'), iv('mv0y'), iv('mv1x'), iv('mv1y')),
         'p1': (iv('mv0p1x'), iv('mv0p1y'), iv('mv1p1x'), iv('mv1p1y')),
         'sub': (iv('sub0'), iv('sub1'), iv('sub2'), iv('sub3')),
@@ -175,6 +175,7 @@ def main() -> None:
     ap.add_argument('gobidi')
     ap.add_argument('--ff-frame', type=int, required=True)
     ap.add_argument('--ff-occurrence', type=int, default=0)
+    ap.add_argument('--ff-poc', type=int, help='optional FF picture POC filter when FFBIDI rows include poc=')
     ap.add_argument('--go-poc', type=int, required=True)
     ap.add_argument('--go-occurrence', type=int, default=0)
     ap.add_argument('--mb', type=int, help='compare only one absolute macroblock index')
@@ -185,16 +186,17 @@ def main() -> None:
     args = ap.parse_args()
     ff = load(args.ffbidi, FF_RE)
     go = load(args.gobidi, GO_RE)
-    keys = sorted(k for k in ff if k[0] == args.ff_frame and k[1] == args.ff_occurrence)
+    keys = sorted(k for k in ff if k[0] == args.ff_frame and (args.ff_poc is not None or k[1] == args.ff_occurrence) and (args.ff_poc is None or int(ff[k].get('poc', -1)) == args.ff_poc))
     rows = diffs = 0
-    for _, _, mb in keys:
+    for key in keys:
+        _, _, mb = key
         if args.mb is not None and mb != args.mb:
             continue
         if args.from_mb is not None and mb < args.from_mb:
             continue
         if args.to_mb is not None and mb > args.to_mb:
             continue
-        f = ff[(args.ff_frame, args.ff_occurrence, mb)]
+        f = ff[key]
         g = go.get((args.go_poc, args.go_occurrence, mb))
         rows += 1
         if g is None:

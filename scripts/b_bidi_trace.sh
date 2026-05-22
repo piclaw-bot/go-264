@@ -103,6 +103,21 @@ if 'FFBSTATE mb=' not in s:
     else:
         s = s.replace('''            sl->last_qscale_diff = 0;\n\n            return 0;\n''', '''            sl->last_qscale_diff = 0;\n\n''' + skip_state + '''            return 0;\n''')
     s = s.replace('''\n    return 0;\n}\n''', '\n' + final_state + '''    return 0;\n}\n''', 1)
+# Add picture POC to FF rows so repeated frame_num B-pictures can be matched
+# without occurrence guessing.
+s = s.replace('h->cur_pic_ptr ? h->cur_pic_ptr->poc : h->cur_pic.poc', 'h->poc.poc_lsb')
+s = s.replace('frame=%d type=%d ref0=', 'frame=%d poc=%d type=%d ref0=')
+s = s.replace('h->poc.frame_num, mb_type,', 'h->poc.frame_num, h->poc.poc_lsb, mb_type,')
+s = s.replace('FFBSTATE mb=%04d x=%02d y=%02d frame=%d kind=', 'FFBSTATE mb=%04d x=%02d y=%02d frame=%d poc=%d kind=')
+s = s.replace('h->poc.frame_num,\n                        (unsigned)sl->cabac.low', 'h->poc.frame_num, h->poc.poc_lsb,\n                        (unsigned)sl->cabac.low')
+s = s.replace('h->poc.frame_num,\n                IS_INTRA(mb_type)', 'h->poc.frame_num, h->poc.poc_lsb,\n                IS_INTRA(mb_type)')
+# Do not alter the older FFCABAC summary format; it has no poc field.
+s = s.replace("h->poc.frame_num, h->poc.poc_lsb,\n                IS_INTRA(mb_type) ? 'I'", "h->poc.frame_num,\n                IS_INTRA(mb_type) ? 'I'")
+s = s.replace('FF_B8x8_MVD mb=%04d frame=%d sub=', 'FF_B8x8_MVD mb=%04d frame=%d poc=%d sub=')
+s = s.replace('FF_BPART_MVD mb=%04d frame=%d part=', 'FF_BPART_MVD mb=%04d frame=%d poc=%d part=')
+s = s.replace('h->poc.frame_num, i, j, list,', 'h->poc.frame_num, h->poc.poc_lsb, i, j, list,')
+s = s.replace('h->poc.frame_num, list,', 'h->poc.frame_num, h->poc.poc_lsb, list,')
+s = s.replace('h->poc.frame_num, i, list,', 'h->poc.frame_num, h->poc.poc_lsb, i, list,')
 p.write_text(s)
 PY
 }
@@ -144,6 +159,7 @@ bidi_args=(
   --go-occurrence "${GO_OCCURRENCE:-0}"
   --limit "${LIMIT:-20}"
 )
+[[ -n "${FF_POC:-}" ]] && bidi_args+=(--ff-poc "$FF_POC")
 [[ -n "${FROM_MB:-}" ]] && bidi_args+=(--from-mb "$FROM_MB")
 [[ -n "${TO_MB:-}" ]] && bidi_args+=(--to-mb "$TO_MB")
 python3 scripts/compare_bidi_trace.py "$OUTDIR/ffbidi.rows" "$OUTDIR/gobidi.rows" \
@@ -160,6 +176,7 @@ if [[ -s "$OUTDIR/ffbstate.rows" && -s "$OUTDIR/gobstate.rows" ]]; then
     --go-occurrence "${GO_OCCURRENCE:-0}"
     --limit "${LIMIT:-20}"
   )
+  [[ -n "${FF_POC:-}" ]] && bstate_args+=(--ff-poc "$FF_POC")
   [[ -n "${FROM_MB:-}" ]] && bstate_args+=(--from-mb "$FROM_MB")
   [[ -n "${TO_MB:-}" ]] && bstate_args+=(--to-mb "$TO_MB")
   python3 scripts/compare_bstate.py "$OUTDIR/ffbstate.rows" "$OUTDIR/gobstate.rows" \
@@ -174,6 +191,7 @@ if [[ -s "$OUTDIR/ffbpart_mvd.rows" && -s "$OUTDIR/gobidi.rows" ]]; then
     --go-occurrence "${GO_OCCURRENCE:-0}"
     --limit "${LIMIT:-20}"
   )
+  [[ -n "${FF_POC:-}" ]] && bpart_args+=(--ff-poc "$FF_POC")
   [[ -n "${FROM_MB:-}" ]] && bpart_args+=(--from-mb "$FROM_MB")
   [[ -n "${TO_MB:-}" ]] && bpart_args+=(--to-mb "$TO_MB")
   python3 scripts/compare_bpart_mvd.py "$OUTDIR/ffbpart_mvd.rows" "$OUTDIR/gobidi.rows" \
@@ -185,6 +203,7 @@ if [[ -s "$OUTDIR/ffbpart_mvd.rows" && -s "$OUTDIR/gobidi.rows" ]]; then
       --go-occurrence "${GO_OCCURRENCE:-0}"
       --limit "${LIMIT:-20}"
     )
+    [[ -n "${FF_POC:-}" ]] && raw_args+=(--ff-poc "$FF_POC")
     [[ -n "${FROM_MB:-}" ]] && raw_args+=(--from-mb "$FROM_MB")
     [[ -n "${TO_MB:-}" ]] && raw_args+=(--to-mb "$TO_MB")
     python3 scripts/compare_bpart_mvd_raw.py "$OUTDIR/ffbpart_mvd.rows" "$OUTDIR/gobpart_mvd.rows" \

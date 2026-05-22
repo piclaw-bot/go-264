@@ -6,7 +6,7 @@ import re
 from collections import defaultdict
 
 FF_RE = re.compile(
-    r'FF_BPART_MVD mb=(?P<mb>\d+)(?: frame=(?P<frame>\d+))? part=(?P<part>\d+) list=(?P<list>\d+) '
+    r'FF_BPART_MVD mb=(?P<mb>\d+)(?: frame=(?P<frame>\d+))?(?: poc=(?P<poc>-?\d+))? part=(?P<part>\d+) list=(?P<list>\d+) '
     r'(?:amvd=\{(?P<amvdx>-?\d+),(?P<amvdy>-?\d+)\} )?mvd_abs=\{(?P<absx>-?\d+),(?P<absy>-?\d+)\} mvd=\{(?P<mvdx>-?\d+),(?P<mvdy>-?\d+)\} '
     r'mvp=\{(?P<mvpx>-?\d+),(?P<mvpy>-?\d+)\} final=\{(?P<finalx>-?\d+),(?P<finaly>-?\d+)\}'
 )
@@ -23,7 +23,7 @@ GO_RE = re.compile(
 def iv(m: re.Match[str], name: str) -> int:
     return int(m.group(name))
 
-def load_ff(path: str, frame_filter: int | None, occurrence: int) -> dict[tuple[int, int, int], dict[str, tuple[int, int]]]:
+def load_ff(path: str, frame_filter: int | None, poc_filter: int | None, occurrence: int) -> dict[tuple[int, int, int], dict[str, tuple[int, int]]]:
     out = {}
     seen: defaultdict[tuple[int, int, int], int] = defaultdict(int)
     for line in open(path, errors='replace'):
@@ -36,6 +36,8 @@ def load_ff(path: str, frame_filter: int | None, occurrence: int) -> dict[tuple[
             # frame= are ambiguous, so skip them instead of silently mixing frames.
             if m.group('frame') is None or iv(m, 'frame') != frame_filter:
                 continue
+        if poc_filter is not None and (m.group('poc') is None or iv(m, 'poc') != poc_filter):
+            continue
         key = (iv(m, 'mb'), iv(m, 'part'), iv(m, 'list'))
         occ = seen[key]; seen[key] += 1
         if occ != occurrence:
@@ -75,6 +77,7 @@ def main() -> None:
     ap.add_argument('ffbpart_mvd')
     ap.add_argument('gobidi')
     ap.add_argument('--ff-frame', type=int, help='only compare FF rows for this frame when rows include frame=')
+    ap.add_argument('--ff-poc', type=int, help='optional FF picture POC filter when rows include poc=')
     ap.add_argument('--go-poc', type=int, required=True)
     ap.add_argument('--ff-occurrence', type=int, default=0)
     ap.add_argument('--go-occurrence', type=int, default=0)
@@ -84,7 +87,7 @@ def main() -> None:
     ap.add_argument('--limit', type=int, default=50)
     ap.add_argument('--fail-on-diff', action='store_true')
     args = ap.parse_args()
-    ff = load_ff(args.ffbpart_mvd, args.ff_frame, args.ff_occurrence)
+    ff = load_ff(args.ffbpart_mvd, args.ff_frame, args.ff_poc, args.ff_occurrence)
     go = load_go(args.gobidi, args.go_poc, args.go_occurrence)
     if not ff:
         print(f'no_ff_mvd_rows frame={args.ff_frame} occurrence={args.ff_occurrence}')

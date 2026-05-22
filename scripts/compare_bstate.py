@@ -5,18 +5,20 @@ import argparse
 import re
 from collections import defaultdict
 
-FF_RE = re.compile(r'FFBSTATE mb=(?P<mb>\d+).*?frame=(?P<frame>\d+) kind=(?P<kind>\w+) low=(?P<low>\d+) range=(?P<range>\d+)')
+FF_RE = re.compile(r'FFBSTATE mb=(?P<mb>\d+).*?frame=(?P<frame>\d+)(?:.*?poc=(?P<poc>-?\d+))? kind=(?P<kind>\w+) low=(?P<low>\d+) range=(?P<range>\d+)')
 GO_RE = re.compile(r'GOBSTATE mb=(?P<mb>\d+).*?poc=(?P<frame>\d+) kind=(?P<kind>\w+) low=(?P<low>\d+) range=(?P<range>\d+)')
 
 def iv(m: re.Match[str], name: str) -> int:
     return int(m.group(name))
 
-def load(path: str, regex: re.Pattern[str], frame: int, occurrence: int) -> dict[int, dict[str, object]]:
+def load(path: str, regex: re.Pattern[str], frame: int, occurrence: int, poc_filter: int | None = None) -> dict[int, dict[str, object]]:
     out = {}
     seen: defaultdict[int, int] = defaultdict(int)
     for line in open(path, errors='replace'):
         m = regex.search(line)
         if not m or iv(m, 'frame') != frame:
+            continue
+        if poc_filter is not None and (m.groupdict().get('poc') is None or iv(m, 'poc') != poc_filter):
             continue
         mb = iv(m, 'mb')
         occ = seen[mb]; seen[mb] += 1
@@ -30,6 +32,7 @@ def main() -> None:
     ap.add_argument('ffbstate')
     ap.add_argument('gobstate')
     ap.add_argument('--ff-frame', type=int, required=True)
+    ap.add_argument('--ff-poc', type=int, help='optional FF picture POC filter when rows include poc=')
     ap.add_argument('--go-poc', type=int, required=True)
     ap.add_argument('--ff-occurrence', type=int, default=0)
     ap.add_argument('--go-occurrence', type=int, default=0)
@@ -40,7 +43,7 @@ def main() -> None:
     ap.add_argument('--limit', type=int, default=50)
     ap.add_argument('--fail-on-diff', action='store_true')
     args = ap.parse_args()
-    ff = load(args.ffbstate, FF_RE, args.ff_frame, args.ff_occurrence)
+    ff = load(args.ffbstate, FF_RE, args.ff_frame, args.ff_occurrence, args.ff_poc)
     go = load(args.gobstate, GO_RE, args.go_poc, args.go_occurrence)
     if not ff:
         print(f'no_ff_bstate_rows frame={args.ff_frame} occurrence={args.ff_occurrence}')
