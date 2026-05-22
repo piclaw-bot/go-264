@@ -590,7 +590,12 @@ func colocatedDirect16x16Zero(colocated *frame.Frame, mbX, mbY, currentPOC int) 
 	mv := colocated.MotionL0[idx]
 	zero := colocated.RefIdxL0[idx] == 0 && mv[0] >= -1 && mv[0] <= 1 && mv[1] >= -1 && mv[1] <= 1
 	if os.Getenv("GO264_DIRECT_COL_TRACE") != "" {
-		fmt.Fprintf(os.Stderr, "GOCOLZERO16 mbx=%02d mby=%02d curpoc=%d colpoc=%d colref0=%d colmv={%d,%d} zero=%t\n", mbX, mbY, currentPOC, colocated.POC, colocated.RefIdxL0[idx], mv[0], mv[1], zero)
+		fmt.Fprintf(os.Stderr, "GOCOLZERO16 mbx=%02d mby=%02d curpoc=%d colpoc=%d colmbtype=%d colref0=%d colmv={%d,%d} zero=%t\n", mbX, mbY, currentPOC, colocated.POC, func() uint32 {
+			if mbIdx >= 0 && mbIdx < len(colocated.MBType) {
+				return colocated.MBType[mbIdx]
+			}
+			return 0
+		}(), colocated.RefIdxL0[idx], mv[0], mv[1], zero)
 	}
 	return zero
 }
