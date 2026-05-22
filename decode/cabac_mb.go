@@ -721,6 +721,10 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 	if dec.DecodeBin(&models[skipCtx]) == 1 {
 		// B_Direct_16x16 skip.
 		mb.MBType = syntax.BMBTypeDirect16x16
+		fillMVD4(mvd4, stride4, mbX*4, mbY*4, 4, 4, syntax.MotionVector{})
+		if mvd4L1 != nil {
+			fillMVD4(mvd4L1, stride4, mbX*4, mbY*4, 4, 4, syntax.MotionVector{})
+		}
 		return mb, nil, true
 	}
 
@@ -784,6 +788,10 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 
 	// B_Direct_16x16: no ref/MV to decode.
 	if bMBType == syntax.BMBTypeDirect16x16 {
+		fillMVD4(mvd4, stride4, mbX*4, mbY*4, 4, 4, syntax.MotionVector{})
+		if mvd4L1 != nil {
+			fillMVD4(mvd4L1, stride4, mbX*4, mbY*4, 4, 4, syntax.MotionVector{})
+		}
 		goto decodeCBP
 	}
 
@@ -950,6 +958,14 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 					fmt.Fprintf(os.Stderr, "GOBPART_MVD_RAW mb=%04d part=%d list=1 amvd={%d,%d} mvd={%d,%d} pre=%d/%d post=%d/%d\n", mbY*stride4/4+mbX, i, mb.AMVDL1[i].X, mb.AMVDL1[i].Y, mb.MVL1[i].X, mb.MVL1[i].Y, preLow, preRange, postLow, postRange)
 				}
 			}
+		}
+		// Zero MVD cache for unused lists (matches FFmpeg: unused-direction
+		// partitions get fill_rectangle(..., 0, 2) in 16x8/8x16 paths).
+		if !usesL0 {
+			fillMVD4(mvd4, stride4, x4, y4, 4, 4, syntax.MotionVector{})
+		}
+		if !usesL1 && mvd4L1 != nil {
+			fillMVD4(mvd4L1, stride4, x4, y4, 4, 4, syntax.MotionVector{})
 		}
 	}
 
