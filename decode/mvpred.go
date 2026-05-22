@@ -566,6 +566,19 @@ func colocatedDirect16x16Zero(colocated *frame.Frame, mbX, mbY, currentPOC int) 
 	if colocated == nil || colocated.MotionStride4 <= 0 || len(colocated.MotionL0) == 0 || len(colocated.RefIdxL0) != len(colocated.MotionL0) || mbX < 0 || mbY < 0 {
 		return false
 	}
+	// Check colocated MB type: if Intra, do not zero (matches FFmpeg's
+	// !IS_INTRA(mb_type_col[0]) guard in pred_spatial_direct_motion).
+	mbWidth := colocated.MotionStride4 / 4
+	if mbWidth <= 0 {
+		return false
+	}
+	mbIdx := mbY*mbWidth + mbX
+	if mbIdx >= 0 && mbIdx < len(colocated.MBType) {
+		const ffMBTypeIntra = ffMBTypeIntra4x4 | ffMBTypeIntra16x16 | ffMBTypeIntraPCM
+		if colocated.MBType[mbIdx]&ffMBTypeIntra != 0 {
+			return false
+		}
+	}
 	x4, y4 := mbX*4, mbY*4
 	if x4 < 0 || y4 < 0 || x4 >= colocated.MotionStride4 {
 		return false
@@ -601,6 +614,17 @@ func colocatedDirectUses8x8(colocated *frame.Frame, mbX, mbY int) bool {
 func colocatedDirect8x8Zero(colocated *frame.Frame, mbX, mbY, part, currentPOC int) bool {
 	if colocated == nil || colocated.MotionStride4 <= 0 || len(colocated.MotionL0) == 0 || len(colocated.RefIdxL0) != len(colocated.MotionL0) || part < 0 || part > 3 {
 		return false
+	}
+	// Check colocated MB type: if Intra, do not zero.
+	mbWidth := colocated.MotionStride4 / 4
+	if mbWidth > 0 {
+		mbIdx := mbY*mbWidth + mbX
+		if mbIdx >= 0 && mbIdx < len(colocated.MBType) {
+			const ffMBTypeIntra = ffMBTypeIntra4x4 | ffMBTypeIntra16x16 | ffMBTypeIntraPCM
+			if colocated.MBType[mbIdx]&ffMBTypeIntra != 0 {
+				return false
+			}
+		}
 	}
 	// FFmpeg's spatial-direct 8x8 zero check samples the colocated 4x4
 	// representative at x8*3/y8*3 within the macroblock (bottom/right cell for
