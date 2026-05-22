@@ -26,7 +26,7 @@ GO_RE = re.compile(
     r'(?: submv0=\{(?P<submv0x>-?\d+),(?P<submv0y>-?\d+)\} submv1=\{(?P<submv1x>-?\d+),(?P<submv1y>-?\d+)\} submv2=\{(?P<submv2x>-?\d+),(?P<submv2y>-?\d+)\} submv3=\{(?P<submv3x>-?\d+),(?P<submv3y>-?\d+)\})?'
 )
 
-DIRECT_FLAGS = {12552, 61704}
+DIRECT_FLAGS = {12552, 61704, 49416}
 
 def normalize_sub_flags(subs: tuple[int, int, int, int]) -> tuple[int, int, int, int]:
     # FFmpeg can report equivalent Direct sub-partition cache flags as either
