@@ -19,6 +19,7 @@ type bMotionCache struct {
 	mv      [2][]syntax.MotionVector
 	mvd     [2][]syntax.MotionVector
 	ref     [2][]int8
+	direct  []bool
 }
 
 func newBMotionCache(stride4, mbHeight int) bMotionCache {
@@ -28,6 +29,7 @@ func newBMotionCache(stride4, mbHeight int) bMotionCache {
 		mv:      [2][]syntax.MotionVector{make([]syntax.MotionVector, n), make([]syntax.MotionVector, n)},
 		mvd:     [2][]syntax.MotionVector{make([]syntax.MotionVector, n), make([]syntax.MotionVector, n)},
 		ref:     [2][]int8{make([]int8, n), make([]int8, n)},
+		direct:  make([]bool, n),
 	}
 	for list := 0; list < 2; list++ {
 		for i := range c.ref[list] {
@@ -60,6 +62,10 @@ func (c bMotionCache) ref4(list int) []int8 {
 
 func (c bMotionCache) refIdxCtxs(mbX, mbY int) [4]int {
 	return cabacRefIdxCtxsForMB(c.ref[0], c.stride4, mbX, mbY)
+}
+
+func (c bMotionCache) refIdxCtxsB(mbX, mbY int) [4]int {
+	return cabacBRefIdxCtxsForMB(c.ref[0], c.direct, c.stride4, mbX, mbY)
 }
 
 func (c bMotionCache) decodeCABACPInterMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
@@ -102,7 +108,7 @@ func (c bMotionCache) decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.
 		leftCBP, topCBP,
 		leftNonSkip, topNonSkip,
 		leftIsDirect, topIsDirect,
-		c.refIdxCtxs(mbX, mbY), c.mv[0], c.ref[0], c.mv[1], c.ref[1], c.mvd[0], c.mvd[1], c.stride4, mbX, mbY,
+		c.refIdxCtxsB(mbX, mbY), c.mv[0], c.ref[0], c.mv[1], c.ref[1], c.mvd[0], c.mvd[1], c.stride4, mbX, mbY,
 		currentPOC,
 		transform8x8Mode, transform8x8Ctx,
 		leftMBType, topMBType,
@@ -148,9 +154,26 @@ func (c bMotionCache) applyDirectSpatial(mbX, mbY int, mb *syntax.MBBidi, refL0 
 	applyB8x8DirectSpatial(mb, refL0, mvL0, refL1, mvL1, colocated, mbX, mbY)
 }
 
+func (c bMotionCache) fillDirectFlag(mbX, mbY, w4, h4 int, direct bool) {
+	if c.stride4 <= 0 {
+		return
+	}
+	x4, y4 := mbX*4, mbY*4
+	for y := 0; y < h4; y++ {
+		row := (y4+y)*c.stride4 + x4
+		for x := 0; x < w4; x++ {
+			idx := row + x
+			if idx >= 0 && idx < len(c.direct) {
+				c.direct[idx] = direct
+			}
+		}
+	}
+}
+
 func (c bMotionCache) writeBackIntra(mbX, mbY int) {
 	writeBackIntra4x4(c.ref[0], c.stride4, mbX, mbY)
 	writeBackIntra4x4(c.ref[1], c.stride4, mbX, mbY)
+	c.fillDirectFlag(mbX, mbY, 4, 4, false)
 }
 
 func (c bMotionCache) applyInterMVPredictors(mb *syntax.MBInter, mbX, mbY int) {
@@ -159,11 +182,27 @@ func (c bMotionCache) applyInterMVPredictors(mb *syntax.MBInter, mbX, mbY int) {
 
 func (c bMotionCache) writeBackInterL0(mbX, mbY int, mb *syntax.MBInter) {
 	writeBackInter4x4(c.mv[0], c.ref[0], c.stride4, mbX, mbY, mb)
+	c.fillDirectFlag(mbX, mbY, 4, 4, false)
 }
 
 func (c bMotionCache) writeBackBidi(mbX, mbY, poc int, mb *syntax.MBBidi) {
 	writeBackBidiListContext(c.mv[0], c.ref[0], c.stride4, mbX, mbY, mb, 0)
 	writeBackBidiListContext(c.mv[1], c.ref[1], c.stride4, mbX, mbY, mb, 1)
+	c.fillDirectFlag(mbX, mbY, 4, 4, mb != nil && mb.MBType == syntax.BMBTypeDirect16x16)
+	if mb != nil && mb.MBType == syntax.BMBTypeB8x8 {
+		for part, t := range mb.SubMBType {
+			baseX4 := mbX*4 + (part&1)*2
+			baseY4 := mbY*4 + (part>>1)*2
+			for y := 0; y < 2; y++ {
+				for x := 0; x < 2; x++ {
+					idx := (baseY4+y)*c.stride4 + baseX4 + x
+					if idx >= 0 && idx < len(c.direct) {
+						c.direct[idx] = t == 0
+					}
+				}
+			}
+		}
+	}
 	c.traceBidiWriteBack(mbX, mbY, poc, mb)
 }
 

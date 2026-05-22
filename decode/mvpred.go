@@ -160,6 +160,35 @@ func cabacRefIdxCtxsForMB(ref4 []int8, stride4, mbX, mbY int) [4]int {
 	}
 }
 
+func cabacBRefIdxCtx(ref4 []int8, direct4 []bool, stride4, x4, y4 int) int {
+	refAt := func(cx, cy int) (int8, bool) {
+		idx := cy*stride4 + cx
+		if stride4 <= 0 || cx < 0 || cy < 0 || cx >= stride4 || idx < 0 || idx >= len(ref4) {
+			return -2, false
+		}
+		direct := idx < len(direct4) && direct4[idx]
+		return ref4[idx], direct
+	}
+	ctx := 0
+	if ref, direct := refAt(x4-1, y4); ref > 0 && !direct {
+		ctx++
+	}
+	if ref, direct := refAt(x4, y4-1); ref > 0 && !direct {
+		ctx += 2
+	}
+	return ctx
+}
+
+func cabacBRefIdxCtxsForMB(ref4 []int8, direct4 []bool, stride4, mbX, mbY int) [4]int {
+	x4, y4 := mbX*4, mbY*4
+	return [4]int{
+		cabacBRefIdxCtx(ref4, direct4, stride4, x4, y4),
+		cabacBRefIdxCtx(ref4, direct4, stride4, x4+2, y4),
+		cabacBRefIdxCtx(ref4, direct4, stride4, x4, y4+2),
+		cabacBRefIdxCtx(ref4, direct4, stride4, x4+2, y4+2),
+	}
+}
+
 func cabacMVDAMVD(mvd4 []syntax.MotionVector, stride4, x4, y4 int, component int) int {
 	absComponent := func(cx, cy int) int {
 		idx := cy*stride4 + cx
