@@ -217,3 +217,18 @@ Useful levels:
 - Level 4.0: 1080p30
 - Level 4.1: 1080p60
 - Level 5.1: 4K30
+
+## Investigation notes: P-frame CABAC divergence (2026-05-22)
+
+**Verified correct for POC=12 P-frame:**
+- Bitstream position: byte 5 (bit 40 after align)
+- CABAC init: low=315, range=510
+- Context tables: PB[0] matches FFmpeg exactly (spot-checked 20+ indices)
+- Skip flag: ctx=11, both decode bin=0 (not skipped), range=410
+- mb_type: ctx14=0, ctx15=0, ctx16=0 → P_L0_16x16
+- MVD ctx40 initial bin: pState=0, valMPS=1, both decode bin=1
+- Bins 0-8 verified by simulation against GOBIN trace
+
+**Unresolved:** Go ends mb=0000 with range=268 (18 bins), FFmpeg ends with range=376. Both start from identical state and read the same bitstream. The divergence occurs somewhere in bins 9-17 (MVD suffix/bypass or CBP decode). No further progress without a full per-bin FFmpeg trace comparison.
+
+**Impact:** POC=12 first P-frame already has 21 dB PSNR (should be ~40+ dB for a P-frame referencing a perfect IDR). This cascades to ALL subsequent frames.
