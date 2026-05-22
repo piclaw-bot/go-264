@@ -709,3 +709,113 @@ func predictBDirectSpatialL0ForSimpleRefs(mv4 []syntax.MotionVector, ref4 []int8
 	}
 	return best, c
 }
+
+// applyTemporalDirect applies temporal direct motion prediction for a B_Direct_16x16 MB.
+// It scales the colocated frame's motion vectors by POC distance ratios.
+// Reference: ITU-T H.264 §8.4.1.2.3, FFmpeg pred_temp_direct_motion().
+func applyTemporalDirect(mb *syntax.MBBidi, colocated *frame.Frame, mbX, mbY int,
+	currentPOC int, l0Frames []*frame.Frame, colPOC int) {
+	if mb == nil || colocated == nil || colocated.MotionStride4 <= 0 {
+		return
+	}
+	mbWidth := colocated.MotionStride4 / 4
+	if mbWidth <= 0 {
+		return
+	}
+	mbIdx := mbY*mbWidth + mbX
+	const ffMBTypeIntra = ffMBTypeIntra4x4 | ffMBTypeIntra16x16 | ffMBTypeIntraPCM
+
+	// Check if colocated MB is 16x16 or intra shaped
+	isIntra := false
+	if mbIdx >= 0 && mbIdx < len(colocated.MBType) {
+		isIntra = colocated.MBType[mbIdx]&ffMBTypeIntra != 0
+	}
+
+	for part := 0; part < 4; part++ {
+		x8 := part & 1
+		y8 := part >> 1
+		// Representative 4x4 position for this 8x8 block (top-left with direct_8x8_inference)
+		x4 := mbX*4 + x8*2
+		y4 := mbY*4 + y8*2
+		idx := y4*colocated.MotionStride4 + x4
+
+		var mvL0, mvL1 syntax.MotionVector
+		var refL0 int8
+
+		if isIntra || idx < 0 || idx >= len(colocated.MotionL0) || idx >= len(colocated.RefIdxL0) {
+			// Intra colocated: zero motion, ref=0
+			refL0 = 0
+		} else {
+			colRef := colocated.RefIdxL0[idx]
+			colMV := colocated.MotionL0[idx]
+
+			// Map colocated ref to current L0 ref (simplified: use ref 0)
+			if colRef < 0 {
+				// Colocated L0 ref unavailable; use zero motion
+				colRef = 0
+				colMV = [2]int16{0, 0}
+			}
+			refL0 = 0
+
+			// Compute dist_scale_factor
+			// td = colPOC - L0[colRef].POC, tb = currentPOC - L0[colRef].POC
+			var poc0 int
+			if int(colRef) < len(l0Frames) && l0Frames[colRef] != nil {
+				poc0 = l0Frames[colRef].POC
+			} else if len(l0Frames) > 0 && l0Frames[0] != nil {
+				poc0 = l0Frames[0].POC
+			}
+
+			td := clipInt8(colPOC - poc0)
+			tb := clipInt8(currentPOC - poc0)
+
+			if td == 0 {
+				mvL0 = syntax.MotionVector{X: int16(colMV[0]), Y: int16(colMV[1])}
+				mvL1 = syntax.MotionVector{}
+			} else {
+				tx := (16384 + abs(int(td))/2) / int(td)
+				scale := clipInt10((int(tb)*tx + 32) >> 6)
+				mvL0.X = int16((scale*int(colMV[0]) + 128) >> 8)
+				mvL0.Y = int16((scale*int(colMV[1]) + 128) >> 8)
+				mvL1.X = mvL0.X - int16(colMV[0])
+				mvL1.Y = mvL0.Y - int16(colMV[1])
+			}
+		}
+
+		mb.RefIdxL0[part] = refL0
+		mb.RefIdxL1[part] = 0 // temporal direct L1 ref is always 0
+		for j := 0; j < 4; j++ {
+			mb.SubMVL0[part*4+j] = mvL0
+			mb.SubMVL1[part*4+j] = mvL1
+		}
+	}
+	mb.MVL0[0] = mb.SubMVL0[0]
+	mb.MVL1[0] = mb.SubMVL1[0]
+}
+
+func clipInt8(v int) int {
+	if v > 127 {
+		return 127
+	}
+	if v < -128 {
+		return -128
+	}
+	return v
+}
+
+func clipInt10(v int) int {
+	if v > 1023 {
+		return 1023
+	}
+	if v < -1024 {
+		return -1024
+	}
+	return v
+}
+
+func abs(v int) int {
+	if v < 0 {
+		return -v
+	}
+	return v
+}

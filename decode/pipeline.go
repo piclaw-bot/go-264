@@ -607,7 +607,12 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					if applyDirectSpatial {
 						bmc.applyDirectSpatial(mbX, mbY, mbBidi, directRefL0, directMVL0, directRefL1, directMVL1, d.refBidiL1(0, f.POC))
 					} else {
-						bmc.initDirect16x16(mbBidi, directRefL0, directMVL0, directRefL1, directMVL1)
+						colFrame := d.refBidiL1(0, f.POC)
+						colPOC := 0
+						if colFrame != nil {
+							colPOC = colFrame.POC
+						}
+						bmc.applyDirectTemporal(mbX, mbY, mbBidi, colFrame, f.POC, d.bidiL0Frames(f.POC), colPOC)
 					}
 					d.reconstructMBBidi(f, mbBidi, mbX, mbY, currentQP)
 					nzCtx[mbIdx] = mbBidi.TotalCoeff
@@ -649,7 +654,12 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 						if applyDirectSpatial {
 							bmc.applyDirectSpatial(mbX, mbY, mbBidi, directRefL0, directMVL0, directRefL1, directMVL1, d.refBidiL1(0, f.POC))
 						} else {
-							bmc.initDirect16x16(mbBidi, directRefL0, directMVL0, directRefL1, directMVL1)
+							colFrame := d.refBidiL1(0, f.POC)
+							colPOC := 0
+							if colFrame != nil {
+								colPOC = colFrame.POC
+							}
+							bmc.applyDirectTemporal(mbX, mbY, mbBidi, colFrame, f.POC, d.bidiL0Frames(f.POC), colPOC)
 						}
 					} else if applyDirectSpatial {
 						bmc.applyDirectSpatial(mbX, mbY, mbBidi, directRefL0, directMVL0, directRefL1, directMVL1, d.refBidiL1(0, f.POC))
@@ -721,7 +731,12 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					if applyDirectSpatial {
 						bmc.applyDirectSpatial(mbX, mbY, mbBidi, directRefL0, directMVL0, directRefL1, directMVL1, d.refBidiL1(0, f.POC))
 					} else {
-						bmc.initDirect16x16(mbBidi, directRefL0, directMVL0, directRefL1, directMVL1)
+						colFrame := d.refBidiL1(0, f.POC)
+						colPOC := 0
+						if colFrame != nil {
+							colPOC = colFrame.POC
+						}
+						bmc.applyDirectTemporal(mbX, mbY, mbBidi, colFrame, f.POC, d.bidiL0Frames(f.POC), colPOC)
 					}
 				} else if applyDirectSpatial {
 					bmc.applyDirectSpatial(mbX, mbY, mbBidi, directRefL0, directMVL0, directRefL1, directMVL1, d.refBidiL1(0, f.POC))

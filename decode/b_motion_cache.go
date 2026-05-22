@@ -239,3 +239,10 @@ func (c bMotionCache) saveL0ToFrame(f *frame.Frame, mbFFTypes []uint32) {
 		f.MotionL0[i] = [2]int16{mv.X, mv.Y}
 	}
 }
+
+func (c bMotionCache) applyDirectTemporal(mbX, mbY int, mb *syntax.MBBidi, colocated *frame.Frame, currentPOC int, l0Frames []*frame.Frame, colPOC int) {
+	if mb == nil {
+		return
+	}
+	applyTemporalDirect(mb, colocated, mbX, mbY, currentPOC, l0Frames, colPOC)
+}

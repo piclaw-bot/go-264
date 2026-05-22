@@ -866,3 +866,25 @@ func directTracePartitionMVs(mb *syntax.MBBidi) (syntax.MotionVector, syntax.Mot
 	}
 	return s0, s1, s2, s3
 }
+
+// bidiL0Frames returns the ordered L0 reference frame list for a B-slice.
+func (d *Decoder) bidiL0Frames(currentPOC int) []*frame.Frame {
+	if d == nil || d.DPB == nil {
+		return nil
+	}
+	var frames []*frame.Frame
+	for _, fr := range d.DPB.Frames {
+		if fr != nil && fr.IsRef && fr.POC < currentPOC {
+			frames = append(frames, fr)
+		}
+	}
+	// Sort by descending POC (nearest past first).
+	for i := 0; i < len(frames)-1; i++ {
+		for j := i + 1; j < len(frames); j++ {
+			if frames[j].POC > frames[i].POC {
+				frames[i], frames[j] = frames[j], frames[i]
+			}
+		}
+	}
+	return frames
+}
