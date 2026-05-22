@@ -190,15 +190,30 @@ func decodeCABACPInterMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, numRe
 }
 
 func decodeCABACMVDPair(dec *cabac.CABACDecoder, models []cabac.CABACCtx, mvd4 []syntax.MotionVector, stride4, x4, y4, w4, h4 int) syntax.MotionVector {
-	mvd, _ := decodeCABACMVDPairDiag(dec, models, mvd4, stride4, x4, y4, w4, h4)
+	mvd, _ := decodeCABACMVDPairDiag(dec, models, mvd4, stride4, x4, y4, w4, h4, -1, -1, -1)
 	return mvd
 }
 
-func decodeCABACMVDPairDiag(dec *cabac.CABACDecoder, models []cabac.CABACCtx, mvd4 []syntax.MotionVector, stride4, x4, y4, w4, h4 int) (syntax.MotionVector, syntax.MotionVector) {
+func decodeCABACMVDPairDiag(dec *cabac.CABACDecoder, models []cabac.CABACCtx, mvd4 []syntax.MotionVector, stride4, x4, y4, w4, h4, part, list, poc int) (syntax.MotionVector, syntax.MotionVector) {
+	mbAddr := 0
+	if stride4 > 0 {
+		mbAddr = (y4/4)*(stride4/4) + x4/4
+	}
+	traceComp := os.Getenv("GO264_B_MVD_COMP_TRACE") != "" && part >= 0 && list >= 0
 	amvdX := cabacMVDAMVD(mvd4, stride4, x4, y4, 0)
+	preLowX, preRangeX, _ := dec.DebugState()
 	mdx := syntax.DecodeCABACMVD(dec, models, 40, amvdX)
+	postLowX, postRangeX, _ := dec.DebugState()
+	if traceComp {
+		fmt.Fprintf(os.Stderr, "GOMVD_COMP mb=%04d poc=%d part=%d list=%d comp=x amvd=%d mvd=%d pre=%d/%d post=%d/%d\n", mbAddr, poc, part, list, amvdX, mdx, preLowX, preRangeX, postLowX, postRangeX)
+	}
 	amvdY := cabacMVDAMVD(mvd4, stride4, x4, y4, 1)
+	preLowY, preRangeY, _ := dec.DebugState()
 	mdy := syntax.DecodeCABACMVD(dec, models, 47, amvdY)
+	postLowY, postRangeY, _ := dec.DebugState()
+	if traceComp {
+		fmt.Fprintf(os.Stderr, "GOMVD_COMP mb=%04d poc=%d part=%d list=%d comp=y amvd=%d mvd=%d pre=%d/%d post=%d/%d\n", mbAddr, poc, part, list, amvdY, mdy, preLowY, preRangeY, postLowY, postRangeY)
+	}
 	mvd := syntax.MotionVector{X: mdx, Y: mdy}
 	// FFmpeg's decode_cabac_mb_mvd returns the full signed MVD for motion
 	// reconstruction, but stores min(abs(mvd),70) in mvda for future CABAC
@@ -682,6 +697,7 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 	leftIsDirect, topIsDirect bool,
 	refCtxs [4]int,
 	mv4 []syntax.MotionVector, ref4 []int8, mv4L1 []syntax.MotionVector, ref4L1 []int8, mvd4 []syntax.MotionVector, mvd4L1 []syntax.MotionVector, stride4, mbX, mbY int,
+	currentPOC int,
 	transform8x8Mode bool, transform8x8Ctx int,
 	leftMBType, topMBType uint32,
 	leftChromaPred, topChromaPred int8,
@@ -896,7 +912,7 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 				if traceMVD {
 					preLow, preRange, _ = dec.DebugState()
 				}
-				mb.MVL0[i], mb.AMVDL0[i] = decodeCABACMVDPairDiag(dec, models, mvd4, stride4, bx, by, pw, ph)
+				mb.MVL0[i], mb.AMVDL0[i] = decodeCABACMVDPairDiag(dec, models, mvd4, stride4, bx, by, pw, ph, i, 0, currentPOC)
 				if traceMVD {
 					postLow, postRange, _ = dec.DebugState()
 					fmt.Fprintf(os.Stderr, "GOBPART_MVD_RAW mb=%04d part=%d list=0 amvd={%d,%d} mvd={%d,%d} pre=%d/%d post=%d/%d\n", mbY*stride4/4+mbX, i, mb.AMVDL0[i].X, mb.AMVDL0[i].Y, mb.MVL0[i].X, mb.MVL0[i].Y, preLow, preRange, postLow, postRange)
@@ -921,7 +937,7 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 				if traceMVD {
 					preLow, preRange, _ = dec.DebugState()
 				}
-				mb.MVL1[i], mb.AMVDL1[i] = decodeCABACMVDPairDiag(dec, models, mvd4L1, stride4, bx, by, pw, ph)
+				mb.MVL1[i], mb.AMVDL1[i] = decodeCABACMVDPairDiag(dec, models, mvd4L1, stride4, bx, by, pw, ph, i, 1, currentPOC)
 				if traceMVD {
 					postLow, postRange, _ = dec.DebugState()
 					fmt.Fprintf(os.Stderr, "GOBPART_MVD_RAW mb=%04d part=%d list=1 amvd={%d,%d} mvd={%d,%d} pre=%d/%d post=%d/%d\n", mbY*stride4/4+mbX, i, mb.AMVDL1[i].X, mb.AMVDL1[i].Y, mb.MVL1[i].X, mb.MVL1[i].Y, preLow, preRange, postLow, postRange)

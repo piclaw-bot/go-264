@@ -596,6 +596,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					leftNonSkip, topNonSkip,
 					!leftNonSkip, !topNonSkip, // leftIsDirect/topIsDirect
 					mbX, mbY,
+					f.POC,
 					pps.Transform8x8Mode, transform8x8CABACCtx,
 					leftMBType, topMBType,
 					leftChromaPred, topChromaPred,
