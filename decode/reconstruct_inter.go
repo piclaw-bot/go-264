@@ -215,7 +215,7 @@ func (d *Decoder) reconstructMBInter(f *frame.Frame, mb *syntax.MBInter, mbX, mb
 			ref0 = ref
 		}
 		mv0 := mb.MV[0]
-		pred.InterPred16x16At(tmp[:], ref0.Y, ref0.StrideY, mbX*16, mbY*16, pred.MotionVector{X: mv0.X, Y: mv0.Y})
+		pred.InterPredLumaH264(tmp[:], 16, ref0.Y, ref0.StrideY, mbX*16, mbY*16, 16, 8, pred.MotionVector{X: mv0.X, Y: mv0.Y})
 		for y := 0; y < 8; y++ {
 			copy(predicted[y*16:y*16+16], tmp[y*16:y*16+16])
 		}
@@ -224,7 +224,7 @@ func (d *Decoder) reconstructMBInter(f *frame.Frame, mb *syntax.MBInter, mbX, mb
 			ref1 = ref
 		}
 		mv1 := mb.MV[1]
-		pred.InterPred16x16At(tmp[:], ref1.Y, ref1.StrideY, mbX*16, mbY*16+8, pred.MotionVector{X: mv1.X, Y: mv1.Y})
+		pred.InterPredLumaH264(tmp[:], 16, ref1.Y, ref1.StrideY, mbX*16, mbY*16+8, 16, 8, pred.MotionVector{X: mv1.X, Y: mv1.Y})
 		for y := 0; y < 8; y++ {
 			copy(predicted[(y+8)*16:(y+8)*16+16], tmp[y*16:y*16+16])
 		}
@@ -239,7 +239,7 @@ func (d *Decoder) reconstructMBInter(f *frame.Frame, mb *syntax.MBInter, mbX, mb
 			ref0 = ref
 		}
 		mv0 := mb.MV[0]
-		pred.InterPred16x16At(tmp[:], ref0.Y, ref0.StrideY, mbX*16, mbY*16, pred.MotionVector{X: mv0.X, Y: mv0.Y})
+		pred.InterPredLumaH264(tmp[:], 16, ref0.Y, ref0.StrideY, mbX*16, mbY*16, 8, 16, pred.MotionVector{X: mv0.X, Y: mv0.Y})
 		for y := 0; y < 16; y++ {
 			copy(predicted[y*16:y*16+8], tmp[y*16:y*16+8])
 		}
@@ -248,7 +248,7 @@ func (d *Decoder) reconstructMBInter(f *frame.Frame, mb *syntax.MBInter, mbX, mb
 			ref1 = ref
 		}
 		mv1 := mb.MV[1]
-		pred.InterPred16x16At(tmp[:], ref1.Y, ref1.StrideY, mbX*16+8, mbY*16, pred.MotionVector{X: mv1.X, Y: mv1.Y})
+		pred.InterPredLumaH264(tmp[:], 16, ref1.Y, ref1.StrideY, mbX*16+8, mbY*16, 8, 16, pred.MotionVector{X: mv1.X, Y: mv1.Y})
 		for y := 0; y < 16; y++ {
 			copy(predicted[y*16+8:y*16+16], tmp[y*16:y*16+8])
 		}
@@ -495,7 +495,7 @@ func (d *Decoder) copyInterSubRect(dst []uint8, ref *frame.Frame, srcBaseX, srcB
 		return
 	}
 	var tmp [256]uint8
-	pred.InterPred16x16At(tmp[:], ref.Y, ref.StrideY, srcBaseX, srcBaseY, pred.MotionVector{X: mv.X, Y: mv.Y})
+	pred.InterPredLumaH264(tmp[:], 16, ref.Y, ref.StrideY, srcBaseX, srcBaseY, w, h, pred.MotionVector{X: mv.X, Y: mv.Y})
 	for y := 0; y < h; y++ {
 		copy(dst[(dstY+y)*16+dstX:(dstY+y)*16+dstX+w], tmp[y*16:y*16+w])
 	}
@@ -598,11 +598,9 @@ func fillBPredBlock(dst []uint8, ref *frame.Frame, srcBaseX, srcBaseY, dstX, dst
 	if lastPixel < 0 || lastPixel >= len(ref.Y) {
 		return
 	}
-	// Use bilinear fractional-pixel interpolation (same as P-frame path).
-	// InterPred16x16At writes a 16×16 block from the reference plane into dst
-	// with quarter-pixel bilinear weighting, handling clipped edges.
+	// H.264 6-tap luma inter prediction for B-frame sub-blocks.
 	var tmp [256]uint8
-	pred.InterPred16x16At(tmp[:], ref.Y, ref.StrideY, srcBaseX, srcBaseY, pred.MotionVector{X: mv.X, Y: mv.Y})
+	pred.InterPredLumaH264(tmp[:], 16, ref.Y, ref.StrideY, srcBaseX, srcBaseY, w, h, pred.MotionVector{X: mv.X, Y: mv.Y})
 	for y := 0; y < h; y++ {
 		for x := 0; x < w; x++ {
 			dst[(dstY+y)*16+dstX+x] = tmp[y*16+x]
