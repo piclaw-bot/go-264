@@ -31,24 +31,46 @@ func (d *Decoder) refL0(refIdx int8) *frame.Frame {
 	if idx < 0 {
 		idx = 0
 	}
+	// H.264 §8.2.4.2.1: P-slice L0 sorted by decreasing FrameNum (PicNum).
+	// Collect reference frames, sort by descending FrameNum, then descending POC
+	// as tiebreaker (for multiple B-refs with same frame_num).
+	var refs []*frame.Frame
 	filterRef := dpbHasReferenceFrames(d.DPB.Frames)
-	seen := 0
-	for i := len(d.DPB.Frames) - 1; i >= 0; i-- {
-		fr := d.DPB.Frames[i]
-		if fr == nil || (filterRef && !fr.IsRef) {
-			continue
-		}
-		if seen == idx {
-			return fr
-		}
-		seen++
-	}
-	for i := len(d.DPB.Frames) - 1; i >= 0; i-- {
-		if d.DPB.Frames[i] != nil {
-			return d.DPB.Frames[i]
+	for _, fr := range d.DPB.Frames {
+		if fr != nil && (!filterRef || fr.IsRef) {
+			refs = append(refs, fr)
 		}
 	}
-	return nil
+	if len(refs) == 0 {
+		return nil
+	}
+	// Sort by descending FrameNum, then descending POC as tiebreaker.
+	// Only sort when FrameNums are meaningful (not all zero with distinct POCs).
+	hasDistinctFN := false
+	for i := 1; i < len(refs); i++ {
+		if refs[i].FrameNum != refs[0].FrameNum {
+			hasDistinctFN = true
+			break
+		}
+	}
+	if hasDistinctFN {
+		for i := 0; i < len(refs)-1; i++ {
+			for j := i + 1; j < len(refs); j++ {
+				if refs[j].FrameNum > refs[i].FrameNum || (refs[j].FrameNum == refs[i].FrameNum && refs[j].POC > refs[i].POC) {
+					refs[i], refs[j] = refs[j], refs[i]
+				}
+			}
+		}
+	} else {
+		// All same FrameNum (or synthetic): keep insertion order reversed (most recent first).
+		for i, j := 0, len(refs)-1; i < j; i, j = i+1, j-1 {
+			refs[i], refs[j] = refs[j], refs[i]
+		}
+	}
+	if idx < len(refs) {
+		return refs[idx]
+	}
+	return refs[len(refs)-1]
 }
 
 func (d *Decoder) refL1(refIdx int8) *frame.Frame {
