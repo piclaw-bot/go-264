@@ -983,8 +983,9 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 decodeCBP:
 	mb.CBP = syntax.DecodeCABACCBP(dec, models, leftCBP, topCBP)
 	if mb.CBP != 0 {
-		mb.QPDelta = int32(syntax.DecodeCABACDQP(dec, models, lastQScaleDiff))
-		// Decode luma residual — mirrors the P-slice path including 8×8 transform.
+		// FFmpeg decodes transform_size_8x8_flag immediately after CBP and before
+		// mb_qp_delta. Reading DQP first swaps the two CABAC decisions whenever an
+		// inter B macroblock has luma residual and 8x8 transform enabled.
 		var nzMB [16]int
 		use8x8Residual := false
 		if transform8x8Mode && mb.CBP&0xF != 0 && bMBType != syntax.BMBTypeDirect16x16 {
@@ -993,6 +994,7 @@ decodeCBP:
 				mb.Use8x8Transform = true
 			}
 		}
+		mb.QPDelta = int32(syntax.DecodeCABACDQP(dec, models, lastQScaleDiff))
 		if use8x8Residual {
 			for group := 0; group < 4; group++ {
 				if mb.CBP&(1<<uint(group)) != 0 {
