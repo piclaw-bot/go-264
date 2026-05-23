@@ -37,22 +37,36 @@ type Header struct {
 	DisableDeblocking      int32
 	SliceAlphaC0Offset     int32
 	SliceBetaOffset        int32
+	LumaLog2WeightDenom    uint32
+	ChromaLog2WeightDenom  uint32
+	LumaWeightL0           [32]int32
+	LumaOffsetL0           [32]int32
+	LumaWeightL1           [32]int32
+	LumaOffsetL1           [32]int32
+	WeightedTablePresent   bool
 }
 
-func skipPredWeightTable(r *nal.Reader, h *Header, sps *nal.SPS) {
+func skipPredWeightTable(r *nal.Reader, h *Header, sps *nal.SPS) { parsePredWeightTable(r, h, sps) }
+
+func parsePredWeightTable(r *nal.Reader, h *Header, sps *nal.SPS) {
 	if r == nil || h == nil || sps == nil {
 		return
 	}
-	r.ReadUE() // luma_log2_weight_denom
+	h.WeightedTablePresent = true
+	h.LumaLog2WeightDenom = r.ReadUE()
+	defaultLumaWeight := int32(1 << h.LumaLog2WeightDenom)
+	for i := range h.LumaWeightL0 {
+		h.LumaWeightL0[i], h.LumaWeightL1[i] = defaultLumaWeight, defaultLumaWeight
+	}
 	chromaPresent := sps.ChromaFormatIDC != 0
 	if chromaPresent {
-		r.ReadUE() // chroma_log2_weight_denom
+		h.ChromaLog2WeightDenom = r.ReadUE()
 	}
-	skipList := func(refs uint32) {
-		for i := uint32(0); i < refs; i++ {
+	parseList := func(refs uint32, weights, offsets *[32]int32) {
+		for i := uint32(0); i < refs && i < 32; i++ {
 			if r.ReadBool() { // luma_weight_lX_flag
-				r.ReadSE() // luma_weight_lX[i]
-				r.ReadSE() // luma_offset_lX[i]
+				weights[i] = r.ReadSE()
+				offsets[i] = r.ReadSE()
 			}
 			if chromaPresent && r.ReadBool() { // chroma_weight_lX_flag
 				for j := 0; j < 2; j++ {
@@ -61,10 +75,13 @@ func skipPredWeightTable(r *nal.Reader, h *Header, sps *nal.SPS) {
 				}
 			}
 		}
+		for i := refs; i < 32; i++ {
+			weights[i] = defaultLumaWeight
+		}
 	}
-	skipList(h.NumRefIdxL0Active)
+	parseList(h.NumRefIdxL0Active, &h.LumaWeightL0, &h.LumaOffsetL0)
 	if h.SliceType == SliceTypeB {
-		skipList(h.NumRefIdxL1Active)
+		parseList(h.NumRefIdxL1Active, &h.LumaWeightL1, &h.LumaOffsetL1)
 	}
 }
 
@@ -198,7 +215,7 @@ func ParseHeaderWithRefIDC(payload []byte, nalType uint8, nalRefIDC uint8, sps *
 		if os.Getenv("GO264_HEADER_TRACE") != "" {
 			fmt.Fprintf(os.Stderr, "GOHEADER_PRE_WEIGHT pos=%d numL0=%d slice_type=%d\n", r.Position(), h.NumRefIdxL0Active, h.SliceType)
 		}
-		skipPredWeightTable(r, h, sps)
+		parsePredWeightTable(r, h, sps)
 		if os.Getenv("GO264_HEADER_TRACE") != "" {
 			fmt.Fprintf(os.Stderr, "GOHEADER_POST_WEIGHT pos=%d\n", r.Position())
 		}

@@ -131,27 +131,43 @@ func InterPredLumaH264(out []uint8, outStride int, ref []uint8, refStride int, b
 		return
 	}
 
-	// Quarter-pel diagonal: average of two adjacent half-pel values
-	// Compute the two relevant half-pel positions and average
+	// Quarter-pel diagonal positions follow FFmpeg's h264_qpel mcXY table:
+	// odd/odd positions average a horizontal and a vertical half-pel; positions
+	// with one coordinate at half-pel average that directional half-pel with the
+	// true diagonal half-pel (HV). Using only H/V halves for mc21/mc12/etc. makes
+	// P/B inter prediction visibly drift even when CABAC and MVs are correct.
+	hvHalf := func(rx, ry int) uint8 {
+		var tmp [6]int
+		for yy := -2; yy <= 3; yy++ {
+			tmp[yy+2] = h264Tap6(getRef(rx-2, ry+yy), getRef(rx-1, ry+yy), getRef(rx, ry+yy), getRef(rx+1, ry+yy), getRef(rx+2, ry+yy), getRef(rx+3, ry+yy))
+		}
+		v := h264Tap6(tmp[0], tmp[1], tmp[2], tmp[3], tmp[4], tmp[5])
+		return clip8i((v + 512) >> 10)
+	}
 	for y := 0; y < h; y++ {
 		ry := baseY + iy + y
 		for x := 0; x < w; x++ {
 			rx := baseX + ix + x
-			// Horizontal half at (rx, ry) or (rx, ry+1)
-			var hHalf, vHalf int
 			hRow := ry
 			if fy == 3 {
 				hRow = ry + 1
 			}
-			hHalf = h264Tap6(getRef(rx-2, hRow), getRef(rx-1, hRow), getRef(rx, hRow), getRef(rx+1, hRow), getRef(rx+2, hRow), getRef(rx+3, hRow))
+			hHalf := clip8i((h264Tap6(getRef(rx-2, hRow), getRef(rx-1, hRow), getRef(rx, hRow), getRef(rx+1, hRow), getRef(rx+2, hRow), getRef(rx+3, hRow)) + 16) >> 5)
 			vCol := rx
 			if fx == 3 {
 				vCol = rx + 1
 			}
-			vHalf = h264Tap6(getRef(vCol, ry-2), getRef(vCol, ry-1), getRef(vCol, ry), getRef(vCol, ry+1), getRef(vCol, ry+2), getRef(vCol, ry+3))
-			h8 := clip8i((hHalf + 16) >> 5)
-			v8 := clip8i((vHalf + 16) >> 5)
-			out[y*outStride+x] = uint8((int(h8) + int(v8) + 1) >> 1)
+			vHalf := clip8i((h264Tap6(getRef(vCol, ry-2), getRef(vCol, ry-1), getRef(vCol, ry), getRef(vCol, ry+1), getRef(vCol, ry+2), getRef(vCol, ry+3)) + 16) >> 5)
+			var a, b uint8
+			switch {
+			case fx == 2:
+				a, b = hHalf, hvHalf(rx, ry)
+			case fy == 2:
+				a, b = vHalf, hvHalf(rx, ry)
+			default:
+				a, b = hHalf, vHalf
+			}
+			out[y*outStride+x] = uint8((int(a) + int(b) + 1) >> 1)
 		}
 	}
 }

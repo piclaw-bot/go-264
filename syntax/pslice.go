@@ -155,6 +155,12 @@ func interTransform8x8FlagPresent(enabled bool, cbp uint32, mbType uint32, subTy
 	return true
 }
 
+func luma4x4BlockFor8x8Group(group, sub int) int {
+	baseCol := (group & 1) * 2
+	baseRow := (group >> 1) * 2
+	return BlkXYToIdx[baseRow+(sub>>1)][baseCol+(sub&1)]
+}
+
 func decodeInterResidualCAVLC(r *nal.Reader, cbp uint32, use8x8 bool, coeffs *[16][16]int16, coeffsChroma *[2][4][16]int16, totalCoeff *[16]int, chromaTotalCoeff *[2][4]int, leftNZ, topNZ *[16]int, leftChromaNZ, topChromaNZ *[2][4]int) {
 	if r == nil || cbp == 0 || coeffs == nil || coeffsChroma == nil || totalCoeff == nil || chromaTotalCoeff == nil {
 		return
@@ -167,7 +173,7 @@ func decodeInterResidualCAVLC(r *nal.Reader, cbp uint32, use8x8 bool, coeffs *[1
 			}
 			var block8 cavlc.Block8x8
 			for sub := 0; sub < 4; sub++ {
-				blk := group*4 + sub
+				blk := luma4x4BlockFor8x8Group(group, sub)
 				nC := computeNC4x4Ctx(blk, totalCoeff[:], leftNZ, topNZ)
 				part, tc := cavlc.DecodeCAVLCBlock8x8Part(r, nC, sub)
 				for i, v := range part {
@@ -179,7 +185,7 @@ func decodeInterResidualCAVLC(r *nal.Reader, cbp uint32, use8x8 bool, coeffs *[1
 		}
 	} else {
 		for blk := 0; blk < 16; blk++ {
-			group := blk / 4
+			group := (Blk4x4Col[blk] / 2) + 2*(Blk4x4Row[blk]/2)
 			if cbpLuma&(1<<uint(group)) == 0 {
 				continue
 			}
@@ -219,7 +225,7 @@ func storeInter8x8Residual(dst *[16][16]int16, group int, src cavlc.Block8x8) {
 		return
 	}
 	for sub := 0; sub < 4; sub++ {
-		blkIdx := group*4 + sub
+		blkIdx := BlkXYToIdx[(group>>1)*2+(sub>>1)][(group&1)*2+(sub&1)]
 		baseX := (sub & 1) * 4
 		baseY := (sub >> 1) * 4
 		for y := 0; y < 4; y++ {

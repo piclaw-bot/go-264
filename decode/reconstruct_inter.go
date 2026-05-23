@@ -185,6 +185,49 @@ func (d *Decoder) refBidiL1(refIdx int8, currentPOC int) *frame.Frame {
 	return nil
 }
 
+func clipWeightedSample(v int) uint8 {
+	if v < 0 {
+		return 0
+	}
+	if v > 255 {
+		return 255
+	}
+	return uint8(v)
+}
+
+func (d *Decoder) applyWeightedPredL0Rect(predicted []uint8, refIdx int8, dstX, dstY, w, h int) {
+	if d == nil || !d.weightedPred || len(predicted) < 256 || w <= 0 || h <= 0 {
+		return
+	}
+	idx := int(refIdx)
+	if idx < 0 {
+		idx = 0
+	}
+	if idx >= len(d.lumaWeightL0) {
+		idx = len(d.lumaWeightL0) - 1
+	}
+	denom := d.lumaWeightDenom
+	weight := int(d.lumaWeightL0[idx])
+	offset := int(d.lumaOffsetL0[idx])
+	if weight == 1<<denom && offset == 0 {
+		return
+	}
+	round := 0
+	if denom > 0 {
+		round = 1 << (denom - 1)
+	}
+	for y := 0; y < h; y++ {
+		row := (dstY+y)*16 + dstX
+		for x := 0; x < w; x++ {
+			v := int(predicted[row+x]) * weight
+			if denom > 0 {
+				v = (v + round) >> denom
+			}
+			predicted[row+x] = clipWeightedSample(v + offset)
+		}
+	}
+}
+
 func (d *Decoder) reconstructMBInter(f *frame.Frame, mb *syntax.MBInter, mbX, mbY, qp int) {
 	if f == nil || mb == nil {
 		return
@@ -204,6 +247,7 @@ func (d *Decoder) reconstructMBInter(f *frame.Frame, mb *syntax.MBInter, mbX, mb
 		mv := mb.MV[0]
 		var predicted [256]uint8
 		pred.InterPred16x16At(predicted[:], ref.Y, ref.StrideY, mbX*16, mbY*16, pred.MotionVector{X: mv.X, Y: mv.Y})
+		d.applyWeightedPredL0Rect(predicted[:], mb.RefIdx[0], 0, 0, 16, 16)
 		d.writeInterResidual(f, mb, predicted[:], mbX, mbY, qp)
 		d.reconstructChromaInter(f, ref, mb, mbX, mbY, qp)
 
@@ -219,6 +263,7 @@ func (d *Decoder) reconstructMBInter(f *frame.Frame, mb *syntax.MBInter, mbX, mb
 		for y := 0; y < 8; y++ {
 			copy(predicted[y*16:y*16+16], tmp[y*16:y*16+16])
 		}
+		d.applyWeightedPredL0Rect(predicted[:], mb.RefIdx[0], 0, 0, 16, 8)
 		ref1 := d.refL0(mb.RefIdx[1])
 		if ref1 == nil {
 			ref1 = ref
@@ -228,6 +273,7 @@ func (d *Decoder) reconstructMBInter(f *frame.Frame, mb *syntax.MBInter, mbX, mb
 		for y := 0; y < 8; y++ {
 			copy(predicted[(y+8)*16:(y+8)*16+16], tmp[y*16:y*16+16])
 		}
+		d.applyWeightedPredL0Rect(predicted[:], mb.RefIdx[1], 0, 8, 16, 8)
 		d.writeInterResidual(f, mb, predicted[:], mbX, mbY, qp)
 		d.reconstructChromaInter(f, ref, mb, mbX, mbY, qp)
 
@@ -243,6 +289,7 @@ func (d *Decoder) reconstructMBInter(f *frame.Frame, mb *syntax.MBInter, mbX, mb
 		for y := 0; y < 16; y++ {
 			copy(predicted[y*16:y*16+8], tmp[y*16:y*16+8])
 		}
+		d.applyWeightedPredL0Rect(predicted[:], mb.RefIdx[0], 0, 0, 8, 16)
 		ref1 := d.refL0(mb.RefIdx[1])
 		if ref1 == nil {
 			ref1 = ref
@@ -252,6 +299,7 @@ func (d *Decoder) reconstructMBInter(f *frame.Frame, mb *syntax.MBInter, mbX, mb
 		for y := 0; y < 16; y++ {
 			copy(predicted[y*16+8:y*16+16], tmp[y*16:y*16+8])
 		}
+		d.applyWeightedPredL0Rect(predicted[:], mb.RefIdx[1], 8, 0, 8, 16)
 		d.writeInterResidual(f, mb, predicted[:], mbX, mbY, qp)
 		d.reconstructChromaInter(f, ref, mb, mbX, mbY, qp)
 
@@ -283,6 +331,7 @@ func (d *Decoder) reconstructMBInter(f *frame.Frame, mb *syntax.MBInter, mbX, mb
 			default:
 				d.copyInterSubRect(predicted[:], partRef, mbX*16+baseX, mbY*16+baseY, baseX, baseY, 8, 8, mb.SubMV[part*4])
 			}
+			d.applyWeightedPredL0Rect(predicted[:], mb.RefIdx[part], baseX, baseY, 8, 8)
 		}
 		d.writeInterResidual(f, mb, predicted[:], mbX, mbY, qp)
 		d.reconstructChromaInter(f, ref, mb, mbX, mbY, qp)
