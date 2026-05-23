@@ -32,8 +32,8 @@ func (d *CABACDecoder) InitFFCompat() {
 	d.count = 16
 	if os.Getenv("GO264_FF_INIT_TRACE") != "" {
 		fmt.Fprintf(os.Stderr, "FFINIT b0=%02x b1=%02x low=%d range=%d\n", b0, b1, d.codILow, d.codIRange)
-		if b0 == 0x9d && b1 == 0x8b {
-			d.BinTrace = 10
+		if b0 == 0x64 && b1 == 0x12 {
+			d.BinTrace = 200
 		}
 	}
 }
