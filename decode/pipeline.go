@@ -659,9 +659,11 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					mbFFTypeCtx[mbIdx] = ffBidiMBType(mbBidi)
 					nonSkipCtx[mbIdx] = false
 					transform8x8Ctx[mbIdx] = false
-					if applyDirectSpatial {
-						bmc.writeBackBidi(mbX, mbY, f.POC, mbBidi)
-					}
+					// Direct skip still contributes motion/ref context for later B macroblocks.
+					// FFmpeg writes both spatial and temporal Direct results back into the
+					// per-list caches; leaving temporal Direct skips out makes subsequent
+					// MVP/ref_idx context see stale zeros.
+					bmc.writeBackBidi(mbX, mbY, f.POC, mbBidi)
 					mbQPCtx[mbIdx] = currentQP
 					traceBState(mbIdx, mbX, mbY, "skip")
 					if cabacDec.DecodeTerminate() == 1 {
