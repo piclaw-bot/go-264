@@ -18,6 +18,7 @@ func main() {
 	input := flag.String("i", "", "input H.264 Annex B file")
 	outDir := flag.String("o", ".", "output directory for decoded frames")
 	format := flag.String("f", "color", "output format: png (greyscale), color (YUV→RGB), or yuv (raw planar)")
+	maxFrames := flag.Int("frames", 0, "maximum decoded frames to process (0 = all)")
 	flag.Parse()
 
 	if *input == "" {
@@ -33,6 +34,7 @@ func main() {
 	fmt.Printf("Input: %s (%d bytes)\n", *input, len(data))
 
 	dec := decode.NewDecoder()
+	dec.MaxFrames = *maxFrames
 	start := time.Now()
 	frames, err := dec.Decode(data)
 	elapsed := time.Since(start)

@@ -54,6 +54,9 @@ type Decoder struct {
 	PPS    map[uint32]*nal.PPS
 	DPB    *frame.DPB
 	Frames []*frame.Frame
+	// MaxFrames optionally stops Decode after this many decoded slice pictures.
+	// Zero means decode all frames.
+	MaxFrames int
 	// Per-frame prediction mode map (4x4 block index → mode)
 	intraModes []int8 // [mbW*4 * mbH*4] for current frame
 	mbW, mbH   int
@@ -108,6 +111,9 @@ func (d *Decoder) Decode(data []byte) ([]*frame.Frame, error) {
 	var frames []*frame.Frame
 
 	for _, unit := range units {
+		if d.MaxFrames > 0 && len(frames) >= d.MaxFrames {
+			break
+		}
 		switch unit.Type {
 		case nal.TypeSPS:
 			sps, err := nal.ParseSPS(unit.Payload)
