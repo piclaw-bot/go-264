@@ -51,18 +51,23 @@ def row(m: re.Match[str]) -> dict[str, object]:
 
 def load(path: str, regex: re.Pattern[str]) -> dict[tuple[int, int, int], dict[str, object]]:
     out = {}
-    occurrence: defaultdict[int, int] = defaultdict(int)
-    last_mb: dict[int, int] = {}
+    occurrence: defaultdict[tuple[int, int], int] = defaultdict(int)
+    last_mb: dict[tuple[int, int], int] = {}
     for line in open(path, errors='replace'):
         m = regex.search(line)
         if not m:
             continue
         r = row(m)
         mb, frame = int(r['mb']), int(r['frame'])
-        if frame in last_mb and mb <= last_mb[frame]:
-            occurrence[frame] += 1
-        last_mb[frame] = mb
-        out[(frame, occurrence[frame], mb)] = r
+        # FFmpeg frame_num repeats across B pictures; when rows carry poc=,
+        # split occurrences by (frame_num, poc) so comparisons cannot match a
+        # same-frame_num row from a different picture.
+        group = (frame, int(r.get('poc', -1)))
+        if group in last_mb and mb <= last_mb[group]:
+            occurrence[group] += 1
+        last_mb[group] = mb
+        key_occurrence = int(r['poc']) if int(r.get('poc', -1)) >= 0 else occurrence[group]
+        out[(frame, key_occurrence, mb)] = r
     return out
 
 GO_L0 = {
@@ -184,7 +189,7 @@ def main() -> None:
     args = ap.parse_args()
     ff = load(args.ffbidi, FF_RE)
     go = load(args.gobidi, GO_RE)
-    keys = sorted(k for k in ff if k[0] == args.ff_frame and (args.ff_poc is not None or k[1] == args.ff_occurrence) and (args.ff_poc is None or int(ff[k].get('poc', -1)) == args.ff_poc))
+    keys = sorted(k for k in ff if k[0] == args.ff_frame and (args.ff_poc is not None or k[1] == args.ff_occurrence) and (args.ff_poc is None or k[1] == args.ff_poc))
     rows = diffs = 0
     for key in keys:
         _, _, mb = key
