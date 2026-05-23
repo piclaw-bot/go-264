@@ -163,7 +163,7 @@ grep -E '^FFCOLZERO(8)?' "$OUTDIR/ffmpeg.direct.trace" >"$OUTDIR/ffcolzero.rows"
 rm -rf "$OUTDIR/go-frames"
 mkdir -p "$OUTDIR/go-frames"
 mkdir -p "${GOTMPDIR:-/workspace/tmp/gotmp}"
-GOTMPDIR="${GOTMPDIR:-/workspace/tmp/gotmp}" GO264_DIRECT_TRACE=1 go run ./cmd/decode264 -f yuv -i "$INPUT" -o "$OUTDIR/go-frames" \
+GOTMPDIR="${GOTMPDIR:-/workspace/tmp/gotmp}" GO264_DIRECT_TRACE=1 go run ./cmd/decode264 -frames "$FRAMES" -f yuv -i "$INPUT" -o "$OUTDIR/go-frames" \
   >"$OUTDIR/go.stdout" 2>"$OUTDIR/go.direct.trace"
 grep '^GODIRECT' "$OUTDIR/go.direct.trace" >"$OUTDIR/godirect.rows" || true
 grep '^GOCOLZERO' "$OUTDIR/go.direct.trace" >"$OUTDIR/gocolzero.rows" || true
@@ -194,9 +194,18 @@ PY
 
 : >"$OUTDIR/gowrite.diff"
 if [[ -n "${GO_POC:-}" ]]; then
+  direct_args=(
+    --ff-frame "${FF_FRAME:-2}"
+    --ff-occurrence "${FF_OCCURRENCE:-0}"
+    --go-poc "$GO_POC"
+    --go-occurrence "${GO_OCCURRENCE:-0}"
+    --limit "${LIMIT:-20}"
+  )
+  if [[ -n "${FF_POC:-}" ]]; then
+    direct_args+=(--ff-poc "$FF_POC")
+  fi
   python3 scripts/compare_direct_trace.py "$OUTDIR/ffdirect.rows" "$OUTDIR/godirect.rows" \
-    --ff-frame "${FF_FRAME:-2}" --ff-occurrence "${FF_OCCURRENCE:-0}" \
-    --go-poc "$GO_POC" --go-occurrence "${GO_OCCURRENCE:-0}" --limit "${LIMIT:-20}" || true
+    "${direct_args[@]}" || true
   if [[ -s "$OUTDIR/gomotwrite.rows" ]]; then
     python3 scripts/compare_direct_writeback.py "$OUTDIR/godirect.rows" "$OUTDIR/gomotwrite.rows" \
       --ffdirect "$OUTDIR/ffdirect.rows" --ff-frame "${FF_FRAME:-2}" \
