@@ -228,6 +228,20 @@ func (d *Decoder) applyWeightedPredL0Rect(predicted []uint8, refIdx int8, dstX, 
 	}
 }
 
+func frameLumaHeight(f *frame.Frame) int {
+	if f == nil || f.StrideY <= 0 {
+		return 0
+	}
+	return len(f.Y) / f.StrideY
+}
+
+func frameChromaHeight(f *frame.Frame) int {
+	if f == nil || f.StrideC <= 0 {
+		return 0
+	}
+	return len(f.U) / f.StrideC
+}
+
 func (d *Decoder) reconstructMBInter(f *frame.Frame, mb *syntax.MBInter, mbX, mbY, qp int) {
 	if f == nil || mb == nil {
 		return
@@ -460,7 +474,8 @@ func (d *Decoder) writeChromaInterResidual(f *frame.Frame, mb *syntax.MBInter, p
 	}
 	dstBaseX := mbX * 8
 	dstBaseY := mbY * 8
-	if dstBaseX < 0 || dstBaseY < 0 || dstBaseX+8 > f.Width/2 || dstBaseY+8 > f.Height/2 || (dstBaseY+7)*f.StrideC+dstBaseX+8 > len(f.U) || (dstBaseY+7)*f.StrideC+dstBaseX+8 > len(f.V) {
+	chromaH := frameChromaHeight(f)
+	if dstBaseX < 0 || dstBaseY < 0 || dstBaseX+8 > f.Width/2 || dstBaseY+8 > chromaH || (dstBaseY+7)*f.StrideC+dstBaseX+8 > len(f.U) || (dstBaseY+7)*f.StrideC+dstBaseX+8 > len(f.V) {
 		return
 	}
 	plane := f.U
@@ -556,7 +571,7 @@ func (d *Decoder) writeInterResidual(f *frame.Frame, mb *syntax.MBInter, predict
 	}
 	dstBaseX := mbX * 16
 	dstBaseY := mbY * 16
-	if dstBaseX < 0 || dstBaseY < 0 || dstBaseX+16 > f.Width || dstBaseY+16 > f.Height || (dstBaseY+15)*f.StrideY+dstBaseX+16 > len(f.Y) {
+	if dstBaseX < 0 || dstBaseY < 0 || dstBaseX+16 > f.Width || dstBaseY+16 > frameLumaHeight(f) || (dstBaseY+15)*f.StrideY+dstBaseX+16 > len(f.Y) {
 		return
 	}
 	cbpLuma := mb.CBP & 0xF
@@ -640,10 +655,11 @@ func (d *Decoder) writeInterResidual(f *frame.Frame, mb *syntax.MBInter, predict
 }
 
 func fillBPredBlock(dst []uint8, ref *frame.Frame, srcBaseX, srcBaseY, dstX, dstY, w, h int, mv syntax.MotionVector) {
-	if ref == nil || ref.Width <= 0 || ref.Height <= 0 || ref.StrideY <= 0 || ref.Width > ref.StrideY || len(dst) < 256 || !valid16x16Rect(dstX, dstY, w, h) {
+	refH := frameLumaHeight(ref)
+	if ref == nil || ref.Width <= 0 || refH <= 0 || ref.StrideY <= 0 || ref.Width > ref.StrideY || len(dst) < 256 || !valid16x16Rect(dstX, dstY, w, h) {
 		return
 	}
-	lastPixel := (ref.Height-1)*ref.StrideY + (ref.Width - 1)
+	lastPixel := (refH-1)*ref.StrideY + (ref.Width - 1)
 	if lastPixel < 0 || lastPixel >= len(ref.Y) {
 		return
 	}
@@ -799,7 +815,7 @@ func (d *Decoder) reconstructMBBidi(f *frame.Frame, mb *syntax.MBBidi, mbX, mbY,
 	d.traceBidiMB(f, mb, mbX, mbY)
 	dstBaseX := mbX * 16
 	dstBaseY := mbY * 16
-	if dstBaseX < 0 || dstBaseY < 0 || dstBaseX+16 > f.Width || dstBaseY+16 > f.Height {
+	if dstBaseX < 0 || dstBaseY < 0 || dstBaseX+16 > f.Width || dstBaseY+16 > frameLumaHeight(f) {
 		return
 	}
 	refL0 := d.refBidiL0(mb.RefIdxL0[0], f.POC)
