@@ -1,6 +1,6 @@
 package cabac
 
-// Tables extracted from FFmpeg ff_h264_cabac_tables for CABAC arithmetic.
+// Tables extracted from FFmpeg ff_h264_cabac_tables.
 
 var normShift = [512]uint8{
 	9, 8, 7, 7, 6, 6, 6, 6, 5, 5, 5, 5, 5, 5, 5, 5, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,

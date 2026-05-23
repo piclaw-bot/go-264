@@ -32,13 +32,16 @@ func (d *CABACDecoder) InitFFCompat() {
 	d.count = 16
 	if os.Getenv("GO264_FF_INIT_TRACE") != "" {
 		fmt.Fprintf(os.Stderr, "FFINIT b0=%02x b1=%02x low=%d range=%d\n", b0, b1, d.codILow, d.codIRange)
+		if b0 == 0x9d && b1 == 0x8b {
+			d.BinTrace = 10
+		}
 	}
 }
 
 // DecodeBinFF decodes one binary decision using FFmpeg's exact arithmetic.
 // The context uses the combined state byte (same as FFmpeg's cabac_state[]).
 func (d *CABACDecoder) DecodeBinFF(state *uint8) uint32 {
-	if d == nil || d.r == nil || state == nil {
+	if d == nil || state == nil {
 		return 0
 	}
 	s := int(*state)
@@ -60,7 +63,7 @@ func (d *CABACDecoder) DecodeBinFF(state *uint8) uint32 {
 	}
 	if d.BinTrace > 0 {
 		d.BinTrace--
-		fmt.Fprintf(os.Stderr, "GOBIN bin=%d range=%d low=%d\n", bit, d.codIRange, d.codILow>>1)
+		fmt.Fprintf(os.Stderr, "GOBIN bin=%d range=%d low=%d state=%d lps=%d\n", bit, d.codIRange, d.codILow>>1, s, rangeLPS)
 	}
 	return bit
 }
@@ -71,28 +74,37 @@ func (d *CABACDecoder) refill() {
 	if d.ffBuf == nil || d.ffPos+1 >= len(d.ffBuf) {
 		return
 	}
-	// Count trailing zeros above CABAC_BITS to find shift
-	i := uint(0)
-	for bit := uint(cabacBits); bit < 32; bit++ {
-		if d.codILow&(1<<bit) != 0 {
-			break
-		}
-		i++
-	}
+	// FFmpeg refill2: i = ctz(low) - CABAC_BITS
+	i := ctz32(d.codILow) - cabacBits
+
 	b0 := uint32(d.ffBuf[d.ffPos])
 	b1 := uint32(0)
 	if d.ffPos+1 < len(d.ffBuf) {
 		b1 = uint32(d.ffBuf[d.ffPos+1])
 	}
 	d.ffPos += 2
-	x := (b0 << 9) + (b1 << 1) - cabacMask
-	d.codILow += x << i
+
+	// x = -CABAC_MASK + (b0<<9) + (b1<<1)
+	x := uint32(0xFFFF0000) + 1 + (b0 << 9) + (b1 << 1)
+	d.codILow += x << uint(i)
 	d.count += 16
+}
+
+func ctz32(v uint32) int {
+	if v == 0 {
+		return 32
+	}
+	n := 0
+	for v&1 == 0 {
+		n++
+		v >>= 1
+	}
+	return n
 }
 
 // DecodeBypassFF decodes a bypass bin (equiprobable) using FFmpeg's arithmetic.
 func (d *CABACDecoder) DecodeBypassFF() uint32 {
-	if d == nil || d.r == nil {
+	if d == nil {
 		return 0
 	}
 	d.codILow += d.codILow
@@ -114,7 +126,7 @@ func (d *CABACDecoder) DecodeBypassFF() uint32 {
 
 // DecodeTerminateFF decodes the end_of_slice_flag using FFmpeg's arithmetic.
 func (d *CABACDecoder) DecodeTerminateFF() uint32 {
-	if d == nil || d.r == nil {
+	if d == nil {
 		return 0
 	}
 	d.codIRange -= 2
