@@ -165,14 +165,15 @@ grep '^GOBPART_MVD' "$OUTDIR/go/bidi.log" >"$OUTDIR/gobpart_mvd.rows" || true
 grep '^GOBSTATE' "$OUTDIR/go/bidi.log" >"$OUTDIR/gobstate.rows" || true
 grep '^GOTERMINATE' "$OUTDIR/go/bidi.log" >"$OUTDIR/goterminate.rows" || true
 
+FF_POC_VALUE="${FF_POC:-${GO_POC:-6}}"
 bidi_args=(
   --ff-frame "${FF_FRAME:-2}"
+  --ff-poc "$FF_POC_VALUE"
   --ff-occurrence "${FF_OCCURRENCE:-0}"
   --go-poc "${GO_POC:-6}"
   --go-occurrence "${GO_OCCURRENCE:-0}"
   --limit "${LIMIT:-20}"
 )
-[[ -n "${FF_POC:-}" ]] && bidi_args+=(--ff-poc "$FF_POC")
 [[ -n "${FROM_MB:-}" ]] && bidi_args+=(--from-mb "$FROM_MB")
 [[ -n "${TO_MB:-}" ]] && bidi_args+=(--to-mb "$TO_MB")
 python3 scripts/compare_bidi_trace.py "$OUTDIR/ffbidi.rows" "$OUTDIR/gobidi.rows" \
@@ -189,7 +190,7 @@ if [[ -s "$OUTDIR/ffbstate.rows" && -s "$OUTDIR/gobstate.rows" ]]; then
     --go-occurrence "${GO_OCCURRENCE:-0}"
     --limit "${LIMIT:-20}"
   )
-  [[ -n "${FF_POC:-}" ]] && bstate_args+=(--ff-poc "$FF_POC")
+  bstate_args+=(--ff-poc "$FF_POC_VALUE")
   [[ -n "${FROM_MB:-}" ]] && bstate_args+=(--from-mb "$FROM_MB")
   [[ -n "${TO_MB:-}" ]] && bstate_args+=(--to-mb "$TO_MB")
   python3 scripts/compare_bstate.py "$OUTDIR/ffbstate.rows" "$OUTDIR/gobstate.rows" \
@@ -204,7 +205,7 @@ if [[ -s "$OUTDIR/ffbpart_mvd.rows" && -s "$OUTDIR/gobidi.rows" ]]; then
     --go-occurrence "${GO_OCCURRENCE:-0}"
     --limit "${LIMIT:-20}"
   )
-  [[ -n "${FF_POC:-}" ]] && bpart_args+=(--ff-poc "$FF_POC")
+  bpart_args+=(--ff-poc "$FF_POC_VALUE")
   [[ -n "${FROM_MB:-}" ]] && bpart_args+=(--from-mb "$FROM_MB")
   [[ -n "${TO_MB:-}" ]] && bpart_args+=(--to-mb "$TO_MB")
   python3 scripts/compare_bpart_mvd.py "$OUTDIR/ffbpart_mvd.rows" "$OUTDIR/gobidi.rows" \
@@ -216,7 +217,7 @@ if [[ -s "$OUTDIR/ffbpart_mvd.rows" && -s "$OUTDIR/gobidi.rows" ]]; then
       --go-occurrence "${GO_OCCURRENCE:-0}"
       --limit "${LIMIT:-20}"
     )
-    [[ -n "${FF_POC:-}" ]] && raw_args+=(--ff-poc "$FF_POC")
+    raw_args+=(--ff-poc "$FF_POC_VALUE")
     [[ -n "${FROM_MB:-}" ]] && raw_args+=(--from-mb "$FROM_MB")
     [[ -n "${TO_MB:-}" ]] && raw_args+=(--to-mb "$TO_MB")
     python3 scripts/compare_bpart_mvd_raw.py "$OUTDIR/ffbpart_mvd.rows" "$OUTDIR/gobpart_mvd.rows" \
