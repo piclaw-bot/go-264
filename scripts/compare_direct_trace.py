@@ -14,7 +14,7 @@ import argparse, re
 from collections import defaultdict
 
 FF_RE = re.compile(
-    r'FFDIRECT mb=(?P<mb>\d+).*?frame=(?P<frame>\d+).*?spatial=(?P<spatial>\d+).*?'
+    r'FFDIRECT mb=(?P<mb>\d+).*?frame=(?P<frame>\d+)(?:\s+poc=(?P<poc>-?\d+))?.*?spatial=(?P<spatial>\d+).*?'
     r'ref0=(?P<ref0>-?\d+) ref1=(?P<ref1>-?\d+) '
     r'mv0=\{(?P<mv0x>-?\d+),(?P<mv0y>-?\d+)\} mv1=\{(?P<mv1x>-?\d+),(?P<mv1y>-?\d+)\}.*?'
     r'sub0=(?P<sub0>\d+) sub1=(?P<sub1>\d+) sub2=(?P<sub2>\d+) sub3=(?P<sub3>\d+)'
@@ -43,6 +43,7 @@ def row_from_match(m: re.Match[str]) -> dict[str, object]:
         'mb': iv('mb'),
         'frame': iv('frame'),
         'spatial': iv('spatial', -1),
+        'poc': iv('poc', -1),
         'ref_mv': (iv('ref0'), iv('ref1'), iv('mv0x'), iv('mv0y'), iv('mv1x'), iv('mv1y')),
         'sub': (iv('sub0'), iv('sub1'), iv('sub2'), iv('sub3')),
         'submv': (
@@ -55,18 +56,20 @@ def row_from_match(m: re.Match[str]) -> dict[str, object]:
 
 def load_ff(path: str) -> dict[tuple[int, int, int], dict[str, object]]:
     out = {}
-    occurrence: defaultdict[int, int] = defaultdict(int)
-    last_mb: dict[int, int] = {}
+    occurrence: defaultdict[tuple[int, int], int] = defaultdict(int)
+    last_mb: dict[tuple[int, int], int] = {}
     for line in open(path, errors='replace'):
         m = FF_RE.search(line)
         if not m:
             continue
         row = row_from_match(m)
         mb, frame = int(row['mb']), int(row['frame'])
-        if frame in last_mb and mb <= last_mb[frame]:
-            occurrence[frame] += 1
-        last_mb[frame] = mb
-        out[(frame, occurrence[frame], mb)] = row
+        group = (frame, int(row.get('poc', -1)))
+        if group in last_mb and mb <= last_mb[group]:
+            occurrence[group] += 1
+        last_mb[group] = mb
+        key_occurrence = int(row['poc']) if int(row.get('poc', -1)) >= 0 else occurrence[group]
+        out[(frame, key_occurrence, mb)] = row
     return out
 
 def load_go(path: str) -> dict[tuple[int, int, int], dict[str, object]]:
@@ -90,6 +93,7 @@ def main():
     ap.add_argument('ffdirect')
     ap.add_argument('godirect')
     ap.add_argument('--ff-frame', type=int, required=True)
+    ap.add_argument('--ff-poc', type=int, help='optional FF picture POC filter when rows include poc=')
     ap.add_argument('--ff-occurrence', type=int, default=0, help='which repeated frame_num group to compare')
     ap.add_argument('--go-poc', type=int, required=True)
     ap.add_argument('--go-occurrence', type=int, default=0, help='which repeated Go POC group to compare')
@@ -106,21 +110,22 @@ def main():
     go = load_go(args.godirect)
     rows = 0
     diffs = 0
-    frame_keys = sorted(k for k in ff if k[0] == args.ff_frame and k[1] == args.ff_occurrence)
+    frame_keys = sorted(k for k in ff if k[0] == args.ff_frame and (args.ff_poc is None and k[1] == args.ff_occurrence or args.ff_poc is not None and k[1] == args.ff_poc))
     if not frame_keys:
         occurrences = sorted({k[1] for k in ff if k[0] == args.ff_frame})
         print(f'no_ff_rows frame={args.ff_frame} occurrence={args.ff_occurrence} available_occurrences={occurrences}')
         if args.fail_on_diff:
             raise SystemExit(1)
         return
-    for _, _, mb in frame_keys:
+    for key in frame_keys:
+        _, _, mb = key
         if args.mb is not None and mb != args.mb:
             continue
         if args.from_mb is not None and mb < args.from_mb:
             continue
         if args.to_mb is not None and mb > args.to_mb:
             continue
-        f = ff[(args.ff_frame, args.ff_occurrence, mb)]
+        f = ff[key]
         if args.spatial is not None and f.get('spatial', -1) != args.spatial:
             continue
         g = go.get((args.go_poc, args.go_occurrence, mb))
