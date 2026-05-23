@@ -791,6 +791,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 			cur := filter.MBDeblockInfo{
 				QP:      mbQPCtx[mbIdx],
 				IsIntra: mbIsIntraCtx[mbIdx],
+				Use8x8:  transform8x8Ctx[mbIdx],
 				NZC:     nzCtx[mbIdx],
 			}
 			var left, top *filter.MBDeblockInfo
@@ -798,6 +799,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 				l := filter.MBDeblockInfo{
 					QP:      mbQPCtx[mbIdx-1],
 					IsIntra: mbIsIntraCtx[mbIdx-1],
+					Use8x8:  transform8x8Ctx[mbIdx-1],
 					NZC:     nzCtx[mbIdx-1],
 				}
 				left = &l
@@ -806,6 +808,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 				t := filter.MBDeblockInfo{
 					QP:      mbQPCtx[mbIdx-mbWidth],
 					IsIntra: mbIsIntraCtx[mbIdx-mbWidth],
+					Use8x8:  transform8x8Ctx[mbIdx-mbWidth],
 					NZC:     nzCtx[mbIdx-mbWidth],
 				}
 				top = &t

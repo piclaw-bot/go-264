@@ -431,6 +431,7 @@ func FilterChromaEdgeH(plane []uint8, stride, y, colStart, ncols int, bS [4]int,
 type MBDeblockInfo struct {
 	QP      int  // luma QP
 	IsIntra bool // MB is intra coded
+	Use8x8  bool // uses 8x8 transform (skip internal 4x4 edges)
 	// Per-4×4 non-zero coefficient count (scan order 0-15, luma only).
 	// Used for inter bS: 2 if either side has non-zero coefficients, else 1/0.
 	NZC [16]int
@@ -590,6 +591,10 @@ func bsHorizMB(cur MBDeblockInfo, top *MBDeblockInfo) [4]int {
 // luma 4×4 scan order columns: edge e covers blocks with col==e (0-indexed).
 func bsVertInternal(cur MBDeblockInfo, edge int) [4]int {
 	var bs [4]int
+	// 8x8 transform: only filter at 8x8 grid boundaries (edge 2).
+	if cur.Use8x8 && edge != 2 {
+		return bs // all zero — no filtering
+	}
 	if cur.IsIntra {
 		for g := range bs {
 			bs[g] = 3
@@ -612,6 +617,10 @@ func bsVertInternal(cur MBDeblockInfo, edge int) [4]int {
 // bsHorizInternal returns bS[4] for internal horizontal luma edges (edge 1-3).
 func bsHorizInternal(cur MBDeblockInfo, edge int) [4]int {
 	var bs [4]int
+	// 8x8 transform: only filter at 8x8 grid boundaries (edge 2).
+	if cur.Use8x8 && edge != 2 {
+		return bs
+	}
 	if cur.IsIntra {
 		for g := range bs {
 			bs[g] = 3
