@@ -67,7 +67,7 @@ Implemented:
 - CABAC P8x8 sub-MB type decoding, variable sub-partition MVD consumption, and FFmpeg-style transform_size_8x8_flag eligibility for full-8x8-only sub partitions.
 - CABAC chroma DC/AC coefficient placement across the four chroma 4×4 blocks for both inter and intra paths.
 - CABAC coded-block-flag and residual decoding, including FFmpeg high-bit CBP context tracking for I16x16 luma DC and chroma DC.
-- CABAC end-of-slice terminate handling, byte-aligned arithmetic decoder initialization after slice header parsing, and reinitialization after CABAC I_PCM raw sample payloads.
+- CABAC end-of-slice terminate handling, byte-aligned arithmetic decoder initialization after slice header parsing, reinitialization after CABAC I_PCM raw sample payloads, and FFmpeg-compatible CABAC arithmetic/table mode (signed C table initializers preserved modulo 256; unaligned three-byte low seed verified against FFmpeg's C decoder trace).
 - H.264 zigzag scan mapping for residual output.
 - I8x8 prediction modes, strong reference-pixel filtering, and CABAC intra `transform_size_8x8_flag` consumption.
 - Inter-MB `transform_size_8x8_flag` decode path and 8×8 residual category support.
@@ -80,7 +80,7 @@ Current parity tooling and findings:
 - `scripts/cabac_parity_baseline.sh` is the repeatable baseline harness for Go output, FFmpeg output, PSNR, snapshots, and logs.
 - `scripts/cabac_firstdiv.sh` patches/builds the local FFmpeg source tree when needed and compares decoder-backed Go CABAC MB traces against FFmpeg traces. It filters Go events to the FFmpeg-decoded frame range so event-count failures do not mask the first real frame-0 divergence.
 - CABAC diagnostics now cover MB summaries, CBP bin decisions with consistent arithmetic state, residual CBF/significant/last/level decisions, and intra syntax bins.
-- `testsrc_cabac_p.h264` and `bbb_annexb.h264` first-frame MB syntax summaries now report `NO_DIVERGENCE in compared fields`.
+- `testsrc_cabac_p.h264` and `bbb_annexb.h264` first-frame MB syntax summaries now report `NO_DIVERGENCE in compared fields` with FFmpeg-compatible CABAC arithmetic enabled.
 - `GO264_RECON_TRACE=1` now emits luma Intra_8x8 syntax vs reconstruction mode, prediction reference samples (`top`, `left`, `top_left`), raw row-major coefficients, FFmpeg-storage raw coefficient view, dequantized coefficients, prediction/residual/output and pre/post-IDCT checksums, plus chroma prediction/residual/output and per-4×4 block checksums, enabling direct FFmpeg reconstruction comparisons.
 - Recent accepted reconstruction/motion fixes include luma Intra_8x8 filtered DC references, FFmpeg chroma DC quadrant/edge predictors, FFmpeg `pred_intra_mode` unavailable-neighbour handling, separate I4x4-derived right/bottom mode caches for CABAC I8x8 neighbour prediction, aligned-buffer reconstruction for partial edge macroblocks, FFmpeg-scale 8×8 dequant before IDCT, available top-right references from already reconstructed rows, FFmpeg-exact I8x8 horizontal-down and vertical-right predictors, partial-edge chroma reconstruction, B-slice MB-type default-branch parity, shaped B_8x8/sub-partition MV cache write-back, separate CABAC B L0/L1 MVD context caches, direct B_8x8 write-back into both list caches, shape-derived 16×8/8×16 directional MVP routing for all two-part B MB types, P16x8 top-part cache write-back before bottom-part MVP prediction, reference-frame-only DPB list filtering, and saved per-frame list0 4×4 motion/ref metadata for future Direct-mode colocated checks. Per-block I4x4/I8x8 luma and chroma reconstruction matches FFmpeg with loop filter disabled; B-frame quality now depends mainly on proper FFmpeg-style Direct-mode shape/colocated derivation.
 
@@ -99,7 +99,8 @@ Still gated:
 | Baseline YUV PSNR | Y=39.58 U=38.13 V=34.03 dB |
 | `testsrc_cabac_p.h264` frame 0 | Y=56.96 U=60.68 V=64.62 dB |
 | `bbb-frame0` CABAC avg PSNR | ~31 dB (est.) |
-| `bbb_annexb.h264` frame 0 | Y=59.85 U=56.14 V=57.08 dB |
+| `bbb_annexb.h264` frame 0 | Y=80.33 U=56.14 V=57.08 dB |
+| `bbb_annexb.h264` 300-frame avg | Y=8.17 U=18.97 V=28.81 dB |
 | `bbb_annexb.h264` B POC=2 / POC=6 | Y≈21.8 / 21.5 dB |
 | `bbb_annexb.h264` later B POC=14 / POC=20 | Y≈19.6 / 19.3 dB |
 | `bbb_annexb.h264` 300-frame average PSNR | Y=9.11 U=19.25 V=29.01 dB |

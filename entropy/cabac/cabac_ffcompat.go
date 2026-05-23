@@ -11,23 +11,25 @@ import (
 const cabacBits = 16
 const cabacMask = (1 << cabacBits) - 1
 
-// InitFFCompat reinitializes the decoder using FFmpeg's 2-byte init and combined
-// state representation. Call this INSTEAD of the old Reset path.
+// InitFFCompat reinitializes the decoder using FFmpeg's byte-buffer init and
+// combined state representation. The three-byte seed matches FFmpeg's unaligned
+// branch; the paired ffPos=3 keeps subsequent refill() calls on the same bitstream
+// trajectory as the aligned two-byte seed plus +1<<9.
 func (d *CABACDecoder) InitFFCompat() {
 	if d == nil || d.r == nil {
 		return
 	}
-	// FFmpeg init: low = (byte0<<18) + (byte1<<10) + (byte2<<2) + 2
-	// For aligned streams (which H.264 always is after byte-align):
+	// FFmpeg init, unaligned branch: low = (byte0<<18) + (byte1<<10) + (byte2<<2) + 2.
 	d.ffBuf = d.r.RemainingBytes()
 	d.ffPos = 0
-	if len(d.ffBuf) < 2 {
+	if len(d.ffBuf) < 3 {
 		return
 	}
 	b0 := uint32(d.ffBuf[0])
 	b1 := uint32(d.ffBuf[1])
-	d.ffPos = 2
-	d.codILow = (b0 << 18) + (b1 << 10) + (1 << 9)
+	b2 := uint32(d.ffBuf[2])
+	d.ffPos = 3
+	d.codILow = (b0 << 18) + (b1 << 10) + (b2 << 2) + 2
 	d.codIRange = 0x1FE
 	d.count = 16
 	if os.Getenv("GO264_FF_INIT_TRACE") != "" {
