@@ -232,3 +232,25 @@ Useful levels:
 **Unresolved:** Go ends mb=0000 with range=268 (18 bins), FFmpeg ends with range=376. Both start from identical state and read the same bitstream. The divergence occurs somewhere in bins 9-17 (MVD suffix/bypass or CBP decode). No further progress without a full per-bin FFmpeg trace comparison.
 
 **Impact:** POC=12 first P-frame already has 21 dB PSNR (should be ~40+ dB for a P-frame referencing a perfect IDR). This cascades to ALL subsequent frames.
+
+## Critical finding: CABAC LPS range table incompatibility (2026-05-23)
+
+**Root cause of P-frame 21 dB quality gap identified:**
+
+Go's `rangeTabLPS` table (from H.264 spec text) produces different bin values than
+x264/FFmpeg's table at specific pState/qIdx combinations. The first divergent bin
+is the P-frame skip_flag at pState=3, qIdx=3 (range=510, low=315):
+
+- Go table: rangeTabLPS[3][3] = 205 → range_after = 305 < low=315 → **LPS (not skipped)**
+- FFmpeg table: equivalent = 51 → range_after = 459 > low=315 → **MPS (skipped!)**
+
+The tables agree at qIdx=0 and diverge increasingly at qIdx 1-3 for pStates 0-11.
+For high pStates (12-63), both tables produce identical values.
+
+**Cannot simply swap tables:** FFmpeg's table + Go's arithmetic = wrong I-frame decode.
+The two implementations use different internal normalizations that require matching
+table + arithmetic as a unit.
+
+**Fix required:** Port FFmpeg's exact CABAC arithmetic (branchless LPS/MPS decision
+with its specific table layout) to replace Go's spec-compliant implementation.
+This is the single remaining blocker for correct multi-frame decode.
