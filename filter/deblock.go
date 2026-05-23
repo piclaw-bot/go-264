@@ -555,14 +555,14 @@ func bsVertMB(cur MBDeblockInfo, left *MBDeblockInfo) [4]int {
 		if cur.IsIntra || (left != nil && left.IsIntra) {
 			bs[g] = 4
 		} else if left != nil {
-			// 4×4 blocks at left edge of cur: 0,4,8,12 (scan order rows 0-3).
 			curNZ := cur.NZC[g*4]
-			leftNZ := left.NZC[g*4+3] // right column of left MB
+			leftNZ := left.NZC[g*4+3]
 			if curNZ != 0 || leftNZ != 0 {
 				bs[g] = 2
-			} else {
-				bs[g] = 1 // MV diff assumed; caller may refine
 			}
+			// bS=0 when both zero NZC. Full spec requires MV/ref comparison
+			// for bS=1 vs 0; without per-4x4 MV data, assume 0 (same as FFmpeg
+			// for P_16x16 with uniform MV across the boundary).
 		}
 	}
 	return bs
@@ -575,13 +575,10 @@ func bsHorizMB(cur MBDeblockInfo, top *MBDeblockInfo) [4]int {
 		if cur.IsIntra || (top != nil && top.IsIntra) {
 			bs[g] = 4
 		} else if top != nil {
-			// 4×4 blocks at top edge of cur: 0,1,2,3 (scan order cols 0-3).
 			curNZ := cur.NZC[g]
-			topNZ := top.NZC[g+12] // bottom row of top MB
+			topNZ := top.NZC[g+12]
 			if curNZ != 0 || topNZ != 0 {
 				bs[g] = 2
-			} else {
-				bs[g] = 1
 			}
 		}
 	}
@@ -605,9 +602,9 @@ func bsVertInternal(cur MBDeblockInfo, edge int) [4]int {
 		blkPrev := row*4 + edge - 1
 		if cur.NZC[blk] != 0 || cur.NZC[blkPrev] != 0 {
 			bs[row] = 2
-		} else {
-			bs[row] = 1
 		}
+		// bS=0 when both have zero coefficients (same ref+MV within MB → no filter).
+		// Full MV comparison requires per-4x4 MV; for now assume same-MB → bS=0.
 	}
 	return bs
 }
@@ -627,9 +624,8 @@ func bsHorizInternal(cur MBDeblockInfo, edge int) [4]int {
 		blkPrev := (edge-1)*4 + col
 		if cur.NZC[blk] != 0 || cur.NZC[blkPrev] != 0 {
 			bs[col] = 2
-		} else {
-			bs[col] = 1
 		}
+		// bS=0 when both have zero coefficients (same ref+MV within MB).
 	}
 	return bs
 }
