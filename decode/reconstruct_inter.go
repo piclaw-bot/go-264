@@ -790,7 +790,7 @@ func (d *Decoder) traceBidiMB(f *frame.Frame, mb *syntax.MBBidi, mbX, mbY int) {
 	p0L0, p0L1 := bTracePart0MVs(mb)
 	p1L0, p1L1 := bTracePart1MVs(mb)
 	ref0p1, ref1p1 := mb.RefIdxL0[0], mb.RefIdxL1[0]
-	if cabacBPartsForType(mb.MBType) == 2 {
+	if mb.MBType == syntax.BMBTypeB8x8 || cabacBPartsForType(mb.MBType) == 2 {
 		ref0p1, ref1p1 = mb.RefIdxL0[1], mb.RefIdxL1[1]
 	}
 	fmt.Fprintf(os.Stderr,
