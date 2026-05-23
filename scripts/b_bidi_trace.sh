@@ -214,6 +214,7 @@ if [[ -s "$OUTDIR/ffbpart_mvd.rows" && -s "$OUTDIR/gobidi.rows" ]]; then
     raw_args=(
       --ff-frame "${FF_FRAME:-2}"
       --ff-occurrence "${FF_OCCURRENCE:-0}"
+      --go-poc "${GO_POC:-6}"
       --go-occurrence "${GO_OCCURRENCE:-0}"
       --limit "${LIMIT:-20}"
     )

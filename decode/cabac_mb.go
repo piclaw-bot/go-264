@@ -936,7 +936,7 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 				mb.MVL0[i], mb.AMVDL0[i] = decodeCABACMVDPairDiag(dec, models, mvd4, stride4, bx, by, pw, ph, i, 0, currentPOC)
 				if traceMVD {
 					postLow, postRange, _ = dec.DebugState()
-					fmt.Fprintf(os.Stderr, "GOBPART_MVD_RAW mb=%04d part=%d list=0 amvd={%d,%d} mvd={%d,%d} pre=%d/%d post=%d/%d\n", mbY*stride4/4+mbX, i, mb.AMVDL0[i].X, mb.AMVDL0[i].Y, mb.MVL0[i].X, mb.MVL0[i].Y, preLow, preRange, postLow, postRange)
+					fmt.Fprintf(os.Stderr, "GOBPART_MVD_RAW mb=%04d poc=%d part=%d list=0 amvd={%d,%d} mvd={%d,%d} pre=%d/%d post=%d/%d\n", mbY*stride4/4+mbX, currentPOC, i, mb.AMVDL0[i].X, mb.AMVDL0[i].Y, mb.MVL0[i].X, mb.MVL0[i].Y, preLow, preRange, postLow, postRange)
 				}
 			}
 		}
@@ -961,7 +961,7 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 				mb.MVL1[i], mb.AMVDL1[i] = decodeCABACMVDPairDiag(dec, models, mvd4L1, stride4, bx, by, pw, ph, i, 1, currentPOC)
 				if traceMVD {
 					postLow, postRange, _ = dec.DebugState()
-					fmt.Fprintf(os.Stderr, "GOBPART_MVD_RAW mb=%04d part=%d list=1 amvd={%d,%d} mvd={%d,%d} pre=%d/%d post=%d/%d\n", mbY*stride4/4+mbX, i, mb.AMVDL1[i].X, mb.AMVDL1[i].Y, mb.MVL1[i].X, mb.MVL1[i].Y, preLow, preRange, postLow, postRange)
+					fmt.Fprintf(os.Stderr, "GOBPART_MVD_RAW mb=%04d poc=%d part=%d list=1 amvd={%d,%d} mvd={%d,%d} pre=%d/%d post=%d/%d\n", mbY*stride4/4+mbX, currentPOC, i, mb.AMVDL1[i].X, mb.AMVDL1[i].Y, mb.MVL1[i].X, mb.MVL1[i].Y, preLow, preRange, postLow, postRange)
 				}
 			}
 		}
