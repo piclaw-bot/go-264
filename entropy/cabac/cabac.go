@@ -17,10 +17,12 @@ import (
 // CABACDecoder is a context-adaptive binary arithmetic coding engine.
 type CABACDecoder struct {
 	r         *nal.Reader
-	codILow   uint32 // current interval low
-	codIRange uint32 // current interval range
-	count     int    // bits consumed
-	BinTrace  int    // if > 0, print per-bin trace and decrement
+	codILow   uint32  // current interval low
+	codIRange uint32  // current interval range
+	count     int     // bits consumed
+	BinTrace  int     // if > 0, print per-bin trace and decrement
+	UseFF     bool    // use FFmpeg-compatible arithmetic
+	ffModels  []uint8 // FFmpeg combined state models (when UseFF=true)
 }
 
 // Context model state (6 bits: pState + valMPS)
@@ -86,6 +88,10 @@ func (d *CABACDecoder) Reset() {
 	if d == nil || d.r == nil {
 		return
 	}
+	if d.UseFF {
+		d.InitFFCompat()
+		return
+	}
 	d.codIRange = 510
 	d.codILow = uint32(d.r.ReadBits(9))
 	d.count = 9
@@ -107,7 +113,19 @@ func (ctx CABACCtx) DebugPackedState() uint8 {
 }
 
 func (d *CABACDecoder) DecodeBin(ctx *CABACCtx) uint32 {
-	if d == nil || d.r == nil || ctx == nil || d.codIRange == 0 || ctx.PState > 63 || ctx.ValMPS > 1 {
+	if d == nil || d.r == nil || ctx == nil {
+		return 0
+	}
+	if d.UseFF {
+		// Convert CABACCtx to FFmpeg combined state byte
+		state := ctx.PState*2 + ctx.ValMPS
+		bin := d.DecodeBinFF(&state)
+		// Write back
+		ctx.ValMPS = state & 1
+		ctx.PState = state >> 1
+		return bin
+	}
+	if d.codIRange == 0 || ctx.PState > 63 || ctx.ValMPS > 1 {
 		return 0
 	}
 	qIdx := (d.codIRange >> 6) & 3
@@ -140,7 +158,13 @@ func (d *CABACDecoder) DecodeBin(ctx *CABACCtx) uint32 {
 
 // DecodeBypass decodes a binary decision with equal probability (p=0.5).
 func (d *CABACDecoder) DecodeBypass() uint32 {
-	if d == nil || d.r == nil || d.codIRange == 0 {
+	if d == nil || d.r == nil {
+		return 0
+	}
+	if d.UseFF {
+		return d.DecodeBypassFF()
+	}
+	if d.codIRange == 0 {
 		return 0
 	}
 	d.codILow <<= 1
@@ -171,12 +195,18 @@ func (d *CABACDecoder) ReadPCMByte() uint8 {
 
 // DecodeTerminate decodes the end-of-slice flag.
 func (d *CABACDecoder) DecodeTerminate() uint32 {
-	if d == nil || d.r == nil || d.codIRange == 0 {
+	if d == nil || d.r == nil {
+		return 0
+	}
+	if d.UseFF {
+		return d.DecodeTerminateFF()
+	}
+	if d.codIRange == 0 {
 		return 0
 	}
 	d.codIRange -= 2
 	if d.codILow >= d.codIRange {
-		return 1 // end of slice
+		return 1
 	}
 	d.renorm()
 	return 0

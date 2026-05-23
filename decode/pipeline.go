@@ -253,6 +253,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 		}
 		r.ByteAlign()
 		cabacDec = cabac.NewCABACDecoder(r)
+		// cabacDec.UseFF = true
 		if os.Getenv("GO264_P_BIN_TRACE") != "" && hdr.SliceType == syntax.SliceTypeP && f.POC == 12 {
 			cabacDec.BinTrace = 30
 		}
