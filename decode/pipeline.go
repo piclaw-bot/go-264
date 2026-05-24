@@ -700,8 +700,17 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 							}
 							bmc.applyDirectTemporal(mbX, mbY, mbBidi, colFrame, f.POC, d.bidiL0Frames(f.POC), colPOC)
 						}
-					} else if applyDirectSpatial {
-						bmc.applyDirectSpatial(mbX, mbY, mbBidi, directRefL0, directMVL0, directRefL1, directMVL1, d.refBidiL1(0, f.POC))
+					} else if mbBidi.MBType == syntax.BMBTypeB8x8 {
+						if applyDirectSpatial {
+							bmc.applyDirectSpatial(mbX, mbY, mbBidi, directRefL0, directMVL0, directRefL1, directMVL1, d.refBidiL1(0, f.POC))
+						} else {
+							colFrame := d.refBidiL1(0, f.POC)
+							colPOC := 0
+							if colFrame != nil {
+								colPOC = colFrame.POC
+							}
+							bmc.applyDirectTemporal(mbX, mbY, mbBidi, colFrame, f.POC, d.bidiL0Frames(f.POC), colPOC)
+						}
 					}
 					d.reconstructMBBidi(f, mbBidi, mbX, mbY, currentQP)
 					nzCtx[mbIdx] = mbBidi.TotalCoeff

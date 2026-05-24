@@ -332,3 +332,33 @@ func TestCABACBListsForTypeUsesPerPartitionTables(t *testing.T) {
 		}
 	}
 }
+
+func TestApplyTemporalDirectB8x8OnlyTouchesDirectSubMBs(t *testing.T) {
+	col := &frame.Frame{POC: 12, MotionStride4: 4, MotionL0: make([][2]int16, 16), RefIdxL0: make([]int8, 16)}
+	for i := range col.RefIdxL0 {
+		col.RefIdxL0[i] = 0
+		col.MotionL0[i] = [2]int16{4, 2}
+	}
+	l0 := []*frame.Frame{{POC: 4}}
+	mb := &syntax.MBBidi{MBType: syntax.BMBTypeB8x8}
+	mb.SubMBType = [4]uint32{0, 1, 0, 3}
+	mb.SubMVL0[4] = syntax.MotionVector{X: 11, Y: 12}
+	mb.SubMVL1[4] = syntax.MotionVector{X: -11, Y: -12}
+	mb.SubMVL0[12] = syntax.MotionVector{X: 21, Y: 22}
+	mb.SubMVL1[12] = syntax.MotionVector{X: -21, Y: -22}
+
+	applyTemporalDirect(mb, col, 0, 0, 8, l0, col.POC)
+
+	if mb.SubMVL0[0] == (syntax.MotionVector{}) || mb.SubMVL1[0] == (syntax.MotionVector{}) {
+		t.Fatalf("direct sub-MB 0 was not temporally derived: L0=%+v L1=%+v", mb.SubMVL0[0], mb.SubMVL1[0])
+	}
+	if mb.SubMVL0[8] == (syntax.MotionVector{}) || mb.SubMVL1[8] == (syntax.MotionVector{}) {
+		t.Fatalf("direct sub-MB 2 was not temporally derived: L0=%+v L1=%+v", mb.SubMVL0[8], mb.SubMVL1[8])
+	}
+	if mb.SubMVL0[4] != (syntax.MotionVector{X: 11, Y: 12}) || mb.SubMVL1[4] != (syntax.MotionVector{X: -11, Y: -12}) {
+		t.Fatalf("explicit sub-MB 1 was overwritten: L0=%+v L1=%+v", mb.SubMVL0[4], mb.SubMVL1[4])
+	}
+	if mb.SubMVL0[12] != (syntax.MotionVector{X: 21, Y: 22}) || mb.SubMVL1[12] != (syntax.MotionVector{X: -21, Y: -22}) {
+		t.Fatalf("explicit sub-MB 3 was overwritten: L0=%+v L1=%+v", mb.SubMVL0[12], mb.SubMVL1[12])
+	}
+}

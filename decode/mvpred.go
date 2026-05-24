@@ -742,6 +742,12 @@ func applyTemporalDirect(mb *syntax.MBBidi, colocated *frame.Frame, mbX, mbY int
 	}
 
 	for part := 0; part < 4; part++ {
+		if mb.MBType == syntax.BMBTypeB8x8 && mb.SubMBType[part] != 0 {
+			// In B_8x8 temporal-direct pictures FFmpeg only derives motion for
+			// sub-MBs whose decoded sub_mb_type is Direct. Explicit L0/L1/Bi
+			// sub-MBs keep their CABAC-decoded MVP+MVD motion.
+			continue
+		}
 		x8 := part & 1
 		y8 := part >> 1
 		// Representative 4x4 position for this 8x8 block (top-left with direct_8x8_inference)
