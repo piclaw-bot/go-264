@@ -43,13 +43,34 @@ func decodeCABACPInterMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, numRe
 		return mb, nil, true
 	}
 	// mb_type binarization (FFmpeg h264_cabac.c decode_cabac_mb_type P-slice path)
-	if dec.DecodeBin(&models[14]) == 0 {
-		if dec.DecodeBin(&models[15]) == 0 {
-			mb.MBType = 3 * dec.DecodeBin(&models[16]) // P16x16 or P8x8
+	tracePTypeLimit := 2
+	if v := os.Getenv("GO264_P_TYPE_TRACE_LIMIT"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			tracePTypeLimit = n
+		}
+	}
+	tracePType := os.Getenv("GO264_P_TYPE_TRACE") != "" && mbY*stride4/4+mbX < tracePTypeLimit
+	pTypeTrace := ""
+	decodePTypeBin := func(ctx int) uint32 {
+		preLow, preRange, _ := dec.DebugState()
+		preState := models[ctx].DebugPackedState()
+		bin := dec.DecodeBin(&models[ctx])
+		if tracePType {
+			postLow, postRange, _ := dec.DebugState()
+			pTypeTrace += fmt.Sprintf(" ctx=%d state=%d pre=%d/%d bin=%d post_state=%d post=%d/%d", ctx, preState, preLow, preRange, bin, models[ctx].DebugPackedState(), postLow, postRange)
+		}
+		return bin
+	}
+	if decodePTypeBin(14) == 0 {
+		if decodePTypeBin(15) == 0 {
+			mb.MBType = 3 * decodePTypeBin(16) // P16x16 or P8x8
 		} else {
-			mb.MBType = 2 - dec.DecodeBin(&models[17]) // P8x16 or P16x8
+			mb.MBType = 2 - decodePTypeBin(17) // P8x16 or P16x8
 		}
 	} else {
+		if tracePType {
+			fmt.Fprintf(os.Stderr, "GOPTYPE mb=%04d raw=intra%s\n", mbY*stride4/4+mbX, pTypeTrace)
+		}
 		// FFmpeg h264_cabac.c decodes intra-in-P via decode_cabac_intra_mb_type(ctx_base=17, intra_slice=0).
 		if cabacUseFFmpegEdgeContexts() {
 			leftCBP, topCBP = cabacUnavailableCBP(leftCBP, topCBP, mbX, mbY, true)
@@ -58,6 +79,9 @@ func decodeCABACPInterMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, numRe
 		}
 		intra := decodeCABACIntraMBWithParams(dec, models, lastQScaleDiff, leftNZ, topNZ, leftChromaNZ, topChromaNZ, leftCBP, topCBP, leftMBType, topMBType, leftChromaPred, topChromaPred, transform8x8Mode, transform8x8Ctx, leftEdge8x8, topEdge8x8, 17, false)
 		return nil, intra, false
+	}
+	if tracePType {
+		fmt.Fprintf(os.Stderr, "GOPTYPE mb=%04d raw=%d%s\n", mbY*stride4/4+mbX, mb.MBType, pTypeTrace)
 	}
 	if cabacUseFFmpegEdgeContexts() {
 		leftCBP, topCBP = cabacUnavailableCBP(leftCBP, topCBP, mbX, mbY, false)
