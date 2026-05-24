@@ -69,6 +69,14 @@ else:
     if needle not in s:
         raise SystemExit('FFBIDI write_back_motion hook target not found')
     s = s.replace(needle, trace, 1)
+# Keep optional FF B mb_type diagnostics bounded by the caller's current MB_LIMIT.
+# Older local source patches used fixed 14/15 limits while chasing the original
+# MB13 divergence; preserve those diagnostics but make the focused window movable.
+s = s.replace('(sl->mb_x + sl->mb_y * h->mb_width) <= 14', f'(sl->mb_x + sl->mb_y * h->mb_width) < {mb_limit}')
+s = s.replace('(sl->mb_x+sl->mb_y*h->mb_width)<15', f'(sl->mb_x+sl->mb_y*h->mb_width)<{mb_limit}')
+s = s.replace('mbidx==12', f'mbidx < {mb_limit}')
+s = s.replace('_mbidx == 12', f'_mbidx < {mb_limit}')
+s = s.replace('(sl->mb_x + sl->mb_y * h->mb_width) < 15', f'(sl->mb_x + sl->mb_y * h->mb_width) < {mb_limit}')
 # Keep optional FF_BPART_MVD diagnostics frame-qualified. Older local patches
 # emitted rows keyed only by mb/part/list, which made repeated B-picture groups
 # ambiguous for compare_bpart_mvd.py.
@@ -159,7 +167,9 @@ go_env=(GOTMPDIR="${GOTMPDIR:-/workspace/tmp/gotmp}" GO264_B_MB_TRACE=1)
 [[ -n "${GO264_B_STATE_TRACE:-}" ]] && go_env+=(GO264_B_STATE_TRACE=1)
 [[ -n "${GO264_B_CABAC_TRACE:-}" ]] && go_env+=(GO264_B_CABAC_TRACE=1)
 [[ -n "${GO264_B_RESIDUAL_TRACE:-}" ]] && go_env+=(GO264_B_RESIDUAL_TRACE=1)
-[[ -n "${GO264_B_TYPE_TRACE:-}" ]] && go_env+=(GO264_B_TYPE_TRACE=1)
+if [[ -n "${GO264_B_TYPE_TRACE:-}" ]]; then
+  go_env+=(GO264_B_TYPE_TRACE=1 GO264_B_TYPE_TRACE_LIMIT="$MB_LIMIT")
+fi
 [[ -n "${GO264_CABAC_TERMINATE_TRACE:-}" ]] && go_env+=(GO264_CABAC_TERMINATE_TRACE=1)
 env "${go_env[@]}" go run ./cmd/decode264 -frames "$FRAMES" -f yuv -i "$INPUT" -o "$OUTDIR/go/frames" \
   >"$OUTDIR/go/stdout.log" 2>"$OUTDIR/go/bidi.log"
