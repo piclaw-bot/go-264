@@ -292,14 +292,14 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 			return
 		}
 		if intra != nil {
-			tc := intra.TotalCoeff
+			tc := traceTotalCoeffFFmpegOrder(intra.TotalCoeff)
 			fmt.Fprintf(os.Stderr, "GOCABACB mb=%04d x=%02d y=%02d poc=%d kind=I type=%d skip=0 cbp=%02x qpd=%d qp=%d 8x8=%d tc=[%d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d]\n",
 				mbIdx, mbX, mbY, f.POC, cabacMBTypeFlag(intra.MBType), intra.CodedBlockPattern, intra.QPDelta, qp, boolInt(intra.Use8x8Transform),
 				tc[0], tc[1], tc[2], tc[3], tc[4], tc[5], tc[6], tc[7], tc[8], tc[9], tc[10], tc[11], tc[12], tc[13], tc[14], tc[15])
 			return
 		}
 		if mb != nil {
-			tc := mb.TotalCoeff
+			tc := traceTotalCoeffFFmpegOrder(mb.TotalCoeff)
 			fmt.Fprintf(os.Stderr, "GOCABACB mb=%04d x=%02d y=%02d poc=%d kind=B type=%d skip=0 cbp=%02x qpd=%d qp=%d 8x8=%d tc=[%d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d]\n",
 				mbIdx, mbX, mbY, f.POC, ffBidiMBType(mb), mb.CBP, mb.QPDelta, qp, boolInt(mb.Use8x8Transform),
 				tc[0], tc[1], tc[2], tc[3], tc[4], tc[5], tc[6], tc[7], tc[8], tc[9], tc[10], tc[11], tc[12], tc[13], tc[14], tc[15])
