@@ -1067,7 +1067,16 @@ decodeCBP:
 				if mb.CBP&(1<<uint(group)) != 0 {
 					nza, nzb := nzCBFCtxLuma(blkIdx, &nzMB, leftNZ, topNZ)
 					var block [16]int16
+					traceRes := os.Getenv("GO264_B_RESIDUAL_TRACE") != ""
+					preLow, preRange := uint32(0), uint32(0)
+					if traceRes {
+						preLow, preRange, _ = dec.DebugState()
+					}
 					tc := dec.DecodeCABACResidual(models, 2, 16, block[:], nza, nzb)
+					if traceRes {
+						postLow, postRange, _ := dec.DebugState()
+						fmt.Fprintf(os.Stderr, "GOBRES mb=%04d poc=%d blk=%02d group=%d nza=%d nzb=%d tc=%d pre=%d/%d post=%d/%d\n", mbY*stride4/4+mbX, currentPOC, blkIdx, group, nza, nzb, tc, preLow, preRange, postLow, postRange)
+					}
 					mb.Coeffs[blkIdx] = block
 					mb.TotalCoeff[blkIdx] = tc
 					nzMB[blkIdx] = tc
