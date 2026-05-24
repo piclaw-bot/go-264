@@ -77,6 +77,50 @@ s = s.replace('(sl->mb_x+sl->mb_y*h->mb_width)<15', f'(sl->mb_x+sl->mb_y*h->mb_w
 s = s.replace('mbidx==12', f'mbidx < {mb_limit}')
 s = s.replace('_mbidx == 12', f'_mbidx < {mb_limit}')
 s = s.replace('(sl->mb_x + sl->mb_y * h->mb_width) < 15', f'(sl->mb_x + sl->mb_y * h->mb_width) < {mb_limit}')
+if 'FFPTYPE mb=' not in s:
+    s = s.replace('''        if( get_cabac_noinline( &sl->cabac, &sl->cabac_state[14] ) == 0 ) {
+            /* P-type */
+            if( get_cabac_noinline( &sl->cabac, &sl->cabac_state[15] ) == 0 ) {
+                /* P_L0_D16x16, P_8x8 */
+                mb_type= 3 * get_cabac_noinline( &sl->cabac, &sl->cabac_state[16] );
+            } else {
+                /* P_L0_D8x16, P_L0_D16x8 */
+                mb_type= 2 - get_cabac_noinline( &sl->cabac, &sl->cabac_state[17] );
+            }
+            partition_count = ff_h264_p_mb_type_info[mb_type].partition_count;
+            mb_type         = ff_h264_p_mb_type_info[mb_type].type;
+        } else {
+''', '''        if (getenv("GO264_P_TYPE_TRACE") && sl->mb_x + sl->mb_y * h->mb_width < ''' + mb_limit + ''') {
+            int _mbt = sl->mb_x + sl->mb_y * h->mb_width;
+            char _tr[512]; int _off = 0; unsigned _pl, _pr; int _bin;
+#define TRACE_PTYPE_BIN(ctxidx) do { _pl=(unsigned)sl->cabac.low>>1; _pr=(unsigned)sl->cabac.range; _bin=get_cabac_noinline(&sl->cabac, &sl->cabac_state[(ctxidx)]); _off += snprintf(_tr+_off, sizeof(_tr)-_off, " ctx=%d pre=%u/%u bin=%d post=%u/%u", (ctxidx), _pl, _pr, _bin, (unsigned)sl->cabac.low>>1, (unsigned)sl->cabac.range); } while(0)
+            TRACE_PTYPE_BIN(14);
+            if (_bin == 0) {
+                TRACE_PTYPE_BIN(15);
+                if (_bin == 0) { TRACE_PTYPE_BIN(16); mb_type = 3 * _bin; }
+                else { TRACE_PTYPE_BIN(17); mb_type = 2 - _bin; }
+                fprintf(stderr, "FFPTYPE mb=%04d poc=%d raw=%d%s\\n", _mbt, h->poc.poc_lsb, mb_type, _tr);
+            } else {
+                fprintf(stderr, "FFPTYPE mb=%04d poc=%d raw=intra%s\\n", _mbt, h->poc.poc_lsb, _tr);
+                mb_type = decode_cabac_intra_mb_type(sl, 17, 0);
+                goto decode_intra_mb;
+            }
+#undef TRACE_PTYPE_BIN
+            partition_count = ff_h264_p_mb_type_info[mb_type].partition_count;
+            mb_type         = ff_h264_p_mb_type_info[mb_type].type;
+        } else if( get_cabac_noinline( &sl->cabac, &sl->cabac_state[14] ) == 0 ) {
+            /* P-type */
+            if( get_cabac_noinline( &sl->cabac, &sl->cabac_state[15] ) == 0 ) {
+                /* P_L0_D16x16, P_8x8 */
+                mb_type= 3 * get_cabac_noinline( &sl->cabac, &sl->cabac_state[16] );
+            } else {
+                /* P_L0_D8x16, P_L0_D16x8 */
+                mb_type= 2 - get_cabac_noinline( &sl->cabac, &sl->cabac_state[17] );
+            }
+            partition_count = ff_h264_p_mb_type_info[mb_type].partition_count;
+            mb_type         = ff_h264_p_mb_type_info[mb_type].type;
+        } else {
+''')
 # Keep optional FF_BPART_MVD diagnostics frame-qualified. Older local patches
 # emitted rows keyed only by mb/part/list, which made repeated B-picture groups
 # ambiguous for compare_bpart_mvd.py.
@@ -151,6 +195,7 @@ ff_env=(GO264_FFMPEG_B_MB_TRACE=1)
 if [[ -n "${GO264_FFMPEG_B_MVD_TRACE:-}" || -n "${GO264_B_CABAC_TRACE:-}" ]]; then
   ff_env+=(GO264_FFMPEG_CABAC_TRACE=1)
 fi
+[[ -n "${GO264_P_TYPE_TRACE:-}" ]] && ff_env+=(GO264_P_TYPE_TRACE=1)
 [[ -n "${GO264_B_STATE_TRACE:-}" ]] && ff_env+=(GO264_FFMPEG_B_STATE_TRACE=1)
 env "${ff_env[@]}" "$FFMPEG" -y -threads 1 -hide_banner \
   -i "$INPUT" -frames:v "$FRAMES" -pix_fmt yuv420p -f rawvideo /dev/null \
@@ -180,6 +225,7 @@ grep '^GOCABACB' "$OUTDIR/go/bidi.log" >"$OUTDIR/gocabacb.rows" || true
 grep '^GOBTYPE' "$OUTDIR/go/bidi.log" >"$OUTDIR/gobtype.rows" || true
 grep '^GOBRES' "$OUTDIR/go/bidi.log" >"$OUTDIR/gobres.rows" || true
 grep '^FFCABAC' "$OUTDIR/ffmpeg/bidi.log" >"$OUTDIR/ffcabac.rows" || true
+grep '^FFPTYPE' "$OUTDIR/ffmpeg/bidi.log" >"$OUTDIR/ffptype.rows" || true
 grep '^GOTERMINATE' "$OUTDIR/go/bidi.log" >"$OUTDIR/goterminate.rows" || true
 
 FF_POC_VALUE="${FF_POC:-${GO_POC:-6}}"
