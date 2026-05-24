@@ -746,8 +746,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					mbTypeCtx[mbIdx] = 0 // inter B
 					mbFFTypeCtx[mbIdx] = ffBidiMBType(mbBidi)
 					nonSkipCtx[mbIdx] = true
-					// transform8x8Ctx not updated: updating propagates wrong values until
-					// the B-frame CABAC transform8x8_flag decode is verified correct.
+					transform8x8Ctx[mbIdx] = mbBidi.Use8x8Transform
 					// Write back 4×4 MV/ref contexts for future MVP/ref_idx context. FFmpeg keeps
 					// separate list caches; B_8x8 and two-part B MBs must fill the same shaped
 					// regions, not just MVL0[0] over the whole macroblock.
