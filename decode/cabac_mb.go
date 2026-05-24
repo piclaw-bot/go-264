@@ -143,7 +143,16 @@ func decodeCABACPInterMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, numRe
 		mb.DecodedMVDX = mb.MV[0].X
 		mb.DecodedMVDY = mb.MV[0].Y
 	}
+	tracePCABAC := os.Getenv("GO264_P_CABAC_TRACE") != "" && currentPOC == 28 && mbY*stride4/4+mbX < tracePTypeLimit
+	if tracePCABAC {
+		preLow, preRange, _ := dec.DebugState()
+		fmt.Fprintf(os.Stderr, "GOP_PRE_CBP mb=%04d poc=%d type=%d left=%02x top=%02x low=%d range=%d\n", mbY*stride4/4+mbX, currentPOC, ffInterMBType(mb), leftCBP, topCBP, preLow, preRange)
+	}
 	mb.CBP = syntax.DecodeCABACCBP(dec, models, leftCBP, topCBP)
+	if tracePCABAC {
+		postLow, postRange, _ := dec.DebugState()
+		fmt.Fprintf(os.Stderr, "GOP_POST_CBP mb=%04d poc=%d cbp=%02x low=%d range=%d\n", mbY*stride4/4+mbX, currentPOC, mb.CBP, postLow, postRange)
+	}
 	if mb.CBP != 0 {
 		use8x8Residual := false
 		if !cabacInter8x8TransformAllowed(mb) {
@@ -155,7 +164,15 @@ func decodeCABACPInterMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, numRe
 				mb.Use8x8Transform = true
 			}
 		}
+		if tracePCABAC {
+			preLow, preRange, _ := dec.DebugState()
+			fmt.Fprintf(os.Stderr, "GOP_PRE_DQP mb=%04d poc=%d 8x8=%d low=%d range=%d\n", mbY*stride4/4+mbX, currentPOC, boolInt(mb.Use8x8Transform), preLow, preRange)
+		}
 		mb.QPDelta = int32(syntax.DecodeCABACDQP(dec, models, lastQScaleDiff))
+		if tracePCABAC {
+			postLow, postRange, _ := dec.DebugState()
+			fmt.Fprintf(os.Stderr, "GOP_POST_DQP mb=%04d poc=%d qpd=%d low=%d range=%d\n", mbY*stride4/4+mbX, currentPOC, mb.QPDelta, postLow, postRange)
+		}
 		var nzMB [16]int
 		if use8x8Residual {
 			for group := 0; group < 4; group++ {

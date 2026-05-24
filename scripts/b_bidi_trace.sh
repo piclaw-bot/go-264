@@ -77,6 +77,7 @@ s = s.replace('(sl->mb_x+sl->mb_y*h->mb_width)<15', f'(sl->mb_x+sl->mb_y*h->mb_w
 s = s.replace('mbidx==12', f'mbidx < {mb_limit}')
 s = s.replace('_mbidx == 12', f'_mbidx < {mb_limit}')
 s = s.replace('(sl->mb_x + sl->mb_y * h->mb_width) < 15', f'(sl->mb_x + sl->mb_y * h->mb_width) < {mb_limit}')
+s = s.replace('(sl->mb_x + sl->mb_y * h->mb_width) < 20', f'(sl->mb_x + sl->mb_y * h->mb_width) < {mb_limit}')
 if 'FFPTYPE mb=' not in s:
     s = s.replace('''        if( get_cabac_noinline( &sl->cabac, &sl->cabac_state[14] ) == 0 ) {
             /* P-type */
