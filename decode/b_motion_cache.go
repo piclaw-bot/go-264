@@ -136,7 +136,7 @@ func (c bMotionCache) initDirect16x16(mb *syntax.MBBidi, refL0 int8, mvL0 syntax
 	if mb == nil || mb.MBType != syntax.BMBTypeDirect16x16 {
 		return
 	}
-	mb.RefIdxL0[0] = refL0
+	mb.RefIdxL0 = [4]int8{refL0, refL0, refL0, refL0}
 	mb.RefIdxL1 = [4]int8{refL1, refL1, refL1, refL1}
 	mb.MVL0[0] = mvL0
 	mb.MVL1[0] = mvL1

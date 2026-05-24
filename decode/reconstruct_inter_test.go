@@ -34,3 +34,21 @@ func TestReconstructMBInterNoReferenceFillsLumaAndLeavesNeutralChroma(t *testing
 		}
 	}
 }
+
+func TestDirect16HasSubMVsDetectsPer8x8DirectMotion(t *testing.T) {
+	mb := &syntax.MBBidi{MBType: syntax.BMBTypeDirect16x16}
+	mb.MVL0[0] = syntax.MotionVector{X: 1, Y: 2}
+	mb.MVL1[0] = syntax.MotionVector{X: -1, Y: -2}
+	for part := 0; part < 4; part++ {
+		mb.RefIdxL0[part], mb.RefIdxL1[part] = 0, 0
+		mb.SubMVL0[part*4] = mb.MVL0[0]
+		mb.SubMVL1[part*4] = mb.MVL1[0]
+	}
+	if direct16HasSubMVs(mb) {
+		t.Fatalf("uniform Direct16x16 motion should use the regular 16x16 path")
+	}
+	mb.SubMVL0[4] = syntax.MotionVector{X: 3, Y: 2}
+	if !direct16HasSubMVs(mb) {
+		t.Fatalf("per-8x8 Direct motion should use sub-block reconstruction")
+	}
+}

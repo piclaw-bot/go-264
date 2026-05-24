@@ -849,6 +849,12 @@ func (d *Decoder) reconstructMBBidi(f *frame.Frame, mb *syntax.MBBidi, mbX, mbY,
 			x0, y0, w, h := bPartRect(mb.MBType, part)
 			d.fillBPartPrediction(blended[:], mb, f, mbX, mbY, x0, y0, w, h, part)
 		}
+	} else if mb.MBType == syntax.BMBTypeDirect16x16 && direct16HasSubMVs(mb) {
+		for part := 0; part < 4; part++ {
+			x0 := (part & 1) * 8
+			y0 := (part >> 1) * 8
+			d.fillBPredByUse(blended[:], f, mbX, mbY, x0, y0, 8, 8, mb.RefIdxL0[part], mb.RefIdxL1[part], mb.SubMVL0[part*4], mb.SubMVL1[part*4], true, true)
+		}
 	} else {
 		var predL0 [256]uint8
 		var predL1 [256]uint8
@@ -948,6 +954,19 @@ func directTraceSubMVs(mb *syntax.MBBidi) (syntax.MotionVector, syntax.MotionVec
 		return directTracePartitionMVs(mb)
 	}
 	return mb.SubMVL0[0], mb.SubMVL0[4], mb.SubMVL0[8], mb.SubMVL0[12]
+}
+
+func direct16HasSubMVs(mb *syntax.MBBidi) bool {
+	if mb == nil || mb.MBType != syntax.BMBTypeDirect16x16 {
+		return false
+	}
+	for part := 0; part < 4; part++ {
+		idx := part * 4
+		if mb.SubMVL0[idx] != mb.MVL0[0] || mb.SubMVL1[idx] != mb.MVL1[0] || mb.RefIdxL0[part] != mb.RefIdxL0[0] || mb.RefIdxL1[part] != mb.RefIdxL1[0] {
+			return true
+		}
+	}
+	return false
 }
 
 func directTracePartitionMVs(mb *syntax.MBBidi) (syntax.MotionVector, syntax.MotionVector, syntax.MotionVector, syntax.MotionVector) {
