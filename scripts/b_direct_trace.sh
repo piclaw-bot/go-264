@@ -163,11 +163,19 @@ grep -E '^FFCOLZERO(8)?' "$OUTDIR/ffmpeg.direct.trace" >"$OUTDIR/ffcolzero.rows"
 rm -rf "$OUTDIR/go-frames"
 mkdir -p "$OUTDIR/go-frames"
 mkdir -p "${GOTMPDIR:-/workspace/tmp/gotmp}"
-GOTMPDIR="${GOTMPDIR:-/workspace/tmp/gotmp}" GO264_DIRECT_TRACE=1 go run ./cmd/decode264 -frames "$FRAMES" -f yuv -i "$INPUT" -o "$OUTDIR/go-frames" \
+go_env=(
+  GOTMPDIR="${GOTMPDIR:-/workspace/tmp/gotmp}"
+  GO264_DIRECT_TRACE=1
+  GO264_DIRECT_COL_TRACE=1
+  GO264_MOTION_SAVE_TRACE=1
+  GO264_MOTION_SAVE_MB_LIMIT="$MB_LIMIT"
+)
+[[ -n "${GO264_MOTION_SAVE_DETAIL:-}" ]] && go_env+=(GO264_MOTION_SAVE_DETAIL=1)
+env "${go_env[@]}" go run ./cmd/decode264 -frames "$FRAMES" -f yuv -i "$INPUT" -o "$OUTDIR/go-frames" \
   >"$OUTDIR/go.stdout" 2>"$OUTDIR/go.direct.trace"
 grep '^GODIRECT' "$OUTDIR/go.direct.trace" >"$OUTDIR/godirect.rows" || true
 grep '^GOCOLZERO' "$OUTDIR/go.direct.trace" >"$OUTDIR/gocolzero.rows" || true
-grep '^GOMOTSAVE' "$OUTDIR/go.direct.trace" >"$OUTDIR/gomotsave.rows" || true
+grep -E '^GOMOTSAVE(4)?' "$OUTDIR/go.direct.trace" >"$OUTDIR/gomotsave.rows" || true
 grep '^GOMOTWRITE' "$OUTDIR/go.direct.trace" >"$OUTDIR/gomotwrite.rows" || true
 python3 - "$OUTDIR/ffdirect.rows" <<'PY'
 import re, sys
@@ -194,6 +202,7 @@ PY
 
 : >"$OUTDIR/gowrite.diff"
 if [[ -n "${GO_POC:-}" ]]; then
+  : "${FF_POC:=$GO_POC}"
   direct_args=(
     --ff-frame "${FF_FRAME:-2}"
     --ff-occurrence "${FF_OCCURRENCE:-0}"
@@ -201,9 +210,7 @@ if [[ -n "${GO_POC:-}" ]]; then
     --go-occurrence "${GO_OCCURRENCE:-0}"
     --limit "${LIMIT:-20}"
   )
-  if [[ -n "${FF_POC:-}" ]]; then
-    direct_args+=(--ff-poc "$FF_POC")
-  fi
+  direct_args+=(--ff-poc "$FF_POC")
   python3 scripts/compare_direct_trace.py "$OUTDIR/ffdirect.rows" "$OUTDIR/godirect.rows" \
     "${direct_args[@]}" || true
   if [[ -s "$OUTDIR/gomotwrite.rows" ]]; then
