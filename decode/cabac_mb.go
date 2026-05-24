@@ -745,16 +745,28 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 	if !topIsDirect {
 		typeCtxOffset++
 	}
-	if dec.DecodeBin(&models[27+typeCtxOffset]) == 0 {
+	traceBType := os.Getenv("GO264_B_TYPE_TRACE") != "" && currentPOC == 20 && mbY*stride4/4+mbX < 20
+	typeTrace := ""
+	decodeTypeBin := func(ctx int) int {
+		preLow, preRange, _ := dec.DebugState()
+		preState := models[ctx].DebugPackedState()
+		bin := dec.DecodeBin(&models[ctx])
+		if traceBType {
+			postLow, postRange, _ := dec.DebugState()
+			typeTrace += fmt.Sprintf(" ctx=%d state=%d pre=%d/%d bin=%d post_state=%d post=%d/%d", ctx, preState, preLow, preRange, bin, models[ctx].DebugPackedState(), postLow, postRange)
+		}
+		return int(bin)
+	}
+	if decodeTypeBin(27+typeCtxOffset) == 0 {
 		mb.MBType = syntax.BMBTypeDirect16x16
-	} else if dec.DecodeBin(&models[27+3]) == 0 {
+	} else if decodeTypeBin(27+3) == 0 {
 		// B_L0_16x16 or B_L1_16x16.
-		mb.MBType = uint32(1) + dec.DecodeBin(&models[27+5])
+		mb.MBType = uint32(1 + decodeTypeBin(27+5))
 	} else {
-		bits := dec.DecodeBin(&models[27+4]) << 3
-		bits |= dec.DecodeBin(&models[27+5]) << 2
-		bits |= dec.DecodeBin(&models[27+5]) << 1
-		bits |= dec.DecodeBin(&models[27+5])
+		bits := decodeTypeBin(27+4) << 3
+		bits |= decodeTypeBin(27+5) << 2
+		bits |= decodeTypeBin(27+5) << 1
+		bits |= decodeTypeBin(27+5)
 		switch {
 		case bits < 8:
 			mb.MBType = uint32(3 + bits) // B_Bi_16x16 through B_L1_L0_16x8
@@ -781,9 +793,12 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 			// bits ∈ {8..12}: read one more bin (ctx 27+5).
 			// shifted_bits = (bits<<1)|extra ∈ {16..25} → mb_type = shifted_bits-4 ∈ {12..21}.
 			// B_L0_Bi_16x8 through B_Bi_Bi_8x16. Mirrors FFmpeg: mb_type = bits - 4.
-			bits = (bits << 1) | dec.DecodeBin(&models[27+5])
-			mb.MBType = bits - 4
+			bits = (bits << 1) | decodeTypeBin(27+5)
+			mb.MBType = uint32(bits - 4)
 		}
+	}
+	if traceBType {
+		fmt.Fprintf(os.Stderr, "GOBTYPE mb=%04d poc=%d leftNonSkip=%t topNonSkip=%t leftDirect=%t topDirect=%t ctxOffset=%d raw=%d%s\n", mbY*stride4/4+mbX, currentPOC, leftNonSkip, topNonSkip, leftIsDirect, topIsDirect, typeCtxOffset, mb.MBType, typeTrace)
 	}
 
 	if cabacUseFFmpegEdgeContexts() {
