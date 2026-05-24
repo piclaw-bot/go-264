@@ -55,15 +55,47 @@ func ffBidiMBType(mb *syntax.MBBidi) uint32 {
 	case syntax.BMBTypeDirect16x16:
 		return ffMBType16x16 | ffMBTypeDirect2 | ffMBTypeP0L0 | ffMBTypeP1L0 | ffMBTypeP0L1 | ffMBTypeP1L1
 	case syntax.BMBTypeL016x16:
-		return ffMBType16x16 | ffMBTypeP0L0 | ffMBTypeP1L0
+		return ffMBType16x16 | ffMBTypeP0L0
 	case syntax.BMBTypeL116x16:
-		return ffMBType16x16 | ffMBTypeP0L1 | ffMBTypeP1L1
+		return ffMBType16x16 | ffMBTypeP0L1
 	case syntax.BMBTypeBi16x16:
-		return ffMBType16x16 | ffMBTypeP0L0 | ffMBTypeP1L0 | ffMBTypeP0L1 | ffMBTypeP1L1
-	case syntax.BMBTypeL016x8, syntax.BMBTypeL116x8, syntax.BMBTypeBi16x8:
-		return ffMBType16x8 | ffBidiPartUseFlags(mb, 0) | ffBidiPartUseFlags(mb, 1)
-	case syntax.BMBTypeL016x8b, syntax.BMBTypeL116x8b, syntax.BMBTypeBi16x8b, syntax.BMBTypeL08x16, syntax.BMBTypeL18x16, syntax.BMBTypeBi8x16:
-		return ffMBType8x16 | ffBidiPartUseFlags(mb, 0) | ffBidiPartUseFlags(mb, 1)
+		return ffMBType16x16 | ffMBTypeP0L0 | ffMBTypeP0L1
+	case syntax.BMBTypeL016x8:
+		return ffMBType16x8 | ffMBTypeP0L0 | ffMBTypeP1L0
+	case syntax.BMBTypeL016x8b:
+		return ffMBType8x16 | ffMBTypeP0L0 | ffMBTypeP1L0
+	case syntax.BMBTypeL116x8:
+		return ffMBType16x8 | ffMBTypeP0L1 | ffMBTypeP1L1
+	case syntax.BMBTypeL116x8b:
+		return ffMBType8x16 | ffMBTypeP0L1 | ffMBTypeP1L1
+	case syntax.BMBTypeBi16x8:
+		return ffMBType16x8 | ffMBTypeP0L0 | ffMBTypeP1L1
+	case syntax.BMBTypeBi16x8b:
+		return ffMBType8x16 | ffMBTypeP0L0 | ffMBTypeP1L1
+	case syntax.BMBTypeL08x16:
+		return ffMBType16x8 | ffMBTypeP0L1 | ffMBTypeP1L0
+	case syntax.BMBTypeL18x16:
+		return ffMBType8x16 | ffMBTypeP0L1 | ffMBTypeP1L0
+	case syntax.BMBTypeBi8x16:
+		return ffMBType16x8 | ffMBTypeP0L0 | ffMBTypeP1L0 | ffMBTypeP1L1
+	case 13:
+		return ffMBType8x16 | ffMBTypeP0L0 | ffMBTypeP1L0 | ffMBTypeP1L1
+	case 14:
+		return ffMBType16x8 | ffMBTypeP0L1 | ffMBTypeP1L0 | ffMBTypeP1L1
+	case 15:
+		return ffMBType8x16 | ffMBTypeP0L1 | ffMBTypeP1L0 | ffMBTypeP1L1
+	case 16:
+		return ffMBType16x8 | ffMBTypeP0L0 | ffMBTypeP0L1 | ffMBTypeP1L0
+	case 17:
+		return ffMBType8x16 | ffMBTypeP0L0 | ffMBTypeP0L1 | ffMBTypeP1L0
+	case 18:
+		return ffMBType16x8 | ffMBTypeP0L0 | ffMBTypeP0L1 | ffMBTypeP1L1
+	case 19:
+		return ffMBType8x16 | ffMBTypeP0L0 | ffMBTypeP0L1 | ffMBTypeP1L1
+	case 20:
+		return ffMBType16x8 | ffMBTypeP0L0 | ffMBTypeP0L1 | ffMBTypeP1L0 | ffMBTypeP1L1
+	case 21:
+		return ffMBType8x16 | ffMBTypeP0L0 | ffMBTypeP0L1 | ffMBTypeP1L0 | ffMBTypeP1L1
 	case syntax.BMBTypeB8x8:
 		flags := ffMBType8x8
 		for part, t := range mb.SubMBType {
