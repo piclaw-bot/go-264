@@ -25,7 +25,7 @@ const cabacMinMacroblockContexts = 402
 
 // decodeCABACPInterMB decodes one CABAC-coded P-slice macroblock.
 // Returns (inter, nil, true) for P-skip, (nil, intra, false) for intra-in-P.
-func decodeCABACPInterMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, numRefFrames uint32, lastQScaleDiff int, leftNZ, topNZ *[16]int, leftChromaNZ, topChromaNZ *[2][4]int, leftCBP, topCBP uint32, leftNonSkip, topNonSkip bool, refCtxs [4]int, mvd4 []syntax.MotionVector, stride4, mbX, mbY int, transform8x8Mode bool, transform8x8Ctx int, leftMBType, topMBType uint32, leftChromaPred, topChromaPred int8, leftEdge8x8, topEdge8x8 [2]int8) (*syntax.MBInter, *syntax.MBIntra, bool) {
+func decodeCABACPInterMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, numRefFrames uint32, lastQScaleDiff int, leftNZ, topNZ *[16]int, leftChromaNZ, topChromaNZ *[2][4]int, leftCBP, topCBP uint32, leftNonSkip, topNonSkip bool, refCtxs [4]int, mvd4 []syntax.MotionVector, stride4, mbX, mbY int, currentPOC int, transform8x8Mode bool, transform8x8Ctx int, leftMBType, topMBType uint32, leftChromaPred, topChromaPred int8, leftEdge8x8, topEdge8x8 [2]int8) (*syntax.MBInter, *syntax.MBIntra, bool) {
 	mb := &syntax.MBInter{MBType: syntax.PMBTypeP16x16}
 	if dec == nil || len(models) < cabacMinMacroblockContexts {
 		return mb, nil, true
@@ -69,7 +69,7 @@ func decodeCABACPInterMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, numRe
 		}
 	} else {
 		if tracePType {
-			fmt.Fprintf(os.Stderr, "GOPTYPE mb=%04d raw=intra%s\n", mbY*stride4/4+mbX, pTypeTrace)
+			fmt.Fprintf(os.Stderr, "GOPTYPE mb=%04d poc=%d raw=intra%s\n", mbY*stride4/4+mbX, currentPOC, pTypeTrace)
 		}
 		// FFmpeg h264_cabac.c decodes intra-in-P via decode_cabac_intra_mb_type(ctx_base=17, intra_slice=0).
 		if cabacUseFFmpegEdgeContexts() {
@@ -81,7 +81,7 @@ func decodeCABACPInterMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, numRe
 		return nil, intra, false
 	}
 	if tracePType {
-		fmt.Fprintf(os.Stderr, "GOPTYPE mb=%04d raw=%d%s\n", mbY*stride4/4+mbX, mb.MBType, pTypeTrace)
+		fmt.Fprintf(os.Stderr, "GOPTYPE mb=%04d poc=%d raw=%d%s\n", mbY*stride4/4+mbX, currentPOC, mb.MBType, pTypeTrace)
 	}
 	if cabacUseFFmpegEdgeContexts() {
 		leftCBP, topCBP = cabacUnavailableCBP(leftCBP, topCBP, mbX, mbY, false)
