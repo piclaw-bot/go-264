@@ -346,6 +346,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 		var leftCBP, topCBP uint32
 		var leftMBType, topMBType uint32
 		var leftNonSkip, topNonSkip bool
+		leftIsDirect, topIsDirect := true, true
 		transform8x8CABACCtx := 0
 		var leftChromaPred, topChromaPred int8
 		if mbX > 0 {
@@ -354,6 +355,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 			leftCBP = cbpCtx[mbIdx-1]
 			leftMBType = mbTypeCtx[mbIdx-1]
 			leftNonSkip = nonSkipCtx[mbIdx-1]
+			leftIsDirect = mbFFTypeCtx[mbIdx-1] == ffBidiMBType(&syntax.MBBidi{MBType: syntax.BMBTypeDirect16x16})
 			if transform8x8Ctx[mbIdx-1] {
 				transform8x8CABACCtx++
 			}
@@ -365,6 +367,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 			topCBP = cbpCtx[mbIdx-mbWidth]
 			topMBType = mbTypeCtx[mbIdx-mbWidth]
 			topNonSkip = nonSkipCtx[mbIdx-mbWidth]
+			topIsDirect = mbFFTypeCtx[mbIdx-mbWidth] == ffBidiMBType(&syntax.MBBidi{MBType: syntax.BMBTypeDirect16x16})
 			if transform8x8Ctx[mbIdx-mbWidth] {
 				transform8x8CABACCtx++
 			}
@@ -652,7 +655,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					leftNZ, topNZ, leftChromaNZ, topChromaNZ,
 					leftCBP, topCBP,
 					leftNonSkip, topNonSkip,
-					!leftNonSkip, !topNonSkip, // leftIsDirect/topIsDirect
+					leftIsDirect, topIsDirect,
 					mbX, mbY,
 					f.POC,
 					pps.Transform8x8Mode, transform8x8CABACCtx,
