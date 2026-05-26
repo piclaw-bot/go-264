@@ -78,6 +78,49 @@ s = s.replace('mbidx==12', f'mbidx < {mb_limit}')
 s = s.replace('_mbidx == 12', f'_mbidx < {mb_limit}')
 s = s.replace('(sl->mb_x + sl->mb_y * h->mb_width) < 15', f'(sl->mb_x + sl->mb_y * h->mb_width) < {mb_limit}')
 s = s.replace('(sl->mb_x + sl->mb_y * h->mb_width) < 20', f'(sl->mb_x + sl->mb_y * h->mb_width) < {mb_limit}')
+if 'FFCBP part=' not in s:
+    s = s.replace('''static int decode_cabac_mb_cbp_luma(H264SliceContext *sl)
+{
+    int cbp_b, cbp_a, ctx, cbp = 0;
+
+    cbp_a = sl->left_cbp;
+    cbp_b = sl->top_cbp;
+
+    ctx = !(cbp_a & 0x02) + 2 * !(cbp_b & 0x04);
+    cbp += get_cabac_noinline(&sl->cabac, &sl->cabac_state[73 + ctx]);
+    ctx = !(cbp   & 0x01) + 2 * !(cbp_b & 0x08);
+    cbp += get_cabac_noinline(&sl->cabac, &sl->cabac_state[73 + ctx]) << 1;
+    ctx = !(cbp_a & 0x08) + 2 * !(cbp   & 0x01);
+    cbp += get_cabac_noinline(&sl->cabac, &sl->cabac_state[73 + ctx]) << 2;
+    ctx = !(cbp   & 0x04) + 2 * !(cbp   & 0x02);
+    cbp += get_cabac_noinline(&sl->cabac, &sl->cabac_state[73 + ctx]) << 3;
+    return cbp;
+}
+''', '''static int decode_cabac_mb_cbp_luma(H264SliceContext *sl)
+{
+    int cbp_b, cbp_a, ctx, cbp = 0;
+    cbp_a = sl->left_cbp;
+    cbp_b = sl->top_cbp;
+#define TRACE_CBP_BIN(name, idxexpr) do { \\
+    int _idx = (idxexpr); unsigned _low = (unsigned)sl->cabac.low >> 1, _range = (unsigned)sl->cabac.range; \\
+    int _state = (int)sl->cabac_state[_idx]; int _bin = get_cabac_noinline(&sl->cabac, &sl->cabac_state[_idx]); \\
+    if (getenv("GO264_FFMPEG_CBP_TRACE") && sl->slice_type_nos == AV_PICTURE_TYPE_P && sl->mb_y == 0 && sl->mb_x < ''' + mb_limit + ''') \\
+        fprintf(stderr, "FFCBP part=%s mb=%04d ctx=%d idx=%d state=%d low=%u range=%u bin=%d post_state=%d post_low=%u post_range=%u left=%03x top=%03x cbp_before=%02x\\n", \\
+                (name), sl->mb_x, ctx, _idx, _state, _low, _range, _bin, (int)sl->cabac_state[_idx], (unsigned)sl->cabac.low >> 1, (unsigned)sl->cabac.range, cbp_a, cbp_b, cbp); \\
+    cbp += _bin; \\
+} while (0)
+    ctx = !(cbp_a & 0x02) + 2 * !(cbp_b & 0x04);
+    TRACE_CBP_BIN("luma0", 73 + ctx);
+    ctx = !(cbp   & 0x01) + 2 * !(cbp_b & 0x08);
+    { int _idx = 73 + ctx; unsigned _low = (unsigned)sl->cabac.low >> 1, _range = (unsigned)sl->cabac.range; int _state = (int)sl->cabac_state[_idx]; int _bin = get_cabac_noinline(&sl->cabac, &sl->cabac_state[_idx]); if (getenv("GO264_FFMPEG_CBP_TRACE") && sl->slice_type_nos == AV_PICTURE_TYPE_P && sl->mb_y == 0 && sl->mb_x < ''' + mb_limit + ''') fprintf(stderr, "FFCBP part=luma1 mb=%04d ctx=%d idx=%d state=%d low=%u range=%u bin=%d post_state=%d post_low=%u post_range=%u left=%03x top=%03x cbp_before=%02x\\n", sl->mb_x, ctx, _idx, _state, _low, _range, _bin, (int)sl->cabac_state[_idx], (unsigned)sl->cabac.low >> 1, (unsigned)sl->cabac.range, cbp_a, cbp_b, cbp); cbp += _bin << 1; }
+    ctx = !(cbp_a & 0x08) + 2 * !(cbp   & 0x01);
+    { int _idx = 73 + ctx; unsigned _low = (unsigned)sl->cabac.low >> 1, _range = (unsigned)sl->cabac.range; int _state = (int)sl->cabac_state[_idx]; int _bin = get_cabac_noinline(&sl->cabac, &sl->cabac_state[_idx]); if (getenv("GO264_FFMPEG_CBP_TRACE") && sl->slice_type_nos == AV_PICTURE_TYPE_P && sl->mb_y == 0 && sl->mb_x < ''' + mb_limit + ''') fprintf(stderr, "FFCBP part=luma2 mb=%04d ctx=%d idx=%d state=%d low=%u range=%u bin=%d post_state=%d post_low=%u post_range=%u left=%03x top=%03x cbp_before=%02x\\n", sl->mb_x, ctx, _idx, _state, _low, _range, _bin, (int)sl->cabac_state[_idx], (unsigned)sl->cabac.low >> 1, (unsigned)sl->cabac.range, cbp_a, cbp_b, cbp); cbp += _bin << 2; }
+    ctx = !(cbp   & 0x04) + 2 * !(cbp   & 0x02);
+    { int _idx = 73 + ctx; unsigned _low = (unsigned)sl->cabac.low >> 1, _range = (unsigned)sl->cabac.range; int _state = (int)sl->cabac_state[_idx]; int _bin = get_cabac_noinline(&sl->cabac, &sl->cabac_state[_idx]); if (getenv("GO264_FFMPEG_CBP_TRACE") && sl->slice_type_nos == AV_PICTURE_TYPE_P && sl->mb_y == 0 && sl->mb_x < ''' + mb_limit + ''') fprintf(stderr, "FFCBP part=luma3 mb=%04d ctx=%d idx=%d state=%d low=%u range=%u bin=%d post_state=%d post_low=%u post_range=%u left=%03x top=%03x cbp_before=%02x\\n", sl->mb_x, ctx, _idx, _state, _low, _range, _bin, (int)sl->cabac_state[_idx], (unsigned)sl->cabac.low >> 1, (unsigned)sl->cabac.range, cbp_a, cbp_b, cbp); cbp += _bin << 3; }
+#undef TRACE_CBP_BIN
+    return cbp;
+}
+''')
 if 'FFPTYPE mb=' not in s:
     s = s.replace('''        if( get_cabac_noinline( &sl->cabac, &sl->cabac_state[14] ) == 0 ) {
             /* P-type */
@@ -197,6 +240,7 @@ if [[ -n "${GO264_FFMPEG_B_MVD_TRACE:-}" || -n "${GO264_B_CABAC_TRACE:-}" ]]; th
   ff_env+=(GO264_FFMPEG_CABAC_TRACE=1)
 fi
 [[ -n "${GO264_P_TYPE_TRACE:-}" ]] && ff_env+=(GO264_P_TYPE_TRACE=1)
+[[ -n "${GO264_FFMPEG_CBP_TRACE:-}" ]] && ff_env+=(GO264_FFMPEG_CBP_TRACE=1)
 [[ -n "${GO264_B_STATE_TRACE:-}" ]] && ff_env+=(GO264_FFMPEG_B_STATE_TRACE=1)
 env "${ff_env[@]}" "$FFMPEG" -y -threads 1 -hide_banner \
   -i "$INPUT" -frames:v "$FRAMES" -pix_fmt yuv420p -f rawvideo /dev/null \
@@ -216,6 +260,10 @@ go_env=(GOTMPDIR="${GOTMPDIR:-/workspace/tmp/gotmp}" GO264_B_MB_TRACE=1)
 if [[ -n "${GO264_B_TYPE_TRACE:-}" ]]; then
   go_env+=(GO264_B_TYPE_TRACE=1 GO264_B_TYPE_TRACE_LIMIT="$MB_LIMIT")
 fi
+if [[ -n "${GO264_P_TYPE_TRACE:-}" ]]; then
+  go_env+=(GO264_P_TYPE_TRACE=1 GO264_P_TYPE_TRACE_LIMIT="$MB_LIMIT")
+fi
+[[ -n "${GO264_P_CABAC_TRACE:-}" ]] && go_env+=(GO264_P_CABAC_TRACE=1)
 [[ -n "${GO264_CABAC_TERMINATE_TRACE:-}" ]] && go_env+=(GO264_CABAC_TERMINATE_TRACE=1)
 env "${go_env[@]}" go run ./cmd/decode264 -frames "$FRAMES" -f yuv -i "$INPUT" -o "$OUTDIR/go/frames" \
   >"$OUTDIR/go/stdout.log" 2>"$OUTDIR/go/bidi.log"
@@ -227,6 +275,12 @@ grep '^GOBTYPE' "$OUTDIR/go/bidi.log" >"$OUTDIR/gobtype.rows" || true
 grep '^GOBRES' "$OUTDIR/go/bidi.log" >"$OUTDIR/gobres.rows" || true
 grep '^FFCABAC' "$OUTDIR/ffmpeg/bidi.log" >"$OUTDIR/ffcabac.rows" || true
 grep '^FFPTYPE' "$OUTDIR/ffmpeg/bidi.log" >"$OUTDIR/ffptype.rows" || true
+grep '^FFCBP' "$OUTDIR/ffmpeg/bidi.log" >"$OUTDIR/ffcbp.rows" || true
+grep '^GOPTYPE' "$OUTDIR/go/bidi.log" >"$OUTDIR/goptype.rows" || true
+grep '^GOP_PRE_CBP' "$OUTDIR/go/bidi.log" >"$OUTDIR/gop_pre_cbp.rows" || true
+grep '^GOP_POST_CBP' "$OUTDIR/go/bidi.log" >"$OUTDIR/gop_post_cbp.rows" || true
+grep '^GOP_PRE_DQP' "$OUTDIR/go/bidi.log" >"$OUTDIR/gop_pre_dqp.rows" || true
+grep '^GOP_POST_DQP' "$OUTDIR/go/bidi.log" >"$OUTDIR/gop_post_dqp.rows" || true
 grep '^GOTERMINATE' "$OUTDIR/go/bidi.log" >"$OUTDIR/goterminate.rows" || true
 
 FF_POC_VALUE="${FF_POC:-${GO_POC:-6}}"
