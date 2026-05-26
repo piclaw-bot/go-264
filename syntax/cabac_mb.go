@@ -15,6 +15,13 @@ import (
 // DecodeCABACCBP decodes the CABAC coded_block_pattern for one macroblock.
 // H.264 §9.3.2.6 / FFmpeg h264_cabac.c decode_cabac_mb_cbp_luma/chroma.
 func DecodeCABACCBP(dec *cabac.CABACDecoder, models []cabac.CABACCtx, leftCBP, topCBP uint32) uint32 {
+	return DecodeCABACCBPWithTrace(dec, models, leftCBP, topCBP, "")
+}
+
+// DecodeCABACCBPWithTrace decodes CBP like DecodeCABACCBP and appends traceTag
+// to optional GOCBP diagnostic rows. The tag keeps decoder-level fields such as
+// macroblock index and POC out of the pure syntax helper's normal API.
+func DecodeCABACCBPWithTrace(dec *cabac.CABACDecoder, models []cabac.CABACCtx, leftCBP, topCBP uint32, traceTag string) uint32 {
 	if dec == nil || len(models) <= 83 {
 		return 0
 	}
@@ -27,7 +34,11 @@ func DecodeCABACCBP(dec *cabac.CABACDecoder, models []cabac.CABACCtx, leftCBP, t
 		bin := dec.DecodeBin(&models[idx])
 		postLow, postRange, _ := dec.DebugState()
 		if traceCBP {
-			fmt.Fprintf(os.Stderr, "GOCBP part=%s ctx=%d idx=%d state=%d low=%d range=%d bin=%d post_state=%d post_low=%d post_range=%d left=%03x top=%03x cbp_before=%02x\n", part, ctx, idx, preState, preLow, preRange, bin, models[idx].DebugPackedState(), postLow, postRange, leftCBP, topCBP, cbpBefore)
+			if traceTag != "" {
+				fmt.Fprintf(os.Stderr, "GOCBP part=%s %s ctx=%d idx=%d state=%d low=%d range=%d bin=%d post_state=%d post_low=%d post_range=%d left=%03x top=%03x cbp_before=%02x\n", part, traceTag, ctx, idx, preState, preLow, preRange, bin, models[idx].DebugPackedState(), postLow, postRange, leftCBP, topCBP, cbpBefore)
+			} else {
+				fmt.Fprintf(os.Stderr, "GOCBP part=%s ctx=%d idx=%d state=%d low=%d range=%d bin=%d post_state=%d post_low=%d post_range=%d left=%03x top=%03x cbp_before=%02x\n", part, ctx, idx, preState, preLow, preRange, bin, models[idx].DebugPackedState(), postLow, postRange, leftCBP, topCBP, cbpBefore)
+			}
 		}
 		return bin
 	}

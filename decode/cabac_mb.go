@@ -148,7 +148,11 @@ func decodeCABACPInterMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, numRe
 		preLow, preRange, _ := dec.DebugState()
 		fmt.Fprintf(os.Stderr, "GOP_PRE_CBP mb=%04d poc=%d type=%d left=%02x top=%02x low=%d range=%d\n", mbY*stride4/4+mbX, currentPOC, ffInterMBType(mb), leftCBP, topCBP, preLow, preRange)
 	}
-	mb.CBP = syntax.DecodeCABACCBP(dec, models, leftCBP, topCBP)
+	if tracePCABAC {
+		mb.CBP = syntax.DecodeCABACCBPWithTrace(dec, models, leftCBP, topCBP, fmt.Sprintf("mb=%04d poc=%d", mbY*stride4/4+mbX, currentPOC))
+	} else {
+		mb.CBP = syntax.DecodeCABACCBP(dec, models, leftCBP, topCBP)
+	}
 	if tracePCABAC {
 		postLow, postRange, _ := dec.DebugState()
 		fmt.Fprintf(os.Stderr, "GOP_POST_CBP mb=%04d poc=%d cbp=%02x low=%d range=%d\n", mbY*stride4/4+mbX, currentPOC, mb.CBP, postLow, postRange)
@@ -814,7 +818,7 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 		bits := decodeTypeBin(27+4) << 3
 		bits |= decodeTypeBin(27+5) << 2
 		bits |= decodeTypeBin(27+5) << 1
-		bits |= decodeTypeBin(27+5)
+		bits |= decodeTypeBin(27 + 5)
 		switch {
 		case bits < 8:
 			mb.MBType = uint32(3 + bits) // B_Bi_16x16 through B_L1_L0_16x8
@@ -1235,7 +1239,6 @@ func decodeCABACBSubMBType(dec *cabac.CABACDecoder, models []cabac.CABACCtx) uin
 	t += dec.DecodeBin(&models[39])
 	return t
 }
-
 
 func decodeCABACBSubMBTypeTrace(dec *cabac.CABACDecoder, models []cabac.CABACCtx, mbAddr, currentPOC, subIdx int) uint32 {
 	if len(models) <= 39 {
