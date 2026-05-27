@@ -177,8 +177,8 @@ func (c bMotionCache) writeBackIntra(mbX, mbY int) {
 	c.fillDirectFlag(mbX, mbY, 4, 4, false)
 }
 
-func (c bMotionCache) applyInterMVPredictors(mb *syntax.MBInter, mbX, mbY int) {
-	applyMVPredictors(mb, c.mv[0], c.ref[0], c.stride4, mbX, mbY)
+func (c bMotionCache) applyInterMVPredictors(mb *syntax.MBInter, mbX, mbY, poc int) {
+	applyMVPredictorsDiag(mb, c.mv[0], c.ref[0], c.stride4, mbX, mbY, poc)
 }
 
 func (c bMotionCache) writeBackInterL0(mbX, mbY int, mb *syntax.MBInter) {

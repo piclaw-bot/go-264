@@ -246,6 +246,10 @@ if 'FFREF mb=' not in s:
     return ref;
 }
 ''')
+# Refresh older in-tree FFMVD_COMP injections so focused P-slice windows can move
+# past the original small MB limit.
+s = s.replace('sl->slice_type_nos == AV_PICTURE_TYPE_B && (sl->mb_x + sl->mb_y * h->mb_width) < ', '(sl->slice_type_nos == AV_PICTURE_TYPE_B || sl->slice_type_nos == AV_PICTURE_TYPE_P) && (sl->mb_x + sl->mb_y * h->mb_width) < ')
+s = re.sub(r'(GO264_FFMPEG_CABAC_TRACE"\) && \(sl->slice_type_nos == AV_PICTURE_TYPE_B \|\| sl->slice_type_nos == AV_PICTURE_TYPE_P\) && \(sl->mb_x \+ sl->mb_y \* h->mb_width\) < )\d+(\)\\)', rf'\g<1>{mb_limit}\g<2>', s)
 if 'FFMVD_COMP mb=' not in s:
     s = s.replace('''    int mxd = decode_cabac_mb_mvd(sl, 40, amvd0, &mpx);\\
     int myd = decode_cabac_mb_mvd(sl, 47, amvd1, &mpy);\\
@@ -327,6 +331,7 @@ go_env=(GOTMPDIR="${GOTMPDIR:-/workspace/tmp/gotmp}" GO264_B_MB_TRACE=1)
 [[ -n "${GO264_B_MVD_TRACE:-}" ]] && go_env+=(GO264_B_MVD_TRACE=1)
 [[ -n "${GO264_B_MVD_COMP_TRACE:-}" ]] && go_env+=(GO264_B_MVD_COMP_TRACE=1)
 [[ -n "${GO264_P_MVD_COMP_TRACE:-}" ]] && go_env+=(GO264_P_MVD_COMP_TRACE=1)
+[[ -n "${GO264_P_MVP_TRACE:-}" ]] && go_env+=(GO264_P_MVP_TRACE=1)
 [[ -n "${GO264_P_REF_TRACE:-}" ]] && go_env+=(GO264_P_REF_TRACE=1)
 [[ -n "${GO264_B_STATE_TRACE:-}" ]] && go_env+=(GO264_B_STATE_TRACE=1)
 [[ -n "${GO264_B_CABAC_TRACE:-}" ]] && go_env+=(GO264_B_CABAC_TRACE=1)
@@ -359,6 +364,7 @@ grep '^GOP_PRE_DQP' "$OUTDIR/go/bidi.log" >"$OUTDIR/gop_pre_dqp.rows" || true
 grep '^GOP_POST_DQP' "$OUTDIR/go/bidi.log" >"$OUTDIR/gop_post_dqp.rows" || true
 grep '^GOCBP' "$OUTDIR/go/bidi.log" >"$OUTDIR/gocbp.rows" || true
 grep '^GOMVD_COMP' "$OUTDIR/go/bidi.log" >"$OUTDIR/gomvd_comp.rows" || true
+grep '^GOPMVP' "$OUTDIR/go/bidi.log" >"$OUTDIR/gopmvp.rows" || true
 grep '^GOREF' "$OUTDIR/go/bidi.log" >"$OUTDIR/goref.rows" || true
 grep '^GOTERMINATE' "$OUTDIR/go/bidi.log" >"$OUTDIR/goterminate.rows" || true
 

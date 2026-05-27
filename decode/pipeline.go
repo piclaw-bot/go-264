@@ -555,7 +555,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					}
 					continue
 				}
-				bmc.applyInterMVPredictors(mbInter, mbX, mbY)
+				bmc.applyInterMVPredictors(mbInter, mbX, mbY, f.POC)
 				cabacLastQScaleDiff = int(mbInter.QPDelta)
 				currentQP = updateQP(currentQP, int(mbInter.QPDelta))
 				d.reconstructMBInter(f, mbInter, mbX, mbY, currentQP)
@@ -621,7 +621,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 				chromaNZCtx[mbIdx] = mb.ChromaTotalCoeff
 				bmc.writeBackIntra(mbX, mbY)
 			} else {
-				bmc.applyInterMVPredictors(&mbInter, mbX, mbY)
+				bmc.applyInterMVPredictors(&mbInter, mbX, mbY, f.POC)
 				currentQP = updateQP(currentQP, int(mbInter.QPDelta))
 				d.reconstructMBInter(f, &mbInter, mbX, mbY, currentQP)
 				nzCtx[mbIdx] = mbInter.TotalCoeff

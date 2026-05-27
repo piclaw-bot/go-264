@@ -208,6 +208,13 @@ func cabacMVDAMVD(mvd4 []syntax.MotionVector, stride4, x4, y4 int, component int
 	return absComponent(x4-1, y4) + absComponent(x4, y4-1)
 }
 
+func tracePMVP(mbX, mbY, poc, part int, ref int8, x4, y4, w4, h4 int, pred, mvd, final syntax.MotionVector) {
+	if os.Getenv("GO264_P_MVP_TRACE") == "" || poc != 28 || mbY != 0 || mbX >= 25 {
+		return
+	}
+	fmt.Fprintf(os.Stderr, "GOPMVP mb=%04d poc=%d part=%d ref=%d x4=%d y4=%d w4=%d h4=%d pred={%d,%d} mvd={%d,%d} final={%d,%d}\n", mbY*40+mbX, poc, part, ref, x4, y4, w4, h4, pred.X, pred.Y, mvd.X, mvd.Y, final.X, final.Y)
+}
+
 func fillMVD4(mvd4 []syntax.MotionVector, stride4, x4, y4, w4, h4 int, mvd syntax.MotionVector) {
 	if stride4 <= 0 {
 		return
@@ -347,6 +354,10 @@ func addMV(mv *syntax.MotionVector, pred syntax.MotionVector) {
 }
 
 func applyMVPredictors(mb *syntax.MBInter, mv4 []syntax.MotionVector, ref4 []int8, stride4 int, mbX, mbY int) {
+	applyMVPredictorsDiag(mb, mv4, ref4, stride4, mbX, mbY, -1)
+}
+
+func applyMVPredictorsDiag(mb *syntax.MBInter, mv4 []syntax.MotionVector, ref4 []int8, stride4 int, mbX, mbY, poc int) {
 	switch mb.MBType {
 	case syntax.PMBTypeP16x16:
 		addMV(&mb.MV[0], predictMotion4x4(mv4, ref4, stride4, mbX*4, mbY*4, 4, mb.RefIdx[0]))
@@ -380,14 +391,18 @@ func applyMVPredictors(mb *syntax.MBInter, mv4 []syntax.MotionVector, ref4 []int
 			switch mb.SubMBType[part] {
 			case 0: // P_L0_8x8
 				pred := predictMotion4x4(mv4, ref4, stride4, baseX, baseY, 2, ref)
+				mvd := mb.SubMV[part*4]
 				addMV(&mb.SubMV[part*4], pred)
+				tracePMVP(mbX, mbY, poc, part*4, ref, baseX, baseY, 2, 2, pred, mvd, mb.SubMV[part*4])
 				fillMV4(mv4, ref4, stride4, baseX, baseY, 2, 2, mb.SubMV[part*4], ref)
 			case 1: // P_L0_8x4
 				for j := 0; j < 2; j++ {
 					idx := part*4 + j
 					y := baseY + j
 					pred := predictMotion4x4(mv4, ref4, stride4, baseX, y, 2, ref)
+					mvd := mb.SubMV[idx]
 					addMV(&mb.SubMV[idx], pred)
+					tracePMVP(mbX, mbY, poc, idx, ref, baseX, y, 2, 1, pred, mvd, mb.SubMV[idx])
 					fillMV4(mv4, ref4, stride4, baseX, y, 2, 1, mb.SubMV[idx], ref)
 				}
 			case 2: // P_L0_4x8
@@ -395,7 +410,9 @@ func applyMVPredictors(mb *syntax.MBInter, mv4 []syntax.MotionVector, ref4 []int
 					idx := part*4 + j
 					x := baseX + j
 					pred := predictMotion4x4(mv4, ref4, stride4, x, baseY, 1, ref)
+					mvd := mb.SubMV[idx]
 					addMV(&mb.SubMV[idx], pred)
+					tracePMVP(mbX, mbY, poc, idx, ref, x, baseY, 1, 2, pred, mvd, mb.SubMV[idx])
 					fillMV4(mv4, ref4, stride4, x, baseY, 1, 2, mb.SubMV[idx], ref)
 				}
 			case 3: // P_L0_4x4
@@ -404,7 +421,9 @@ func applyMVPredictors(mb *syntax.MBInter, mv4 []syntax.MotionVector, ref4 []int
 					x := baseX + (j & 1)
 					y := baseY + (j >> 1)
 					pred := predictMotion4x4(mv4, ref4, stride4, x, y, 1, ref)
+					mvd := mb.SubMV[idx]
 					addMV(&mb.SubMV[idx], pred)
+					tracePMVP(mbX, mbY, poc, idx, ref, x, y, 1, 1, pred, mvd, mb.SubMV[idx])
 					fillMV4(mv4, ref4, stride4, x, y, 1, 1, mb.SubMV[idx], ref)
 				}
 			}

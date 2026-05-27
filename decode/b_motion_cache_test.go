@@ -94,7 +94,7 @@ func TestBMotionCacheApplyInterMVPredictors(t *testing.T) {
 	c.ref4(0)[3] = 0
 	c.mv4(0)[3] = syntax.MotionVector{X: 2, Y: 3}
 	mb := &syntax.MBInter{MBType: syntax.PMBTypeP16x16, RefIdx: [4]int8{0}}
-	c.applyInterMVPredictors(mb, 1, 0)
+	c.applyInterMVPredictors(mb, 1, 0, -1)
 	if mb.MV[0] != (syntax.MotionVector{X: 2, Y: 3}) {
 		t.Fatalf("predicted MV=%+v want {2,3}", mb.MV[0])
 	}
