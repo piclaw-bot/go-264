@@ -171,12 +171,14 @@ go_env=(
   GO264_MOTION_SAVE_MB_LIMIT="$MB_LIMIT"
 )
 [[ -n "${GO264_MOTION_SAVE_DETAIL:-}" ]] && go_env+=(GO264_MOTION_SAVE_DETAIL=1)
+[[ -n "${GO264_TEMPORAL_DIRECT_TRACE:-}" ]] && go_env+=(GO264_TEMPORAL_DIRECT_TRACE=1)
 env "${go_env[@]}" go run ./cmd/decode264 -frames "$FRAMES" -f yuv -i "$INPUT" -o "$OUTDIR/go-frames" \
   >"$OUTDIR/go.stdout" 2>"$OUTDIR/go.direct.trace"
 grep '^GODIRECT' "$OUTDIR/go.direct.trace" >"$OUTDIR/godirect.rows" || true
 grep '^GOCOLZERO' "$OUTDIR/go.direct.trace" >"$OUTDIR/gocolzero.rows" || true
 grep -E '^GOMOTSAVE(4)?' "$OUTDIR/go.direct.trace" >"$OUTDIR/gomotsave.rows" || true
 grep '^GOMOTWRITE' "$OUTDIR/go.direct.trace" >"$OUTDIR/gomotwrite.rows" || true
+grep '^GOTEMPDIRECT' "$OUTDIR/go.direct.trace" >"$OUTDIR/gotempdirect.rows" || true
 python3 - "$OUTDIR/ffdirect.rows" <<'PY'
 import re, sys
 from collections import Counter
@@ -227,4 +229,5 @@ echo "ffcolzero=$OUTDIR/ffcolzero.rows"
 echo "gocolzero=$OUTDIR/gocolzero.rows"
 echo "gomotsave=$OUTDIR/gomotsave.rows"
 echo "gomotwrite=$OUTDIR/gomotwrite.rows"
+echo "gotempdirect=$OUTDIR/gotempdirect.rows"
 echo "gowrite_diff=$OUTDIR/gowrite.diff"

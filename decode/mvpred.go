@@ -757,13 +757,17 @@ func applyTemporalDirect(mb *syntax.MBBidi, colocated *frame.Frame, mbX, mbY int
 
 		var mvL0, mvL1 syntax.MotionVector
 		var refL0 int8
+		colRef := int8(-2)
+		colMV := [2]int16{}
+		poc0 := 0
+		td, tb, scale := 0, 0, 0
 
 		if isIntra || idx < 0 || idx >= len(colocated.MotionL0) || idx >= len(colocated.RefIdxL0) {
 			// Intra colocated: zero motion, ref=0
 			refL0 = 0
 		} else {
-			colRef := colocated.RefIdxL0[idx]
-			colMV := colocated.MotionL0[idx]
+			colRef = colocated.RefIdxL0[idx]
+			colMV = colocated.MotionL0[idx]
 
 			// Map colocated ref to current L0 ref (simplified: use ref 0)
 			if colRef < 0 {
@@ -775,22 +779,21 @@ func applyTemporalDirect(mb *syntax.MBBidi, colocated *frame.Frame, mbX, mbY int
 
 			// Compute dist_scale_factor
 			// td = colPOC - L0[colRef].POC, tb = currentPOC - L0[colRef].POC
-			var poc0 int
 			if int(colRef) < len(l0Frames) && l0Frames[colRef] != nil {
 				poc0 = l0Frames[colRef].POC
 			} else if len(l0Frames) > 0 && l0Frames[0] != nil {
 				poc0 = l0Frames[0].POC
 			}
 
-			td := clipInt8(colPOC - poc0)
-			tb := clipInt8(currentPOC - poc0)
+			td = clipInt8(colPOC - poc0)
+			tb = clipInt8(currentPOC - poc0)
 
 			if td == 0 {
 				mvL0 = syntax.MotionVector{X: int16(colMV[0]), Y: int16(colMV[1])}
 				mvL1 = syntax.MotionVector{}
 			} else {
 				tx := (16384 + abs(int(td))/2) / int(td)
-				scale := clipInt10((int(tb)*tx + 32) >> 6)
+				scale = clipInt10((int(tb)*tx + 32) >> 6)
 				mvL0.X = int16((scale*int(colMV[0]) + 128) >> 8)
 				mvL0.Y = int16((scale*int(colMV[1]) + 128) >> 8)
 				mvL1.X = mvL0.X - int16(colMV[0])
@@ -798,6 +801,9 @@ func applyTemporalDirect(mb *syntax.MBBidi, colocated *frame.Frame, mbX, mbY int
 			}
 		}
 
+		if os.Getenv("GO264_TEMPORAL_DIRECT_TRACE") != "" && currentPOC == 20 && mbY == 0 && mbX < 20 {
+			fmt.Fprintf(os.Stderr, "GOTEMPDIRECT_PART mb=%04d poc=%d part=%d x4=%d y4=%d colref=%d colmv={%d,%d} poc0=%d td=%d tb=%d scale=%d ref0=%d mv0={%d,%d} mv1={%d,%d}\n", mbY*(colocated.MotionStride4/4)+mbX, currentPOC, part, x4, y4, colRef, colMV[0], colMV[1], poc0, td, tb, scale, refL0, mvL0.X, mvL0.Y, mvL1.X, mvL1.Y)
+		}
 		mb.RefIdxL0[part] = refL0
 		mb.RefIdxL1[part] = 0 // temporal direct L1 ref is always 0
 		for j := 0; j < 4; j++ {
