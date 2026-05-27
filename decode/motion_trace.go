@@ -29,7 +29,7 @@ func traceSavedMotion(f *frame.Frame, mbWidth int) {
 						continue
 					}
 					mv := f.MotionL0[idx]
-					fmt.Fprintf(os.Stderr, "GOMOTSAVE4 frame=%d poc=%d mb=%04d x=%02d y=%02d cell=%d,%d mbtype=%d ref0=%d mv0={%d,%d}\n", f.FrameNum, f.POC, mb, mbX, mbY, x, y, f.MBType[mb], f.RefIdxL0[idx], mv[0], mv[1])
+					fmt.Fprintf(os.Stderr, "GOMOTSAVE4 frame=%d poc=%d mb=%04d x=%02d y=%02d cell=%d,%d idx=%d mbtype=%d ref0=%d mv0={%d,%d}\n", f.FrameNum, f.POC, mb, mbX, mbY, x, y, idx, f.MBType[mb], f.RefIdxL0[idx], mv[0], mv[1])
 				}
 			}
 		}
@@ -41,7 +41,7 @@ func traceSavedMotion(f *frame.Frame, mbWidth int) {
 				continue
 			}
 			mv := f.MotionL0[idx]
-			fmt.Fprintf(os.Stderr, "GOMOTSAVE frame=%d poc=%d mb=%04d x=%02d y=%02d part=%d mbtype=%d ref0=%d mv0={%d,%d}\n", f.FrameNum, f.POC, mb, mbX, mbY, part, f.MBType[mb], f.RefIdxL0[idx], mv[0], mv[1])
+			fmt.Fprintf(os.Stderr, "GOMOTSAVE frame=%d poc=%d mb=%04d x=%02d y=%02d part=%d idx=%d mbtype=%d ref0=%d mv0={%d,%d}\n", f.FrameNum, f.POC, mb, mbX, mbY, part, idx, f.MBType[mb], f.RefIdxL0[idx], mv[0], mv[1])
 		}
 	}
 }
