@@ -675,7 +675,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 						if colFrame != nil {
 							colPOC = colFrame.POC
 						}
-						bmc.applyDirectTemporal(mbX, mbY, mbBidi, colFrame, f.POC, d.bidiL0Frames(f.POC), colPOC)
+						bmc.applyDirectTemporal(mbX, mbY, mbBidi, colFrame, f.POC, d.bidiL0FramesWithMods(f.POC, hdr.FrameNum, hdr.RefModifications[0]), colPOC)
 					}
 					d.reconstructMBBidi(f, mbBidi, mbX, mbY, currentQP)
 					nzCtx[mbIdx] = mbBidi.TotalCoeff
@@ -725,7 +725,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 							if colFrame != nil {
 								colPOC = colFrame.POC
 							}
-							bmc.applyDirectTemporal(mbX, mbY, mbBidi, colFrame, f.POC, d.bidiL0Frames(f.POC), colPOC)
+							bmc.applyDirectTemporal(mbX, mbY, mbBidi, colFrame, f.POC, d.bidiL0FramesWithMods(f.POC, hdr.FrameNum, hdr.RefModifications[0]), colPOC)
 						}
 					} else if mbBidi.MBType == syntax.BMBTypeB8x8 {
 						if applyDirectSpatial {
@@ -736,7 +736,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 							if colFrame != nil {
 								colPOC = colFrame.POC
 							}
-							bmc.applyDirectTemporal(mbX, mbY, mbBidi, colFrame, f.POC, d.bidiL0Frames(f.POC), colPOC)
+							bmc.applyDirectTemporal(mbX, mbY, mbBidi, colFrame, f.POC, d.bidiL0FramesWithMods(f.POC, hdr.FrameNum, hdr.RefModifications[0]), colPOC)
 						}
 					}
 					d.reconstructMBBidi(f, mbBidi, mbX, mbY, currentQP)
@@ -811,7 +811,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 						if colFrame != nil {
 							colPOC = colFrame.POC
 						}
-						bmc.applyDirectTemporal(mbX, mbY, mbBidi, colFrame, f.POC, d.bidiL0Frames(f.POC), colPOC)
+						bmc.applyDirectTemporal(mbX, mbY, mbBidi, colFrame, f.POC, d.bidiL0FramesWithMods(f.POC, hdr.FrameNum, hdr.RefModifications[0]), colPOC)
 					}
 				} else if applyDirectSpatial {
 					bmc.applyDirectSpatial(mbX, mbY, mbBidi, directRefL0, directMVL0, directRefL1, directMVL1, d.refBidiL1(0, f.POC))

@@ -983,6 +983,10 @@ func directTracePartitionMVs(mb *syntax.MBBidi) (syntax.MotionVector, syntax.Mot
 
 // bidiL0Frames returns the ordered L0 reference frame list for a B-slice.
 func (d *Decoder) bidiL0Frames(currentPOC int) []*frame.Frame {
+	return d.bidiL0FramesWithMods(currentPOC, 0, nil)
+}
+
+func (d *Decoder) bidiL0FramesWithMods(currentPOC int, currentFrameNum uint32, mods []syntax.RefPicListModification) []*frame.Frame {
 	if d == nil || d.DPB == nil {
 		return nil
 	}
@@ -998,6 +1002,36 @@ func (d *Decoder) bidiL0Frames(currentPOC int) []*frame.Frame {
 			if frames[j].POC > frames[i].POC {
 				frames[i], frames[j] = frames[j], frames[i]
 			}
+		}
+	}
+	if len(mods) > 0 {
+		maxPicNum := 16
+		pred := int(currentFrameNum) & (maxPicNum - 1)
+		for index, mod := range mods {
+			if index >= len(frames) || (mod.Op != 0 && mod.Op != 1) {
+				continue
+			}
+			diff := int(mod.Val) + 1
+			if mod.Op == 0 {
+				pred = (pred - diff) & (maxPicNum - 1)
+			} else {
+				pred = (pred + diff) & (maxPicNum - 1)
+			}
+			found := -1
+			for i, fr := range frames {
+				if fr != nil && fr.FrameNum == pred {
+					found = i
+					break
+				}
+			}
+			if found < 0 || found < index {
+				continue
+			}
+			ref := frames[found]
+			if found > index {
+				copy(frames[index+1:found+1], frames[index:found])
+			}
+			frames[index] = ref
 		}
 	}
 	return frames

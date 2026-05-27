@@ -44,6 +44,12 @@ type Header struct {
 	LumaWeightL1           [32]int32
 	LumaOffsetL1           [32]int32
 	WeightedTablePresent   bool
+	RefModifications       [2][]RefPicListModification
+}
+
+type RefPicListModification struct {
+	Op  uint32
+	Val uint32
 }
 
 func skipPredWeightTable(r *nal.Reader, h *Header, sps *nal.SPS) { parsePredWeightTable(r, h, sps) }
@@ -85,7 +91,9 @@ func parsePredWeightTable(r *nal.Reader, h *Header, sps *nal.SPS) {
 	}
 }
 
-func skipRefPicListModification(r *nal.Reader) {
+func skipRefPicListModification(r *nal.Reader) { parseRefPicListModification(r, nil, 0) }
+
+func parseRefPicListModification(r *nal.Reader, h *Header, list int) {
 	if r == nil || !r.ReadBool() {
 		return
 	}
@@ -93,9 +101,15 @@ func skipRefPicListModification(r *nal.Reader) {
 		op := r.ReadUE()
 		switch op {
 		case 0, 1:
-			r.ReadUE() // abs_diff_pic_num_minus1
+			val := r.ReadUE() // abs_diff_pic_num_minus1
+			if h != nil && list >= 0 && list < len(h.RefModifications) {
+				h.RefModifications[list] = append(h.RefModifications[list], RefPicListModification{Op: op, Val: val})
+			}
 		case 2:
-			r.ReadUE() // long_term_pic_num
+			val := r.ReadUE() // long_term_pic_num
+			if h != nil && list >= 0 && list < len(h.RefModifications) {
+				h.RefModifications[list] = append(h.RefModifications[list], RefPicListModification{Op: op, Val: val})
+			}
 		case 3:
 			return
 		default:
@@ -200,9 +214,9 @@ func ParseHeaderWithRefIDC(payload []byte, nalType uint8, nalRefIDC uint8, sps *
 	// slice header. Reading it earlier shifts P-slice headers whenever the
 	// override flag is present.
 	if h.SliceType != SliceTypeI && h.SliceType != SliceTypeSI {
-		skipRefPicListModification(r) // list 0
+		parseRefPicListModification(r, h, 0) // list 0
 		if h.SliceType == SliceTypeB {
-			skipRefPicListModification(r) // list 1
+			parseRefPicListModification(r, h, 1) // list 1
 		}
 	}
 
