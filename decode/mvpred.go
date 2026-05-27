@@ -264,9 +264,9 @@ func predictMotion4x4(mv4 []syntax.MotionVector, ref4 []int8, stride4, x4, y4, p
 	} else {
 		out = syntax.MotionVector{X: median3(a.X, b.X, c.X), Y: median3(a.Y, b.Y, c.Y)}
 	}
-	if os.Getenv("GO264_B_MVP_TRACE") != "" && stride4 > 0 {
+	if (os.Getenv("GO264_B_MVP_TRACE") != "" || os.Getenv("GO264_P_MVP_CAND_TRACE") != "") && stride4 > 0 {
 		mb := (y4/4)*(stride4/4) + x4/4
-		fmt.Fprintf(os.Stderr, "GOMVP mb=%04d x4=%d y4=%d pw=%d ref=%d A=%d/{%d,%d} B=%d/{%d,%d} C=%d/{%d,%d} out={%d,%d}\n", mb, x4, y4, partWidth4, targetRef, refA, a.X, a.Y, refB, b.X, b.Y, refC, c.X, c.Y, out.X, out.Y)
+		fmt.Fprintf(os.Stderr, "GOMVP mb=%04d x4=%d y4=%d pw=%d ref=%d A=%d/{%d,%d} B=%d/{%d,%d} C=%d/{%d,%d} matches=%d out={%d,%d}\n", mb, x4, y4, partWidth4, targetRef, refA, a.X, a.Y, refB, b.X, b.Y, refC, c.X, c.Y, matchCount, out.X, out.Y)
 	}
 	return out
 }

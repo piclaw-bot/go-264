@@ -332,6 +332,7 @@ go_env=(GOTMPDIR="${GOTMPDIR:-/workspace/tmp/gotmp}" GO264_B_MB_TRACE=1)
 [[ -n "${GO264_B_MVD_COMP_TRACE:-}" ]] && go_env+=(GO264_B_MVD_COMP_TRACE=1)
 [[ -n "${GO264_P_MVD_COMP_TRACE:-}" ]] && go_env+=(GO264_P_MVD_COMP_TRACE=1)
 [[ -n "${GO264_P_MVP_TRACE:-}" ]] && go_env+=(GO264_P_MVP_TRACE=1)
+[[ -n "${GO264_P_MVP_CAND_TRACE:-}" ]] && go_env+=(GO264_P_MVP_CAND_TRACE=1)
 [[ -n "${GO264_P_REF_TRACE:-}" ]] && go_env+=(GO264_P_REF_TRACE=1)
 [[ -n "${GO264_B_STATE_TRACE:-}" ]] && go_env+=(GO264_B_STATE_TRACE=1)
 [[ -n "${GO264_B_CABAC_TRACE:-}" ]] && go_env+=(GO264_B_CABAC_TRACE=1)
@@ -365,6 +366,7 @@ grep '^GOP_POST_DQP' "$OUTDIR/go/bidi.log" >"$OUTDIR/gop_post_dqp.rows" || true
 grep '^GOCBP' "$OUTDIR/go/bidi.log" >"$OUTDIR/gocbp.rows" || true
 grep '^GOMVD_COMP' "$OUTDIR/go/bidi.log" >"$OUTDIR/gomvd_comp.rows" || true
 grep '^GOPMVP' "$OUTDIR/go/bidi.log" >"$OUTDIR/gopmvp.rows" || true
+grep '^GOMVP' "$OUTDIR/go/bidi.log" >"$OUTDIR/gomvp.rows" || true
 grep '^GOREF' "$OUTDIR/go/bidi.log" >"$OUTDIR/goref.rows" || true
 grep '^GOTERMINATE' "$OUTDIR/go/bidi.log" >"$OUTDIR/goterminate.rows" || true
 
