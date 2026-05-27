@@ -25,7 +25,7 @@ const cabacMinMacroblockContexts = 402
 
 // decodeCABACPInterMB decodes one CABAC-coded P-slice macroblock.
 // Returns (inter, nil, true) for P-skip, (nil, intra, false) for intra-in-P.
-func decodeCABACPInterMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, numRefFrames uint32, lastQScaleDiff int, leftNZ, topNZ *[16]int, leftChromaNZ, topChromaNZ *[2][4]int, leftCBP, topCBP uint32, leftNonSkip, topNonSkip bool, refCtxs [4]int, mvd4 []syntax.MotionVector, stride4, mbX, mbY int, currentPOC int, transform8x8Mode bool, transform8x8Ctx int, leftMBType, topMBType uint32, leftChromaPred, topChromaPred int8, leftEdge8x8, topEdge8x8 [2]int8) (*syntax.MBInter, *syntax.MBIntra, bool) {
+func decodeCABACPInterMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, numRefFrames uint32, lastQScaleDiff int, leftNZ, topNZ *[16]int, leftChromaNZ, topChromaNZ *[2][4]int, leftCBP, topCBP uint32, leftNonSkip, topNonSkip bool, refCtxs [4]int, ref4 []int8, mvd4 []syntax.MotionVector, stride4, mbX, mbY int, currentPOC int, transform8x8Mode bool, transform8x8Ctx int, leftMBType, topMBType uint32, leftChromaPred, topChromaPred int8, leftEdge8x8, topEdge8x8 [2]int8) (*syntax.MBInter, *syntax.MBIntra, bool) {
 	mb := &syntax.MBInter{MBType: syntax.PMBTypeP16x16}
 	if dec == nil || len(models) < cabacMinMacroblockContexts {
 		return mb, nil, true
@@ -97,12 +97,27 @@ func decodeCABACPInterMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, numRe
 		}
 	}
 	if numRefFrames > 1 && mb.MBType != syntax.PMBTypeP8x8ref0 {
+		tracePRef := os.Getenv("GO264_P_REF_TRACE") != "" && currentPOC == 28 && mbY*stride4/4+mbX < tracePTypeLimit
 		for i := 0; i < parts; i++ {
 			ctxSlot := i
 			if mb.MBType == syntax.PMBTypeP16x8 && i == 1 {
 				ctxSlot = 2 // second 16x8 partition starts at the bottom-left 8x8 origin
 			}
-			mb.RefIdx[i] = int8(syntax.DecodeCABACRef(dec, models, refCtxs[ctxSlot]))
+			ctx := refCtxs[ctxSlot]
+			bx, by, bw, bh := cabacPPartRefRect(mb.MBType, i, mbX*4, mbY*4)
+			if len(ref4) > 0 {
+				ctx = cabacRefIdxCtx(ref4, stride4, bx, by)
+			}
+			preLow, preRange, _ := dec.DebugState()
+			ref := syntax.DecodeCABACRef(dec, models, ctx)
+			postLow, postRange, _ := dec.DebugState()
+			mb.RefIdx[i] = int8(ref)
+			if len(ref4) > 0 {
+				fillRef4(ref4, stride4, bx, by, bw, bh, mb.RefIdx[i])
+			}
+			if tracePRef {
+				fmt.Fprintf(os.Stderr, "GOREF mb=%04d poc=%d part=%d ctx=%d ref=%d pre=%d/%d post=%d/%d\n", mbY*stride4/4+mbX, currentPOC, i, ctx, ref, preLow, preRange, postLow, postRange)
+			}
 		}
 	}
 	x4, y4 := mbX*4, mbY*4
@@ -113,18 +128,18 @@ func decodeCABACPInterMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, numRe
 			switch mb.SubMBType[i] {
 			case 1: // P_L0_8x4
 				for j := 0; j < 2; j++ {
-					mb.SubMV[i*4+j] = decodeCABACMVDPair(dec, models, mvd4, stride4, baseX, baseY+j, 2, 1)
+					mb.SubMV[i*4+j], _ = decodeCABACMVDPairDiag(dec, models, mvd4, stride4, baseX, baseY+j, 2, 1, i*4+j, 0, currentPOC)
 				}
 			case 2: // P_L0_4x8
 				for j := 0; j < 2; j++ {
-					mb.SubMV[i*4+j] = decodeCABACMVDPair(dec, models, mvd4, stride4, baseX+j, baseY, 1, 2)
+					mb.SubMV[i*4+j], _ = decodeCABACMVDPairDiag(dec, models, mvd4, stride4, baseX+j, baseY, 1, 2, i*4+j, 0, currentPOC)
 				}
 			case 3: // P_L0_4x4
 				for j := 0; j < 4; j++ {
-					mb.SubMV[i*4+j] = decodeCABACMVDPair(dec, models, mvd4, stride4, baseX+(j&1), baseY+(j>>1), 1, 1)
+					mb.SubMV[i*4+j], _ = decodeCABACMVDPairDiag(dec, models, mvd4, stride4, baseX+(j&1), baseY+(j>>1), 1, 1, i*4+j, 0, currentPOC)
 				}
 			default: // P_L0_8x8
-				mb.SubMV[i*4] = decodeCABACMVDPair(dec, models, mvd4, stride4, baseX, baseY, 2, 2)
+				mb.SubMV[i*4], _ = decodeCABACMVDPairDiag(dec, models, mvd4, stride4, baseX, baseY, 2, 2, i, 0, currentPOC)
 			}
 		}
 		mb.DecodedMVDX = mb.SubMV[0].X
@@ -133,11 +148,11 @@ func decodeCABACPInterMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, numRe
 		for i := 0; i < parts; i++ {
 			switch mb.MBType {
 			case syntax.PMBTypeP16x8:
-				mb.MV[i] = decodeCABACMVDPair(dec, models, mvd4, stride4, x4, y4+i*2, 4, 2)
+				mb.MV[i], _ = decodeCABACMVDPairDiag(dec, models, mvd4, stride4, x4, y4+i*2, 4, 2, i, 0, currentPOC)
 			case syntax.PMBTypeP8x16:
-				mb.MV[i] = decodeCABACMVDPair(dec, models, mvd4, stride4, x4+i*2, y4, 2, 4)
+				mb.MV[i], _ = decodeCABACMVDPairDiag(dec, models, mvd4, stride4, x4+i*2, y4, 2, 4, i, 0, currentPOC)
 			default:
-				mb.MV[i] = decodeCABACMVDPair(dec, models, mvd4, stride4, x4, y4, 4, 4)
+				mb.MV[i], _ = decodeCABACMVDPairDiag(dec, models, mvd4, stride4, x4, y4, 4, 4, i, 0, currentPOC)
 			}
 		}
 		mb.DecodedMVDX = mb.MV[0].X
@@ -235,6 +250,19 @@ func decodeCABACPInterMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, numRe
 	return mb, nil, false
 }
 
+func cabacPPartRefRect(mbType uint32, part, x4, y4 int) (int, int, int, int) {
+	switch mbType {
+	case syntax.PMBTypeP16x8:
+		return x4, y4 + part*2, 4, 2
+	case syntax.PMBTypeP8x16:
+		return x4 + part*2, y4, 2, 4
+	case syntax.PMBTypeP8x8, syntax.PMBTypeP8x8ref0:
+		return x4 + (part&1)*2, y4 + (part>>1)*2, 2, 2
+	default:
+		return x4, y4, 4, 4
+	}
+}
+
 func decodeCABACMVDPair(dec *cabac.CABACDecoder, models []cabac.CABACCtx, mvd4 []syntax.MotionVector, stride4, x4, y4, w4, h4 int) syntax.MotionVector {
 	mvd, _ := decodeCABACMVDPairDiag(dec, models, mvd4, stride4, x4, y4, w4, h4, -1, -1, -1)
 	return mvd
@@ -245,7 +273,7 @@ func decodeCABACMVDPairDiag(dec *cabac.CABACDecoder, models []cabac.CABACCtx, mv
 	if stride4 > 0 {
 		mbAddr = (y4/4)*(stride4/4) + x4/4
 	}
-	traceComp := os.Getenv("GO264_B_MVD_COMP_TRACE") != "" && part >= 0 && list >= 0
+	traceComp := (os.Getenv("GO264_B_MVD_COMP_TRACE") != "" || os.Getenv("GO264_P_MVD_COMP_TRACE") != "") && part >= 0 && list >= 0
 	amvdX := cabacMVDAMVD(mvd4, stride4, x4, y4, 0)
 	preLowX, preRangeX, _ := dec.DebugState()
 	mdx := syntax.DecodeCABACMVD(dec, models, 40, amvdX)

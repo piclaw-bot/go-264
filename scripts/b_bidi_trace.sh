@@ -183,6 +183,69 @@ s = s.replace('sl->mb_x + sl->mb_y*h->mb_width, i, list, mpx, mpy,', 'sl->mb_x +
 s = s.replace('sl->mb_x + sl->mb_y*h->mb_width, list, mpx, mpy,', 'sl->mb_x + sl->mb_y*h->mb_width, h->poc.frame_num, list, mpx, mpy,')
 s = s.replace('sl->mb_x + sl->mb_y*h->mb_width, i, j, list,\n                                _amvdX', 'sl->mb_x + sl->mb_y*h->mb_width, h->poc.frame_num, i, j, list,\n                                _amvdX')
 s = re.sub(r'(GO264_FFMPEG_CABAC_TRACE"\) && sl->slice_type_nos == AV_PICTURE_TYPE_B && \(sl->mb_x \+ sl->mb_y \* h->mb_width\) < )\d+(\)\n\s*fprintf\(stderr, "FF_B(?:8x8|PART)_MVD)', rf'\g<1>{mb_limit}\g<2>', s)
+# Let the generic FF MVD component trace cover both B and P slices when present.
+s = s.replace('sl->slice_type_nos == AV_PICTURE_TYPE_B && (sl->mb_x + sl->mb_y * h->mb_width) < ', '(sl->slice_type_nos == AV_PICTURE_TYPE_B || sl->slice_type_nos == AV_PICTURE_TYPE_P) && (sl->mb_x + sl->mb_y * h->mb_width) < ')
+if 'FFREF mb=' not in s:
+    s = s.replace('''static int decode_cabac_mb_ref(H264SliceContext *sl, int list, int n)
+{
+    int refa = sl->ref_cache[list][scan8[n] - 1];
+    int refb = sl->ref_cache[list][scan8[n] - 8];
+    int ref  = 0;
+    int ctx  = 0;
+
+    if (sl->slice_type_nos == AV_PICTURE_TYPE_B) {
+        if( refa > 0 && !(sl->direct_cache[scan8[n] - 1]&(MB_TYPE_DIRECT2>>1)) )
+            ctx++;
+        if( refb > 0 && !(sl->direct_cache[scan8[n] - 8]&(MB_TYPE_DIRECT2>>1)) )
+            ctx += 2;
+    } else {
+        if( refa > 0 )
+            ctx++;
+        if( refb > 0 )
+            ctx += 2;
+    }
+
+    while( get_cabac( &sl->cabac, &sl->cabac_state[54+ctx] ) ) {
+        ref++;
+        ctx = (ctx>>2)+4;
+        if(ref >= 32 /*h->ref_list[list]*/){
+            return -1;
+        }
+    }
+    return ref;
+}
+''', '''static int decode_cabac_mb_ref(H264SliceContext *sl, int list, int n)
+{
+    int refa = sl->ref_cache[list][scan8[n] - 1];
+    int refb = sl->ref_cache[list][scan8[n] - 8];
+    int ref  = 0;
+    int ctx  = 0;
+    unsigned _pre_low = (unsigned)sl->cabac.low >> 1, _pre_range = (unsigned)sl->cabac.range;
+
+    if (sl->slice_type_nos == AV_PICTURE_TYPE_B) {
+        if( refa > 0 && !(sl->direct_cache[scan8[n] - 1]&(MB_TYPE_DIRECT2>>1)) )
+            ctx++;
+        if( refb > 0 && !(sl->direct_cache[scan8[n] - 8]&(MB_TYPE_DIRECT2>>1)) )
+            ctx += 2;
+    } else {
+        if( refa > 0 )
+            ctx++;
+        if( refb > 0 )
+            ctx += 2;
+    }
+
+    while( get_cabac( &sl->cabac, &sl->cabac_state[54+ctx] ) ) {
+        ref++;
+        ctx = (ctx>>2)+4;
+        if(ref >= 32 /*h->ref_list[list]*/){
+            return -1;
+        }
+    }
+    if (getenv("GO264_FFMPEG_REF_TRACE") && sl->slice_type_nos == AV_PICTURE_TYPE_P && (sl->mb_x + sl->mb_y * sl->h264->mb_width) < ''' + mb_limit + ''')
+        fprintf(stderr, "FFREF mb=%04d poc=%d n=%d list=%d refa=%d refb=%d ref=%d pre=%u/%u post=%u/%u\\n", sl->mb_x + sl->mb_y * sl->h264->mb_width, sl->h264->poc.poc_lsb, n, list, refa, refb, ref, _pre_low, _pre_range, (unsigned)sl->cabac.low >> 1, (unsigned)sl->cabac.range);
+    return ref;
+}
+''')
 if 'FFMVD_COMP mb=' not in s:
     s = s.replace('''    int mxd = decode_cabac_mb_mvd(sl, 40, amvd0, &mpx);\\
     int myd = decode_cabac_mb_mvd(sl, 47, amvd1, &mpy);\\
@@ -249,6 +312,7 @@ if [[ -n "${GO264_FFMPEG_B_MVD_TRACE:-}" || -n "${GO264_B_CABAC_TRACE:-}" || -n 
 fi
 [[ -n "${GO264_P_TYPE_TRACE:-}" ]] && ff_env+=(GO264_P_TYPE_TRACE=1)
 [[ -n "${GO264_FFMPEG_CBP_TRACE:-}" ]] && ff_env+=(GO264_FFMPEG_CBP_TRACE=1)
+[[ -n "${GO264_P_REF_TRACE:-}" ]] && ff_env+=(GO264_FFMPEG_REF_TRACE=1)
 [[ -n "${GO264_B_STATE_TRACE:-}" ]] && ff_env+=(GO264_FFMPEG_B_STATE_TRACE=1)
 env "${ff_env[@]}" "$FFMPEG" -y -threads 1 -hide_banner \
   -i "$INPUT" -frames:v "$FRAMES" -pix_fmt yuv420p -f rawvideo /dev/null \
@@ -262,6 +326,8 @@ mkdir -p "$OUTDIR/go/frames" "${GOTMPDIR:-/workspace/tmp/gotmp}"
 go_env=(GOTMPDIR="${GOTMPDIR:-/workspace/tmp/gotmp}" GO264_B_MB_TRACE=1)
 [[ -n "${GO264_B_MVD_TRACE:-}" ]] && go_env+=(GO264_B_MVD_TRACE=1)
 [[ -n "${GO264_B_MVD_COMP_TRACE:-}" ]] && go_env+=(GO264_B_MVD_COMP_TRACE=1)
+[[ -n "${GO264_P_MVD_COMP_TRACE:-}" ]] && go_env+=(GO264_P_MVD_COMP_TRACE=1)
+[[ -n "${GO264_P_REF_TRACE:-}" ]] && go_env+=(GO264_P_REF_TRACE=1)
 [[ -n "${GO264_B_STATE_TRACE:-}" ]] && go_env+=(GO264_B_STATE_TRACE=1)
 [[ -n "${GO264_B_CABAC_TRACE:-}" ]] && go_env+=(GO264_B_CABAC_TRACE=1)
 [[ -n "${GO264_B_RESIDUAL_TRACE:-}" ]] && go_env+=(GO264_B_RESIDUAL_TRACE=1)
@@ -284,12 +350,16 @@ grep '^GOBRES' "$OUTDIR/go/bidi.log" >"$OUTDIR/gobres.rows" || true
 grep '^FFCABAC' "$OUTDIR/ffmpeg/bidi.log" >"$OUTDIR/ffcabac.rows" || true
 grep '^FFPTYPE' "$OUTDIR/ffmpeg/bidi.log" >"$OUTDIR/ffptype.rows" || true
 grep '^FFCBP' "$OUTDIR/ffmpeg/bidi.log" >"$OUTDIR/ffcbp.rows" || true
+grep '^FFMVD_COMP' "$OUTDIR/ffmpeg/bidi.log" >"$OUTDIR/ffmvd_comp.rows" || true
+grep '^FFREF' "$OUTDIR/ffmpeg/bidi.log" >"$OUTDIR/ffref.rows" || true
 grep '^GOPTYPE' "$OUTDIR/go/bidi.log" >"$OUTDIR/goptype.rows" || true
 grep '^GOP_PRE_CBP' "$OUTDIR/go/bidi.log" >"$OUTDIR/gop_pre_cbp.rows" || true
 grep '^GOP_POST_CBP' "$OUTDIR/go/bidi.log" >"$OUTDIR/gop_post_cbp.rows" || true
 grep '^GOP_PRE_DQP' "$OUTDIR/go/bidi.log" >"$OUTDIR/gop_pre_dqp.rows" || true
 grep '^GOP_POST_DQP' "$OUTDIR/go/bidi.log" >"$OUTDIR/gop_post_dqp.rows" || true
 grep '^GOCBP' "$OUTDIR/go/bidi.log" >"$OUTDIR/gocbp.rows" || true
+grep '^GOMVD_COMP' "$OUTDIR/go/bidi.log" >"$OUTDIR/gomvd_comp.rows" || true
+grep '^GOREF' "$OUTDIR/go/bidi.log" >"$OUTDIR/goref.rows" || true
 grep '^GOTERMINATE' "$OUTDIR/go/bidi.log" >"$OUTDIR/goterminate.rows" || true
 
 FF_POC_VALUE="${FF_POC:-${GO_POC:-6}}"

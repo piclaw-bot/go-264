@@ -102,7 +102,7 @@ func TestStoreCABACIntraChromaResidualsMatchDCSplit(t *testing.T) {
 }
 
 func TestDecodeCABACPInterMBHandlesShortContextTable(t *testing.T) {
-	mb, intra, skipped := decodeCABACPInterMB(nil, make([]cabac.CABACCtx, 24), 1, 0, nil, nil, nil, nil, 0, 0, false, false, [4]int{}, nil, 0, 0, 0, 0, true, 0, 0, 0, 0, 0, [2]int8{}, [2]int8{})
+	mb, intra, skipped := decodeCABACPInterMB(nil, make([]cabac.CABACCtx, 24), 1, 0, nil, nil, nil, nil, 0, 0, false, false, [4]int{}, nil, nil, 0, 0, 0, 0, true, 0, 0, 0, 0, 0, [2]int8{}, [2]int8{})
 	if mb == nil || intra != nil || !skipped {
 		t.Fatalf("short context table got mb=%v intra=%v skipped=%v", mb, intra, skipped)
 	}

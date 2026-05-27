@@ -83,7 +83,7 @@ func (c bMotionCache) decodeCABACPInterMB(dec *cabac.CABACDecoder, models []caba
 	return decodeCABACPInterMB(dec, models, numRefFrames, lastQScaleDiff,
 		leftNZ, topNZ, leftChromaNZ, topChromaNZ,
 		leftCBP, topCBP, leftNonSkip, topNonSkip,
-		c.refIdxCtxs(mbX, mbY), c.mvd[0], c.stride4, mbX, mbY, currentPOC,
+		c.refIdxCtxs(mbX, mbY), c.ref[0], c.mvd[0], c.stride4, mbX, mbY, currentPOC,
 		transform8x8Mode, transform8x8Ctx,
 		leftMBType, topMBType,
 		leftChromaPred, topChromaPred,
