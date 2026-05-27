@@ -700,6 +700,10 @@ func predictBDirectSpatialL0Ref(mv4 []syntax.MotionVector, ref4 []int8, stride4,
 }
 
 func predictBDirectSpatialL0ForSimpleRefs(mv4 []syntax.MotionVector, ref4 []int8, stride4, x4, y4 int) (int8, syntax.MotionVector) {
+	return predictBDirectSpatialL0ForSimpleRefsDiag(mv4, ref4, stride4, x4, y4, -1, -1)
+}
+
+func predictBDirectSpatialL0ForSimpleRefsDiag(mv4 []syntax.MotionVector, ref4 []int8, stride4, x4, y4, mbX, mbY int) (int8, syntax.MotionVector) {
 	const partNotAvailable int8 = -2
 	left, leftRef := getMV4(mv4, ref4, stride4, x4-1, y4)
 	top, topRef := getMV4(mv4, ref4, stride4, x4, y4-1)
@@ -714,6 +718,9 @@ func predictBDirectSpatialL0ForSimpleRefs(mv4 []syntax.MotionVector, ref4 []int8
 		}
 	}
 	if best == 127 {
+		if os.Getenv("GO264_DIRECT_CTX_TRACE") != "" && mbX >= 0 {
+			fmt.Fprintf(os.Stderr, "GODIRECTPRED mb=%04d ref=-1 mv={0,0} A=%d/{%d,%d} B=%d/{%d,%d} C=%d/{%d,%d}\n", mbY*(stride4/4)+mbX, leftRef, left.X, left.Y, topRef, top.X, top.Y, cRef, c.X, c.Y)
+		}
 		return -1, syntax.MotionVector{}
 	}
 	matches := 0
@@ -726,16 +733,20 @@ func predictBDirectSpatialL0ForSimpleRefs(mv4 []syntax.MotionVector, ref4 []int8
 	if cRef == best {
 		matches++
 	}
+	var out syntax.MotionVector
 	if matches > 1 {
-		return best, syntax.MotionVector{X: median3(left.X, top.X, c.X), Y: median3(left.Y, top.Y, c.Y)}
+		out = syntax.MotionVector{X: median3(left.X, top.X, c.X), Y: median3(left.Y, top.Y, c.Y)}
+	} else if leftRef == best {
+		out = left
+	} else if topRef == best {
+		out = top
+	} else {
+		out = c
 	}
-	if leftRef == best {
-		return best, left
+	if os.Getenv("GO264_DIRECT_CTX_TRACE") != "" && mbX >= 0 {
+		fmt.Fprintf(os.Stderr, "GODIRECTPRED mb=%04d ref=%d mv={%d,%d} A=%d/{%d,%d} B=%d/{%d,%d} C=%d/{%d,%d} matches=%d\n", mbY*(stride4/4)+mbX, best, out.X, out.Y, leftRef, left.X, left.Y, topRef, top.X, top.Y, cRef, c.X, c.Y, matches)
 	}
-	if topRef == best {
-		return best, top
-	}
-	return best, c
+	return best, out
 }
 
 // applyTemporalDirect applies temporal direct motion prediction for a B_Direct_16x16 MB.

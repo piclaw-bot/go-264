@@ -197,6 +197,7 @@ go_env=(
   GO264_DIRECT_TRACE=1
   GO264_DIRECT_COL_TRACE=1
   GO264_MOTION_SAVE_TRACE=1
+  GO264_DIRECT_CTX_TRACE=1
   GO264_MOTION_SAVE_MB_LIMIT="$MB_LIMIT"
 )
 [[ -n "${GO264_MOTION_SAVE_DETAIL:-}" ]] && go_env+=(GO264_MOTION_SAVE_DETAIL=1)
@@ -207,6 +208,7 @@ grep '^GODIRECT' "$OUTDIR/go.direct.trace" >"$OUTDIR/godirect.rows" || true
 grep '^GOCOLZERO' "$OUTDIR/go.direct.trace" >"$OUTDIR/gocolzero.rows" || true
 grep -E '^GOMOTSAVE(4)?' "$OUTDIR/go.direct.trace" >"$OUTDIR/gomotsave.rows" || true
 grep '^GOMOTWRITE' "$OUTDIR/go.direct.trace" >"$OUTDIR/gomotwrite.rows" || true
+grep '^GODIRECTPRED' "$OUTDIR/go.direct.trace" >"$OUTDIR/godirectpred.rows" || true
 grep '^GOTEMPDIRECT' "$OUTDIR/go.direct.trace" >"$OUTDIR/gotempdirect.rows" || true
 python3 - "$OUTDIR/ffdirect.rows" <<'PY'
 import re, sys
@@ -260,4 +262,5 @@ echo "gocolzero=$OUTDIR/gocolzero.rows"
 echo "gomotsave=$OUTDIR/gomotsave.rows"
 echo "gomotwrite=$OUTDIR/gomotwrite.rows"
 echo "gotempdirect=$OUTDIR/gotempdirect.rows"
+echo "godirectpred=$OUTDIR/godirectpred.rows"
 echo "gowrite_diff=$OUTDIR/gowrite.diff"
