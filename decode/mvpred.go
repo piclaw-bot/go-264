@@ -750,9 +750,11 @@ func applyTemporalDirect(mb *syntax.MBBidi, colocated *frame.Frame, mbX, mbY int
 		}
 		x8 := part & 1
 		y8 := part >> 1
-		// Representative 4x4 position for this 8x8 block (top-left with direct_8x8_inference)
-		x4 := mbX*4 + x8*2
-		y4 := mbY*4 + y8*2
+		// FFmpeg temporal Direct samples x8*3/y8*3 in the colocated MB when
+		// direct_8x8_inference is active, matching the representative used by
+		// its 8x8 temporal path rather than the geometric top-left 4x4.
+		x4 := mbX*4 + x8*3
+		y4 := mbY*4 + y8*3
 		idx := y4*colocated.MotionStride4 + x4
 
 		var mvL0, mvL1 syntax.MotionVector
