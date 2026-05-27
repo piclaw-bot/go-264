@@ -8,6 +8,40 @@ MB_LIMIT="${MB_LIMIT:-40}"
 FFSRC="${FFMPEG_SRC:-/workspace/tmp/ffmpeg-7.1.3}"
 FFMPEG="${FFMPEG:-$FFSRC/ffmpeg}"
 
+patch_ffmpeg_mvp_trace() {
+  python3 - "$FFSRC/libavcodec/h264_mvpred.h" "$MB_LIMIT" <<'PY'
+from pathlib import Path
+import re, sys
+p = Path(sys.argv[1])
+mb_limit = sys.argv[2]
+s = p.read_text()
+if '#include <stdlib.h>' not in s:
+    s = s.replace('#include "h264dec.h"', '#include "h264dec.h"\n#include <stdlib.h>')
+if 'FFMVP mb=' not in s:
+    needle = '''    ff_tlog(h->avctx,
+            "pred_motion (%2d %2d %2d) (%2d %2d %2d) (%2d %2d %2d) -> (%2d %2d %2d) at %2d %2d %d list %d\\n",
+            top_ref, B[0], B[1], diagonal_ref, C[0], C[1], left_ref,
+            A[0], A[1], ref, *mx, *my, sl->mb_x, sl->mb_y, n, list);
+'''
+    repl = '''    if (getenv("GO264_FFMPEG_MVP_TRACE") && (sl->slice_type_nos == AV_PICTURE_TYPE_B || sl->slice_type_nos == AV_PICTURE_TYPE_P) && (sl->mb_x + sl->mb_y * h->mb_width) < ''' + mb_limit + ''')
+        fprintf(stderr, "FFMVP mb=%04d poc=%d n=%d pw=%d list=%d ref=%d A=%d/{%d,%d} B=%d/{%d,%d} C=%d/{%d,%d} matches=%d out={%d,%d}\\n",
+                sl->mb_x + sl->mb_y*h->mb_width, h->poc.poc_lsb, n, part_width, list, ref,
+                left_ref, A[0], A[1], top_ref, B[0], B[1], diagonal_ref, C[0], C[1], match_count, *mx, *my);
+    ff_tlog(h->avctx,
+            "pred_motion (%2d %2d %2d) (%2d %2d %2d) (%2d %2d %2d) -> (%2d %2d %2d) at %2d %2d %d list %d\\n",
+            top_ref, B[0], B[1], diagonal_ref, C[0], C[1], left_ref,
+            A[0], A[1], ref, *mx, *my, sl->mb_x, sl->mb_y, n, list);
+'''
+    if needle not in s:
+        raise SystemExit('h264_mvpred pred_motion trace target not found')
+    s = s.replace(needle, repl, 1)
+else:
+    s = re.sub(r'(GO264_FFMPEG_MVP_TRACE"\) && \(sl->slice_type_nos == AV_PICTURE_TYPE_B \|\| sl->slice_type_nos == AV_PICTURE_TYPE_P\) && \(sl->mb_x \+ sl->mb_y \* h->mb_width\) < )\d+(\))', rf'\g<1>{mb_limit}\g<2>', s)
+    s = s.replace('sl->slice_type_nos == AV_PICTURE_TYPE_B && (sl->mb_x + sl->mb_y * h->mb_width) < ', '(sl->slice_type_nos == AV_PICTURE_TYPE_B || sl->slice_type_nos == AV_PICTURE_TYPE_P) && (sl->mb_x + sl->mb_y * h->mb_width) < ')
+p.write_text(s)
+PY
+}
+
 patch_ffmpeg_bidi_trace() {
   python3 - "$FFSRC/libavcodec/h264_cabac.c" "$MB_LIMIT" <<'PY'
 from pathlib import Path
@@ -307,6 +341,7 @@ PY
 
 mkdir -p "$OUTDIR/go" "$OUTDIR/ffmpeg"
 patch_ffmpeg_bidi_trace
+patch_ffmpeg_mvp_trace
 (cd "$FFSRC" && make -j"${MAKE_JOBS:-$(nproc 2>/dev/null || echo 2)}" ffmpeg >/tmp/go264-ffmpeg-bidi-build.log)
 ff_env=(GO264_FFMPEG_B_MB_TRACE=1)
 # FFmpeg's C-side getenv() treats an empty environment variable as enabled, so
@@ -316,6 +351,7 @@ if [[ -n "${GO264_FFMPEG_B_MVD_TRACE:-}" || -n "${GO264_B_CABAC_TRACE:-}" || -n 
 fi
 [[ -n "${GO264_P_TYPE_TRACE:-}" ]] && ff_env+=(GO264_P_TYPE_TRACE=1)
 [[ -n "${GO264_FFMPEG_CBP_TRACE:-}" ]] && ff_env+=(GO264_FFMPEG_CBP_TRACE=1)
+[[ -n "${GO264_P_MVP_CAND_TRACE:-}" ]] && ff_env+=(GO264_FFMPEG_MVP_TRACE=1)
 [[ -n "${GO264_P_REF_TRACE:-}" ]] && ff_env+=(GO264_FFMPEG_REF_TRACE=1)
 [[ -n "${GO264_B_STATE_TRACE:-}" ]] && ff_env+=(GO264_FFMPEG_B_STATE_TRACE=1)
 env "${ff_env[@]}" "$FFMPEG" -y -threads 1 -hide_banner \
@@ -358,6 +394,7 @@ grep '^FFPTYPE' "$OUTDIR/ffmpeg/bidi.log" >"$OUTDIR/ffptype.rows" || true
 grep '^FFCBP' "$OUTDIR/ffmpeg/bidi.log" >"$OUTDIR/ffcbp.rows" || true
 grep '^FFMVD_COMP' "$OUTDIR/ffmpeg/bidi.log" >"$OUTDIR/ffmvd_comp.rows" || true
 grep '^FFREF' "$OUTDIR/ffmpeg/bidi.log" >"$OUTDIR/ffref.rows" || true
+grep '^FFMVP' "$OUTDIR/ffmpeg/bidi.log" >"$OUTDIR/ffmvp.rows" || true
 grep '^GOPTYPE' "$OUTDIR/go/bidi.log" >"$OUTDIR/goptype.rows" || true
 grep '^GOP_PRE_CBP' "$OUTDIR/go/bidi.log" >"$OUTDIR/gop_pre_cbp.rows" || true
 grep '^GOP_POST_CBP' "$OUTDIR/go/bidi.log" >"$OUTDIR/gop_post_cbp.rows" || true
