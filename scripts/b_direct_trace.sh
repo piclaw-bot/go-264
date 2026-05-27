@@ -114,6 +114,32 @@ s = re.sub(
 s = s.replace(
     'fprintf(stderr, "FFCOLZERO mb=%04d i8=%d i4=%d colref0=%d colref1=%d colmv={%d,%d} ref0=%d ref1=%d\\n",\n                                    sl->mb_x + sl->mb_y * h->mb_width, i8, i4, l1ref0[i8], l1ref1[i8], mv_col[0], mv_col[1], ref[0], ref[1]);',
     'fprintf(stderr, "FFCOLZERO mb=%04d i8=%d i4=%d coltype0=%d coltype1=%d colref0=%d colref1=%d colmv={%d,%d} ref0=%d ref1=%d is_b8x8=%d sub_type=%u mb_type=%d\\n",\n                                    sl->mb_x + sl->mb_y * h->mb_width, i8, i4, mb_type_col[0], mb_type_col[1], l1ref0[i8], l1ref1[i8], mv_col[0], mv_col[1], ref[0], ref[1], is_b8x8, sub_mb_type, *mb_type);')
+if 'FFTEMPDIRECT_PART mb=' not in s:
+    needle_temp8 = '''                if (IS_SUB_8X8(sub_mb_type)) {
+                    const int16_t *mv_col = l1mv[x8 * 3 + y8 * 3 * b4_stride];
+                    int mx                = (scale * mv_col[0] + 128) >> 8;
+                    int my                = (scale * mv_col[1] + 128) >> 8;
+                    fill_rectangle(&sl->mv_cache[0][scan8[i8 * 4]], 2, 2, 8,
+                                   pack16to32(mx, my), 4);
+                    fill_rectangle(&sl->mv_cache[1][scan8[i8 * 4]], 2, 2, 8,
+                                   pack16to32(mx - mv_col[0], my - mv_col[1]), 4);
+                } else {
+'''
+    repl_temp8 = '''                if (IS_SUB_8X8(sub_mb_type)) {
+                    const int16_t *mv_col = l1mv[x8 * 3 + y8 * 3 * b4_stride];
+                    int mx                = (scale * mv_col[0] + 128) >> 8;
+                    int my                = (scale * mv_col[1] + 128) >> 8;
+                    if (getenv("GO264_FFMPEG_TEMPORAL_DIRECT_TRACE") && (sl->mb_x + sl->mb_y * h->mb_width) < ''' + mb_limit + ''')
+                        fprintf(stderr, "FFTEMPDIRECT_PART mb=%04d poc=%d part=%d mode=8x8 colref0=%d colref1=%d ref0=%d scale=%d colmv={%d,%d} mv0={%d,%d} mv1={%d,%d}\\n", sl->mb_x + sl->mb_y * h->mb_width, h->poc.poc_lsb, i8, l1ref0[i8], l1ref1[i8], ref0, scale, mv_col[0], mv_col[1], mx, my, mx - mv_col[0], my - mv_col[1]);
+                    fill_rectangle(&sl->mv_cache[0][scan8[i8 * 4]], 2, 2, 8,
+                                   pack16to32(mx, my), 4);
+                    fill_rectangle(&sl->mv_cache[1][scan8[i8 * 4]], 2, 2, 8,
+                                   pack16to32(mx - mv_col[0], my - mv_col[1]), 4);
+                } else {
+'''
+    if needle_temp8 not in s:
+        raise SystemExit('ffmpeg h264_direct.c temporal 8x8 hook target not found')
+    s = s.replace(needle_temp8, repl_temp8, 1)
 if 'FFCOLZERO8 mb=' not in s:
     needle8 = '''                    const int16_t *mv_col = l1mv[x8 * 3 + y8 * 3 * b4_stride];
                     if (FFABS(mv_col[0]) <= 1 && FFABS(mv_col[1]) <= 1) {
@@ -153,11 +179,14 @@ PY
 mkdir -p "$OUTDIR"
 patch_ffmpeg_direct_trace
 (cd "$FFSRC" && make -j"${MAKE_JOBS:-$(nproc 2>/dev/null || echo 2)}" ffmpeg >/tmp/go264-ffmpeg-direct-build.log)
-GO264_FFMPEG_DIRECT_TRACE=1 "$FFMPEG" -y -threads 1 -hide_banner \
+ff_env=(GO264_FFMPEG_DIRECT_TRACE=1)
+[[ -n "${GO264_TEMPORAL_DIRECT_TRACE:-}" ]] && ff_env+=(GO264_FFMPEG_TEMPORAL_DIRECT_TRACE=1)
+env "${ff_env[@]}" "$FFMPEG" -y -threads 1 -hide_banner \
   -i "$INPUT" -frames:v "$FRAMES" -pix_fmt yuv420p -f rawvideo /dev/null \
   >"$OUTDIR/ffmpeg.stdout" 2>"$OUTDIR/ffmpeg.direct.trace" || true
 
 grep '^FFDIRECT' "$OUTDIR/ffmpeg.direct.trace" >"$OUTDIR/ffdirect.rows" || true
+grep '^FFTEMPDIRECT' "$OUTDIR/ffmpeg.direct.trace" >"$OUTDIR/fftempdirect.rows" || true
 grep -E '^FFCOLZERO(8)?' "$OUTDIR/ffmpeg.direct.trace" >"$OUTDIR/ffcolzero.rows" || true
 
 rm -rf "$OUTDIR/go-frames"
@@ -224,6 +253,7 @@ if [[ -n "${GO_POC:-}" ]]; then
 fi
 
 echo "ffdirect=$OUTDIR/ffdirect.rows"
+echo "fftempdirect=$OUTDIR/fftempdirect.rows"
 echo "godirect=$OUTDIR/godirect.rows"
 echo "ffcolzero=$OUTDIR/ffcolzero.rows"
 echo "gocolzero=$OUTDIR/gocolzero.rows"
