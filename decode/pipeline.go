@@ -316,6 +316,13 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 		if applyDirectSpatial {
 			directRefL0, directMVL0 = bmc.predictDirectSpatial(0, mbX*4, mbY*4, f.POC)
 			directRefL1, directMVL1 = bmc.predictDirectSpatial(1, mbX*4, mbY*4, f.POC)
+			if directRefL0 < 0 && directRefL1 < 0 {
+				// FFmpeg spatial Direct promotes fully unavailable neighbour refs to
+				// bidirectional ref0/ref0 with zero motion. Leaving both refs at -1
+				// prevents later Direct MBs from seeing valid top/left ref caches.
+				directRefL0, directRefL1 = 0, 0
+				directMVL0, directMVL1 = syntax.MotionVector{}, syntax.MotionVector{}
+			}
 			if os.Getenv("GO264_DIRECT_CTX_TRACE") != "" {
 				a0, ar0 := bmc.get(0, mbX*4-1, mbY*4)
 				b0, br0 := bmc.get(0, mbX*4, mbY*4-1)
