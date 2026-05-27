@@ -231,11 +231,15 @@ func fillMVD4(mvd4 []syntax.MotionVector, stride4, x4, y4, w4, h4 int, mvd synta
 }
 
 func predictMotion4x4(mv4 []syntax.MotionVector, ref4 []int8, stride4, x4, y4, partWidth4 int, targetRef int8) syntax.MotionVector {
+	return predictMotion4x4WithDiag(mv4, ref4, stride4, x4, y4, partWidth4, targetRef, false)
+}
+
+func predictMotion4x4WithDiag(mv4 []syntax.MotionVector, ref4 []int8, stride4, x4, y4, partWidth4 int, targetRef int8, forceTopLeftDiag bool) syntax.MotionVector {
 	const partNotAvailable int8 = -2
 	a, refA := getMV4(mv4, ref4, stride4, x4-1, y4)
 	b, refB := getMV4(mv4, ref4, stride4, x4, y4-1)
 	c, refC := getMV4(mv4, ref4, stride4, x4+partWidth4, y4-1)
-	if refC == partNotAvailable {
+	if forceTopLeftDiag || refC == partNotAvailable {
 		c, refC = getMV4(mv4, ref4, stride4, x4-1, y4-1)
 	}
 	matchCount := 0
@@ -399,7 +403,12 @@ func applyMVPredictorsDiag(mb *syntax.MBInter, mv4 []syntax.MotionVector, ref4 [
 				for j := 0; j < 2; j++ {
 					idx := part*4 + j
 					y := baseY + j
-					pred := predictMotion4x4(mv4, ref4, stride4, baseX, y, 2, ref)
+					// For the bottom 8x4 sub-partition FFmpeg's fetch_diagonal_mv()
+					// falls back from the not-yet-usable top-right current-MB cell to
+					// the top-left/left neighbour. The ref cache for that current-MB
+					// cell may already be seeded by ref_idx decode, so model the
+					// availability rule explicitly instead of trusting the raw ref cache.
+					pred := predictMotion4x4WithDiag(mv4, ref4, stride4, baseX, y, 2, ref, j == 1)
 					mvd := mb.SubMV[idx]
 					addMV(&mb.SubMV[idx], pred)
 					tracePMVP(mbX, mbY, poc, idx, ref, baseX, y, 2, 1, pred, mvd, mb.SubMV[idx])
