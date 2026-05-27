@@ -275,7 +275,7 @@ if 'FFREF mb=' not in s:
             return -1;
         }
     }
-    if (getenv("GO264_FFMPEG_REF_TRACE") && sl->slice_type_nos == AV_PICTURE_TYPE_P && (sl->mb_x + sl->mb_y * sl->h264->mb_width) < ''' + mb_limit + ''')
+    if (getenv("GO264_FFMPEG_REF_TRACE") && (sl->slice_type_nos == AV_PICTURE_TYPE_P || sl->slice_type_nos == AV_PICTURE_TYPE_B) && (sl->mb_x + sl->mb_y * sl->h264->mb_width) < ''' + mb_limit + ''')
         fprintf(stderr, "FFREF mb=%04d poc=%d n=%d list=%d refa=%d refb=%d ref=%d pre=%u/%u post=%u/%u\\n", sl->mb_x + sl->mb_y * sl->h264->mb_width, sl->h264->poc.poc_lsb, n, list, refa, refb, ref, _pre_low, _pre_range, (unsigned)sl->cabac.low >> 1, (unsigned)sl->cabac.range);
     return ref;
 }
@@ -352,7 +352,7 @@ fi
 [[ -n "${GO264_P_TYPE_TRACE:-}" ]] && ff_env+=(GO264_P_TYPE_TRACE=1)
 [[ -n "${GO264_FFMPEG_CBP_TRACE:-}" ]] && ff_env+=(GO264_FFMPEG_CBP_TRACE=1)
 [[ -n "${GO264_P_MVP_CAND_TRACE:-}" ]] && ff_env+=(GO264_FFMPEG_MVP_TRACE=1)
-[[ -n "${GO264_P_REF_TRACE:-}" ]] && ff_env+=(GO264_FFMPEG_REF_TRACE=1)
+[[ -n "${GO264_P_REF_TRACE:-}" || -n "${GO264_B_REF_TRACE:-}" ]] && ff_env+=(GO264_FFMPEG_REF_TRACE=1)
 [[ -n "${GO264_B_STATE_TRACE:-}" ]] && ff_env+=(GO264_FFMPEG_B_STATE_TRACE=1)
 env "${ff_env[@]}" "$FFMPEG" -y -threads 1 -hide_banner \
   -i "$INPUT" -frames:v "$FRAMES" -pix_fmt yuv420p -f rawvideo /dev/null \
@@ -370,6 +370,7 @@ go_env=(GOTMPDIR="${GOTMPDIR:-/workspace/tmp/gotmp}" GO264_B_MB_TRACE=1)
 [[ -n "${GO264_P_MVP_TRACE:-}" ]] && go_env+=(GO264_P_MVP_TRACE=1)
 [[ -n "${GO264_P_MVP_CAND_TRACE:-}" ]] && go_env+=(GO264_P_MVP_CAND_TRACE=1)
 [[ -n "${GO264_P_REF_TRACE:-}" ]] && go_env+=(GO264_P_REF_TRACE=1)
+[[ -n "${GO264_B_REF_TRACE:-}" ]] && go_env+=(GO264_B_REF_TRACE=1)
 [[ -n "${GO264_B_STATE_TRACE:-}" ]] && go_env+=(GO264_B_STATE_TRACE=1)
 [[ -n "${GO264_B_CABAC_TRACE:-}" ]] && go_env+=(GO264_B_CABAC_TRACE=1)
 [[ -n "${GO264_B_RESIDUAL_TRACE:-}" ]] && go_env+=(GO264_B_RESIDUAL_TRACE=1)
@@ -405,6 +406,7 @@ grep '^GOMVD_COMP' "$OUTDIR/go/bidi.log" >"$OUTDIR/gomvd_comp.rows" || true
 grep '^GOPMVP' "$OUTDIR/go/bidi.log" >"$OUTDIR/gopmvp.rows" || true
 grep '^GOMVP' "$OUTDIR/go/bidi.log" >"$OUTDIR/gomvp.rows" || true
 grep '^GOREF' "$OUTDIR/go/bidi.log" >"$OUTDIR/goref.rows" || true
+grep '^GOBREF' "$OUTDIR/go/bidi.log" >"$OUTDIR/gobref.rows" || true
 grep '^GOTERMINATE' "$OUTDIR/go/bidi.log" >"$OUTDIR/goterminate.rows" || true
 
 FF_POC_VALUE="${FF_POC:-${GO_POC:-6}}"

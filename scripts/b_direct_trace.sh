@@ -198,6 +198,7 @@ go_env=(
   GO264_DIRECT_COL_TRACE=1
   GO264_MOTION_SAVE_TRACE=1
   GO264_DIRECT_CTX_TRACE=1
+  GO264_HEADER_TRACE=1
   GO264_MOTION_SAVE_MB_LIMIT="$MB_LIMIT"
 )
 [[ -n "${GO264_MOTION_SAVE_DETAIL:-}" ]] && go_env+=(GO264_MOTION_SAVE_DETAIL=1)
@@ -205,6 +206,7 @@ go_env=(
 env "${go_env[@]}" go run ./cmd/decode264 -frames "$FRAMES" -f yuv -i "$INPUT" -o "$OUTDIR/go-frames" \
   >"$OUTDIR/go.stdout" 2>"$OUTDIR/go.direct.trace"
 grep '^GODIRECT' "$OUTDIR/go.direct.trace" >"$OUTDIR/godirect.rows" || true
+grep '^GOHEADER' "$OUTDIR/go.direct.trace" >"$OUTDIR/goheader.rows" || true
 grep '^GOCOLZERO' "$OUTDIR/go.direct.trace" >"$OUTDIR/gocolzero.rows" || true
 grep -E '^GOMOTSAVE(4)?' "$OUTDIR/go.direct.trace" >"$OUTDIR/gomotsave.rows" || true
 grep '^GOMOTWRITE' "$OUTDIR/go.direct.trace" >"$OUTDIR/gomotwrite.rows" || true
@@ -257,6 +259,7 @@ fi
 echo "ffdirect=$OUTDIR/ffdirect.rows"
 echo "fftempdirect=$OUTDIR/fftempdirect.rows"
 echo "godirect=$OUTDIR/godirect.rows"
+echo "goheader=$OUTDIR/goheader.rows"
 echo "ffcolzero=$OUTDIR/ffcolzero.rows"
 echo "gocolzero=$OUTDIR/gocolzero.rows"
 echo "gomotsave=$OUTDIR/gomotsave.rows"

@@ -1020,6 +1020,7 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 		parts := cabacBPartsForType(bMBType)
 		usesL0, usesL1 := cabacBListsForType(bMBType)
 		x4, y4 := mbX*4, mbY*4
+		traceBRef := os.Getenv("GO264_B_REF_TRACE") != "" && currentPOC == 30 && mbY*stride4/4+mbX < traceBTypeLimit
 		if numRefL0 > 1 && usesL0 {
 			for i := 0; i < parts; i++ {
 				if cabacBPartUsesL0(bMBType, i) {
@@ -1029,7 +1030,13 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 					if i > 0 {
 						ctx = cabacBRefIdxCtx(ref4, direct4, stride4, bx, by)
 					}
-					mb.RefIdxL0[i] = int8(syntax.DecodeCABACRef(dec, models, ctx))
+					preLow, preRange, _ := dec.DebugState()
+					ref := syntax.DecodeCABACRef(dec, models, ctx)
+					postLow, postRange, _ := dec.DebugState()
+					mb.RefIdxL0[i] = int8(ref)
+					if traceBRef {
+						fmt.Fprintf(os.Stderr, "GOBREF mb=%04d poc=%d part=%d list=0 ctx=%d ref=%d pre=%d/%d post=%d/%d\n", mbY*stride4/4+mbX, currentPOC, i, ctx, ref, preLow, preRange, postLow, postRange)
+					}
 					fillRef4(ref4, stride4, bx, by, pw, ph, mb.RefIdxL0[i])
 				}
 			}
@@ -1037,7 +1044,14 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 		if numRefL1 > 1 && usesL1 {
 			for i := 0; i < parts; i++ {
 				if cabacBPartUsesL1(bMBType, i) {
-					mb.RefIdxL1[i] = int8(syntax.DecodeCABACRef(dec, models, refCtxs[i]))
+					ctx := refCtxs[i]
+					preLow, preRange, _ := dec.DebugState()
+					ref := syntax.DecodeCABACRef(dec, models, ctx)
+					postLow, postRange, _ := dec.DebugState()
+					mb.RefIdxL1[i] = int8(ref)
+					if traceBRef {
+						fmt.Fprintf(os.Stderr, "GOBREF mb=%04d poc=%d part=%d list=1 ctx=%d ref=%d pre=%d/%d post=%d/%d\n", mbY*stride4/4+mbX, currentPOC, i, ctx, ref, preLow, preRange, postLow, postRange)
+					}
 				}
 			}
 		}

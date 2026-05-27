@@ -263,7 +263,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 		// CABAC arithmetic bytes are byte-aligned after cabac_alignment_one_bit;
 		// starting the arithmetic decoder mid-byte desynchronizes every bin.
 		if os.Getenv("GO264_HEADER_TRACE") != "" {
-			fmt.Fprintf(os.Stderr, "GOHEADER_CABAC_INIT pos=%d poc=%d slice=%d qp=%d initIDC=%d\n", r.Position(), f.POC, hdr.SliceType, currentQP, hdr.CabacInitIDC)
+			fmt.Fprintf(os.Stderr, "GOHEADER_CABAC_INIT pos=%d poc=%d frame=%d slice=%d qp=%d initIDC=%d refL0=%d refL1=%d directSpatial=%d firstMB=%d modsL0=%d modsL1=%d\n", r.Position(), f.POC, hdr.FrameNum, hdr.SliceType, currentQP, hdr.CabacInitIDC, hdr.NumRefIdxL0Active, hdr.NumRefIdxL1Active, boolInt(hdr.DirectSpatialMvPred), hdr.FirstMbInSlice, len(hdr.RefModifications[0]), len(hdr.RefModifications[1]))
 		}
 		r.ByteAlign()
 		cabacDec = &cabac.CABACDecoder{}
