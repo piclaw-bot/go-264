@@ -272,7 +272,14 @@ if 'FFREF mb=' not in s:
             ctx += 2;
     }
 
-    while( get_cabac( &sl->cabac, &sl->cabac_state[54+ctx] ) ) {
+    while( 1 ) {
+        int _ctx = ctx;
+        uint8_t _state = sl->cabac_state[54+ctx];
+        unsigned _bin_pre_low = (unsigned)sl->cabac.low >> 1, _bin_pre_range = (unsigned)sl->cabac.range;
+        int _bin = get_cabac( &sl->cabac, &sl->cabac_state[54+ctx] );
+        if (getenv("GO264_FFMPEG_REF_TRACE") && (sl->slice_type_nos == AV_PICTURE_TYPE_P || sl->slice_type_nos == AV_PICTURE_TYPE_B) && (sl->mb_x + sl->mb_y * sl->h264->mb_width) < ''' + mb_limit + ''')
+            fprintf(stderr, "FFREFBIN mb=%04d poc=%d n=%d list=%d ctx=%d idx=%d state=%d low=%u range=%u bin=%d post_state=%d post_low=%u post_range=%u ref_before=%d\\n", sl->mb_x + sl->mb_y * sl->h264->mb_width, sl->h264->poc.poc_lsb, n, list, _ctx, 54+_ctx, _state, _bin_pre_low, _bin_pre_range, _bin, (int)sl->cabac_state[54+_ctx], (unsigned)sl->cabac.low >> 1, (unsigned)sl->cabac.range, ref);
+        if (!_bin) break;
         ref++;
         ctx = (ctx>>2)+4;
         if(ref >= 32 /*h->ref_list[list]*/){
@@ -283,6 +290,31 @@ if 'FFREF mb=' not in s:
         fprintf(stderr, "FFREF mb=%04d poc=%d n=%d list=%d refa=%d refb=%d ref=%d pre=%u/%u post=%u/%u\\n", sl->mb_x + sl->mb_y * sl->h264->mb_width, sl->h264->poc.poc_lsb, n, list, refa, refb, ref, _pre_low, _pre_range, (unsigned)sl->cabac.low >> 1, (unsigned)sl->cabac.range);
     return ref;
 }
+''')
+# Refresh older in-tree FFREF injections to add per-bin trace when the wrapper
+# was already patched by a previous run.
+if 'FFREF mb=' in s and 'FFREFBIN mb=' not in s:
+    s = s.replace('''    while( get_cabac( &sl->cabac, &sl->cabac_state[54+ctx] ) ) {
+        ref++;
+        ctx = (ctx>>2)+4;
+        if(ref >= 32 /*h->ref_list[list]*/){
+            return -1;
+        }
+    }
+''', '''    while( 1 ) {
+        int _ctx = ctx;
+        uint8_t _state = sl->cabac_state[54+ctx];
+        unsigned _bin_pre_low = (unsigned)sl->cabac.low >> 1, _bin_pre_range = (unsigned)sl->cabac.range;
+        int _bin = get_cabac( &sl->cabac, &sl->cabac_state[54+ctx] );
+        if (getenv("GO264_FFMPEG_REF_TRACE") && (sl->slice_type_nos == AV_PICTURE_TYPE_P || sl->slice_type_nos == AV_PICTURE_TYPE_B) && (sl->mb_x + sl->mb_y * sl->h264->mb_width) < ''' + mb_limit + ''')
+            fprintf(stderr, "FFREFBIN mb=%04d poc=%d n=%d list=%d ctx=%d idx=%d state=%d low=%u range=%u bin=%d post_state=%d post_low=%u post_range=%u ref_before=%d\\n", sl->mb_x + sl->mb_y * sl->h264->mb_width, sl->h264->poc.poc_lsb, n, list, _ctx, 54+_ctx, _state, _bin_pre_low, _bin_pre_range, _bin, (int)sl->cabac_state[54+_ctx], (unsigned)sl->cabac.low >> 1, (unsigned)sl->cabac.range, ref);
+        if (!_bin) break;
+        ref++;
+        ctx = (ctx>>2)+4;
+        if(ref >= 32 /*h->ref_list[list]*/){
+            return -1;
+        }
+    }
 ''')
 # Refresh older in-tree FFMVD_COMP injections so focused P-slice windows can move
 # past the original small MB limit.
@@ -399,6 +431,7 @@ grep '^FFPTYPE' "$OUTDIR/ffmpeg/bidi.log" >"$OUTDIR/ffptype.rows" || true
 grep '^FFCBP' "$OUTDIR/ffmpeg/bidi.log" >"$OUTDIR/ffcbp.rows" || true
 grep '^FFMVD_COMP' "$OUTDIR/ffmpeg/bidi.log" >"$OUTDIR/ffmvd_comp.rows" || true
 grep '^FFREF' "$OUTDIR/ffmpeg/bidi.log" >"$OUTDIR/ffref.rows" || true
+grep '^FFREFBIN' "$OUTDIR/ffmpeg/bidi.log" >"$OUTDIR/ffrefbin.rows" || true
 grep '^FFMVP' "$OUTDIR/ffmpeg/bidi.log" >"$OUTDIR/ffmvp.rows" || true
 grep '^GOPTYPE' "$OUTDIR/go/bidi.log" >"$OUTDIR/goptype.rows" || true
 grep '^GOP_PRE_CBP' "$OUTDIR/go/bidi.log" >"$OUTDIR/gop_pre_cbp.rows" || true

@@ -1048,7 +1048,9 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 		if numRefL1 > 1 && usesL1 {
 			for i := 0; i < parts; i++ {
 				if cabacBPartUsesL1(bMBType, i) {
-					ctx := refCtxs[i]
+					pw, ph := cabacBPartDims(bMBType, i)
+					bx, by := x4+cabacBPartX(bMBType, i, parts), y4+cabacBPartY(bMBType, i, parts)
+					ctx := cabacBRefIdxCtx(ref4L1, direct4, stride4, bx, by)
 					preLow, preRange, _ := dec.DebugState()
 					traceTag := ""
 					if traceBRef {
@@ -1060,6 +1062,7 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 					if traceBRef {
 						fmt.Fprintf(os.Stderr, "GOBREF mb=%04d poc=%d part=%d list=1 ctx=%d ref=%d pre=%d/%d post=%d/%d\n", mbY*stride4/4+mbX, currentPOC, i, ctx, ref, preLow, preRange, postLow, postRange)
 					}
+					fillRef4(ref4L1, stride4, bx, by, pw, ph, mb.RefIdxL1[i])
 				}
 			}
 		}
