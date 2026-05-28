@@ -655,6 +655,11 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 						topE8B[bc] = -1
 					}
 				}
+				colFrame := d.refBidiL1(0, f.POC)
+				colPOC := 0
+				if colFrame != nil {
+					colPOC = colFrame.POC
+				}
 				mbBidi, mbIntra, skipped := bmc.decodeCABACBidiMB(
 					cabacDec, cabacModels,
 					hdr.NumRefIdxL0Active, hdr.NumRefIdxL1Active,
@@ -665,6 +670,10 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					leftIsDirect, topIsDirect,
 					mbX, mbY,
 					f.POC,
+					hdr.DirectSpatialMvPred,
+					directRefL0, directMVL0,
+					directRefL1, directMVL1,
+					colFrame, d.bidiL0FramesWithMods(f.POC, hdr.FrameNum, hdr.RefModifications[0]), colPOC,
 					pps.Transform8x8Mode, transform8x8CABACCtx,
 					leftMBType, topMBType,
 					leftChromaPred, topChromaPred,

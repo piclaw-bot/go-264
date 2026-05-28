@@ -10,6 +10,7 @@ import (
 	"strconv"
 
 	cabac "github.com/rcarmo/go-264/entropy/cabac"
+	"github.com/rcarmo/go-264/frame"
 	"github.com/rcarmo/go-264/syntax"
 )
 
@@ -778,6 +779,10 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 	refCtxs [4]int,
 	mv4 []syntax.MotionVector, ref4 []int8, direct4 []bool, mv4L1 []syntax.MotionVector, ref4L1 []int8, mvd4 []syntax.MotionVector, mvd4L1 []syntax.MotionVector, stride4, mbX, mbY int,
 	currentPOC int,
+	directSpatial bool,
+	directRefL0 int8, directMVL0 syntax.MotionVector,
+	directRefL1 int8, directMVL1 syntax.MotionVector,
+	directColocated *frame.Frame, directL0Frames []*frame.Frame, directColPOC int,
 	transform8x8Mode bool, transform8x8Ctx int,
 	leftMBType, topMBType uint32,
 	leftChromaPred, topChromaPred int8,
@@ -914,13 +919,38 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 		// Ref-idx syntax is decoded list-by-list before MVDs, matching FFmpeg's
 		// B_8x8 CABAC order. FFmpeg runs direct prediction before ref_idx decode
 		// when any sub-MB is Direct, so direct sub-blocks must seed the ref/direct
-		// caches used by subsequent ref_idx context derivation.
+		// and MV caches used by subsequent ref_idx and MVP derivation.
 		x4, y4 := mbX*4, mbY*4
+		var directSeed syntax.MBBidi
+		haveDirectSeed := false
+		for _, t := range mb.SubMBType {
+			if t == 0 {
+				haveDirectSeed = true
+				break
+			}
+		}
+		if haveDirectSeed {
+			directSeed.MBType = syntax.BMBTypeB8x8
+			directSeed.SubMBType = mb.SubMBType
+			if directSpatial {
+				applyB8x8DirectSpatial(&directSeed, directRefL0, directMVL0, directRefL1, directMVL1, directColocated, mbX, mbY)
+			} else {
+				applyTemporalDirect(&directSeed, directColocated, mbX, mbY, currentPOC, directL0Frames, directColPOC)
+			}
+		}
 		for i, t := range mb.SubMBType {
 			if t == 0 {
 				bx, by := x4+(i&1)*2, y4+(i>>1)*2
-				fillRef4(ref4, stride4, bx, by, 2, 2, 0)
-				fillRef4(ref4L1, stride4, bx, by, 2, 2, 0)
+				mb.RefIdxL0[i] = directSeed.RefIdxL0[i]
+				mb.RefIdxL1[i] = directSeed.RefIdxL1[i]
+				mb.SubMVL0[i*4] = directSeed.SubMVL0[i*4]
+				mb.SubMVL1[i*4] = directSeed.SubMVL1[i*4]
+				fillRef4(ref4, stride4, bx, by, 2, 2, mb.RefIdxL0[i])
+				fillRef4(ref4L1, stride4, bx, by, 2, 2, mb.RefIdxL1[i])
+				fillMV4(mv4, ref4, stride4, bx, by, 2, 2, directSeed.SubMVL0[i*4], mb.RefIdxL0[i])
+				fillMV4(mv4L1, ref4L1, stride4, bx, by, 2, 2, directSeed.SubMVL1[i*4], mb.RefIdxL1[i])
+				fillMVD4(mvd4, stride4, bx, by, 2, 2, syntax.MotionVector{})
+				fillMVD4(mvd4L1, stride4, bx, by, 2, 2, syntax.MotionVector{})
 				if direct4 != nil {
 					for dy := 0; dy < 2; dy++ {
 						for dx := 0; dx < 2; dx++ {
@@ -962,19 +992,6 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 			t := mb.SubMBType[i]
 			bx, by := x4+(i&1)*2, y4+(i>>1)*2
 			if t == 0 {
-				// B_Direct_8x8 writes resolved direct motion into FFmpeg's MV cache
-				// before later explicit B_8x8 sub-partitions call pred_motion. Until
-				// colocated temporal derivation is implemented, use the same spatial
-				// MVP fallback as our direct reconstruction path so following sub-MB
-				// MVPs see a populated direct neighbour instead of stale zeros.
-				mv0 := predictMotion4x4(mv4, ref4, stride4, bx, by, 2, mb.RefIdxL0[i])
-				mv1 := predictMotion4x4(mv4L1, ref4L1, stride4, bx, by, 2, mb.RefIdxL1[i])
-				mb.SubMVL0[i*4] = mv0
-				mb.SubMVL1[i*4] = mv1
-				fillMV4(mv4, ref4, stride4, bx, by, 2, 2, mv0, mb.RefIdxL0[i])
-				fillMV4(mv4L1, ref4L1, stride4, bx, by, 2, 2, mv1, mb.RefIdxL1[i])
-				fillMVD4(mvd4, stride4, bx, by, 2, 2, syntax.MotionVector{})
-				fillMVD4(mvd4L1, stride4, bx, by, 2, 2, syntax.MotionVector{})
 				continue
 			}
 			sc := syntax.BMBSubPartCount(t)
