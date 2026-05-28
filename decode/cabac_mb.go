@@ -1039,7 +1039,7 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 							amvdY = cabacMVDAMVD(mvd4, stride4, sx, sy, 1)
 							preLow, preRange, _ = dec.DebugState()
 						}
-						mvd := decodeCABACMVDPair(dec, models, mvd4, stride4, sx, sy, fillW4, fillH4)
+						mvd, _ := decodeCABACMVDPairDiag(dec, models, mvd4, stride4, sx, sy, fillW4, fillH4, idx, 0, currentPOC)
 						if traceMVD {
 							postLow, postRange, _ = dec.DebugState()
 						}
@@ -1058,7 +1058,8 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 							amvdY = cabacMVDAMVD(mvd4L1, stride4, sx, sy, 1)
 							preLow, preRange, _ = dec.DebugState()
 						}
-						mb.SubMVL1[idx] = decodeCABACMVDPair(dec, models, mvd4L1, stride4, sx, sy, fillW4, fillH4)
+						mvd, _ := decodeCABACMVDPairDiag(dec, models, mvd4L1, stride4, sx, sy, fillW4, fillH4, idx, 1, currentPOC)
+						mb.SubMVL1[idx] = mvd
 						mvp := predictMotion4x4(mv4L1, ref4L1, stride4, sx, sy, fillW4, mb.RefIdxL1[i])
 						mb.SubMVL1[idx].X += mvp.X
 						mb.SubMVL1[idx].Y += mvp.Y
