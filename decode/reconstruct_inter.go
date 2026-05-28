@@ -159,6 +159,9 @@ func (d *Decoder) refL0ListWithMods(currentFrameNum uint32, mods []syntax.RefPic
 				continue
 			}
 			if found < index {
+				refs = append(refs, nil)
+				copy(refs[index+1:], refs[index:len(refs)-1])
+				refs[index] = ref
 				continue
 			}
 			if found > index {
@@ -1102,6 +1105,16 @@ func (d *Decoder) bidiL0FramesWithMods(currentPOC int, currentFrameNum uint32, m
 				continue
 			}
 			ref := frames[found]
+			if index >= len(frames) {
+				frames = append(frames, ref)
+				continue
+			}
+			if found < index {
+				frames = append(frames, nil)
+				copy(frames[index+1:], frames[index:len(frames)-1])
+				frames[index] = ref
+				continue
+			}
 			if found > index {
 				copy(frames[index+1:found+1], frames[index:found])
 			}
