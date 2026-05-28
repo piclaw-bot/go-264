@@ -766,11 +766,18 @@ func applyTemporalDirect(mb *syntax.MBBidi, colocated *frame.Frame, mbX, mbY int
 		}
 	}
 	if traceTemporal && mbX == 0 && mbY == 0 && currentPOC == tracePOC {
-		fmt.Fprintf(os.Stderr, "GOTEMPDIRECT curpoc=%d colpoc=%d nL0=%d\n", currentPOC, colPOC, len(l0Frames))
+		fmt.Fprintf(os.Stderr, "GOTEMPDIRECT curpoc=%d colpoc=%d nL0=%d colList=%d\n", currentPOC, colPOC, len(l0Frames), len(colocated.RefListL0POC))
 		for i, f := range l0Frames {
 			if i < 12 && f != nil {
 				fmt.Fprintf(os.Stderr, "GOTEMPDIRECT_L0 curpoc=%d idx=%d poc=%d frame=%d\n", currentPOC, i, f.POC, f.FrameNum)
 			}
+		}
+		for i := 0; i < len(colocated.RefListL0POC) && i < 12; i++ {
+			frameNum := -1
+			if i < len(colocated.RefListL0Num) {
+				frameNum = colocated.RefListL0Num[i]
+			}
+			fmt.Fprintf(os.Stderr, "GOTEMPDIRECT_COLLIST curpoc=%d idx=%d poc=%d frame=%d\n", currentPOC, i, colocated.RefListL0POC[i], frameNum)
 		}
 	}
 	mbWidth := colocated.MotionStride4 / 4
@@ -816,18 +823,36 @@ func applyTemporalDirect(mb *syntax.MBBidi, colocated *frame.Frame, mbX, mbY int
 			colRef = colocated.RefIdxL0[idx]
 			colMV = colocated.MotionL0[idx]
 
-			// Map colocated ref to current L0 ref (simplified: use ref 0)
 			if colRef < 0 {
-				// Colocated L0 ref unavailable; use zero motion
+				// Colocated L0 ref unavailable; use zero motion.
 				colRef = 0
 				colMV = [2]int16{0, 0}
 			}
 			refL0 = 0
+			targetPOC, targetNum := 0, -1
+			if int(colRef) < len(colocated.RefListL0POC) {
+				targetPOC = colocated.RefListL0POC[colRef]
+				if int(colRef) < len(colocated.RefListL0Num) {
+					targetNum = colocated.RefListL0Num[colRef]
+				}
+				for i, ref := range l0Frames {
+					if ref == nil {
+						continue
+					}
+					if targetNum >= 0 && ref.FrameNum == targetNum && ref.POC == targetPOC {
+						refL0 = int8(i)
+						break
+					}
+					if ref.POC == targetPOC {
+						refL0 = int8(i)
+						break
+					}
+				}
+			}
 
-			// Compute dist_scale_factor
-			// td = colPOC - L0[colRef].POC, tb = currentPOC - L0[colRef].POC
-			if int(colRef) < len(l0Frames) && l0Frames[colRef] != nil {
-				poc0 = l0Frames[colRef].POC
+			// Compute dist_scale_factor using the mapped current L0 reference.
+			if int(refL0) < len(l0Frames) && l0Frames[refL0] != nil {
+				poc0 = l0Frames[refL0].POC
 			} else if len(l0Frames) > 0 && l0Frames[0] != nil {
 				poc0 = l0Frames[0].POC
 			}

@@ -240,7 +240,7 @@ func (c bMotionCache) traceBidiWriteBack(mbX, mbY, poc int, mb *syntax.MBBidi) {
 	}
 }
 
-func (c bMotionCache) saveL0ToFrame(f *frame.Frame, mbFFTypes []uint32) {
+func (c bMotionCache) saveL0ToFrame(f *frame.Frame, mbFFTypes []uint32, l0Frames []*frame.Frame) {
 	if f == nil {
 		return
 	}
@@ -248,6 +248,15 @@ func (c bMotionCache) saveL0ToFrame(f *frame.Frame, mbFFTypes []uint32) {
 	f.MotionL0 = make([][2]int16, len(c.mv[0]))
 	f.RefIdxL0 = append(f.RefIdxL0[:0], c.ref[0]...)
 	f.MBType = append(f.MBType[:0], mbFFTypes...)
+	f.RefListL0POC = f.RefListL0POC[:0]
+	f.RefListL0Num = f.RefListL0Num[:0]
+	for _, ref := range l0Frames {
+		if ref == nil {
+			continue
+		}
+		f.RefListL0POC = append(f.RefListL0POC, ref.POC)
+		f.RefListL0Num = append(f.RefListL0Num, ref.FrameNum)
+	}
 	for i, mv := range c.mv[0] {
 		f.MotionL0[i] = [2]int16{mv.X, mv.Y}
 	}

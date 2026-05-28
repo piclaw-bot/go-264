@@ -52,7 +52,7 @@ func TestBMotionCacheSaveL0ToFrame(t *testing.T) {
 	c.mv4(0)[0] = syntax.MotionVector{X: 7, Y: -2}
 	c.ref4(0)[0] = 1
 	f := &frame.Frame{}
-	c.saveL0ToFrame(f, []uint32{123})
+	c.saveL0ToFrame(f, []uint32{123}, nil)
 	if f.MotionStride4 != 4 || len(f.MotionL0) != 16 || len(f.RefIdxL0) != 16 || len(f.MBType) != 1 {
 		t.Fatalf("unexpected saved frame sizes/stride: stride=%d motion=%d ref=%d mbtype=%d", f.MotionStride4, len(f.MotionL0), len(f.RefIdxL0), len(f.MBType))
 	}

@@ -96,6 +96,80 @@ func (d *Decoder) refL1(refIdx int8) *frame.Frame {
 	return d.refL0(refIdx)
 }
 
+func (d *Decoder) refL0ListWithMods(currentFrameNum uint32, mods []syntax.RefPicListModification) []*frame.Frame {
+	if d == nil || d.DPB == nil {
+		return nil
+	}
+	var refs []*frame.Frame
+	filterRef := dpbHasReferenceFrames(d.DPB.Frames)
+	for _, fr := range d.DPB.Frames {
+		if fr != nil && (!filterRef || fr.IsRef) {
+			refs = append(refs, fr)
+		}
+	}
+	if len(refs) == 0 {
+		return nil
+	}
+	hasDistinctFN := false
+	for i := 1; i < len(refs); i++ {
+		if refs[i].FrameNum != refs[0].FrameNum {
+			hasDistinctFN = true
+			break
+		}
+	}
+	if hasDistinctFN {
+		for i := 0; i < len(refs)-1; i++ {
+			for j := i + 1; j < len(refs); j++ {
+				if refs[j].FrameNum > refs[i].FrameNum || (refs[j].FrameNum == refs[i].FrameNum && refs[j].POC > refs[i].POC) {
+					refs[i], refs[j] = refs[j], refs[i]
+				}
+			}
+		}
+	} else {
+		for i, j := 0, len(refs)-1; i < j; i, j = i+1, j-1 {
+			refs[i], refs[j] = refs[j], refs[i]
+		}
+	}
+	if len(mods) > 0 {
+		maxPicNum := 16
+		pred := int(currentFrameNum) & (maxPicNum - 1)
+		for index, mod := range mods {
+			if mod.Op != 0 && mod.Op != 1 {
+				continue
+			}
+			diff := int(mod.Val) + 1
+			if mod.Op == 0 {
+				pred = (pred - diff) & (maxPicNum - 1)
+			} else {
+				pred = (pred + diff) & (maxPicNum - 1)
+			}
+			found := -1
+			for i, fr := range refs {
+				if fr != nil && fr.FrameNum == pred {
+					found = i
+					break
+				}
+			}
+			if found < 0 {
+				continue
+			}
+			ref := refs[found]
+			if index >= len(refs) {
+				refs = append(refs, ref)
+				continue
+			}
+			if found < index {
+				continue
+			}
+			if found > index {
+				copy(refs[index+1:found+1], refs[index:found])
+			}
+			refs[index] = ref
+		}
+	}
+	return refs
+}
+
 // refBidiL0 returns the refIdx-th L0 (past) reference for B-slice prediction.
 // Uses POC-ordered lookup when the DPB has frames with distinct POCs; falls back
 // to simple index-from-end when all frames share the same POC.

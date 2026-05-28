@@ -18,6 +18,8 @@ type Frame struct {
 	MotionL0      [][2]int16 // decoded list0 4x4 motion cache for B-direct colocated checks
 	RefIdxL0      []int8     // decoded list0 4x4 ref cache matching MotionL0
 	MBType        []uint32   // FFmpeg-style per-MB shape/use flags for colocated direct derivation
+	RefListL0POC  []int      // ordered L0 reference POCs used when this picture was decoded
+	RefListL0Num  []int      // ordered L0 reference frame_num values matching RefListL0POC
 }
 
 // NewFrame allocates a YUV 4:2:0 frame.

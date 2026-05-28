@@ -842,7 +842,14 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 		mbQPCtx[mbIdx] = currentQP
 	}
 
-	bmc.saveL0ToFrame(f, mbFFTypeCtx)
+	var savedL0Frames []*frame.Frame
+	switch hdr.SliceType {
+	case syntax.SliceTypeB:
+		savedL0Frames = d.bidiL0FramesWithMods(f.POC, hdr.FrameNum, hdr.RefModifications[0])
+	case syntax.SliceTypeP:
+		savedL0Frames = d.refL0ListWithMods(hdr.FrameNum, hdr.RefModifications[0])
+	}
+	bmc.saveL0ToFrame(f, mbFFTypeCtx, savedL0Frames)
 	traceSavedMotion(f, mbWidth)
 
 	// In-loop deblocking filter (H.264 §8.7), applied in a second pass over all
