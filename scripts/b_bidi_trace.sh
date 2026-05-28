@@ -416,6 +416,7 @@ go_env=(GOTMPDIR="${GOTMPDIR:-/workspace/tmp/gotmp}" GO264_B_MB_TRACE=1)
 [[ -n "${GO264_B_RESIDUAL_TRACE:-}" ]] && go_env+=(GO264_B_RESIDUAL_TRACE=1)
 if [[ -n "${GO264_B_TYPE_TRACE:-}" ]]; then
   go_env+=(GO264_B_TYPE_TRACE=1 GO264_B_TYPE_TRACE_LIMIT="$MB_LIMIT")
+  [[ -n "${GO264_B_TYPE_TRACE_POC:-}" ]] && go_env+=(GO264_B_TYPE_TRACE_POC="$GO264_B_TYPE_TRACE_POC")
 fi
 if [[ -n "${GO264_P_TYPE_TRACE:-}" ]]; then
   go_env+=(GO264_P_TYPE_TRACE=1 GO264_P_TYPE_TRACE_LIMIT="$MB_LIMIT")
@@ -429,6 +430,7 @@ grep '^GOBPART_MVD' "$OUTDIR/go/bidi.log" >"$OUTDIR/gobpart_mvd.rows" || true
 grep '^GOBSTATE' "$OUTDIR/go/bidi.log" >"$OUTDIR/gobstate.rows" || true
 grep '^GOCABACB' "$OUTDIR/go/bidi.log" >"$OUTDIR/gocabacb.rows" || true
 grep '^GOBTYPE' "$OUTDIR/go/bidi.log" >"$OUTDIR/gobtype.rows" || true
+grep '^GOBSUBTYPE' "$OUTDIR/go/bidi.log" >"$OUTDIR/gobsubtype.rows" || true
 grep '^GOBRES' "$OUTDIR/go/bidi.log" >"$OUTDIR/gobres.rows" || true
 grep '^FFCABAC' "$OUTDIR/ffmpeg/bidi.log" >"$OUTDIR/ffcabac.rows" || true
 grep '^FFPTYPE' "$OUTDIR/ffmpeg/bidi.log" >"$OUTDIR/ffptype.rows" || true
@@ -521,4 +523,6 @@ echo "bpart_mvd_diff=$OUTDIR/bpart_mvd.diff"
 echo "bstate_diff=$OUTDIR/bstate.diff"
 echo "bpart_mvd_raw_diff=$OUTDIR/bpart_mvd_raw.diff"
 echo "gobstate=$OUTDIR/gobstate.rows"
+echo "gobtype=$OUTDIR/gobtype.rows"
+echo "gobsubtype=$OUTDIR/gobsubtype.rows"
 echo "goterminate=$OUTDIR/goterminate.rows"

@@ -145,7 +145,7 @@ def main():
         # 8x8 cache cells while Go normalizes direct cache cells to 12552. Treat
         # both as direct for direct-motion comparisons and only report sub-type
         # differences for non-direct shape disagreements.
-        direct_flags = {12552, 61704}
+        direct_flags = {12552, 20744, 61704}
         all_direct = all(s in direct_flags for s in f['sub']) and all(s in direct_flags for s in g['sub'])
         # For mixed B_8x8 rows, FFDIRECT is emitted before explicit sub-MB MVD
         # decode overwrites non-direct cache cells. Top-level ref/mv fields are

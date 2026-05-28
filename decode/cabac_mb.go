@@ -825,7 +825,13 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 			traceBTypeLimit = n
 		}
 	}
-	traceBType := os.Getenv("GO264_B_TYPE_TRACE") != "" && currentPOC == 20 && mbY*stride4/4+mbX < traceBTypeLimit
+	traceBTypePOC := 20
+	if v := os.Getenv("GO264_B_TYPE_TRACE_POC"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			traceBTypePOC = n
+		}
+	}
+	traceBType := os.Getenv("GO264_B_TYPE_TRACE") != "" && currentPOC == traceBTypePOC && mbY*stride4/4+mbX < traceBTypeLimit
 	typeTrace := ""
 	decodeTypeBin := func(ctx int) int {
 		preLow, preRange, _ := dec.DebugState()
@@ -899,7 +905,7 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 	// B_8x8: decode sub-MB types then ref/MV per sub-partition.
 	if bMBType == syntax.BMBTypeB8x8 {
 		for i := 0; i < 4; i++ {
-			if os.Getenv("GO264_B_TYPE_TRACE") != "" && currentPOC == 20 {
+			if traceBType {
 				mb.SubMBType[i] = decodeCABACBSubMBTypeTrace(dec, models, mbY*stride4/4+mbX, currentPOC, i)
 			} else {
 				mb.SubMBType[i] = decodeCABACBSubMBType(dec, models)
