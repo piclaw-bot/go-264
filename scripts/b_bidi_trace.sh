@@ -24,8 +24,8 @@ if 'FFMVP mb=' not in s:
             A[0], A[1], ref, *mx, *my, sl->mb_x, sl->mb_y, n, list);
 '''
     repl = '''    if (getenv("GO264_FFMPEG_MVP_TRACE") && (sl->slice_type_nos == AV_PICTURE_TYPE_B || sl->slice_type_nos == AV_PICTURE_TYPE_P) && (sl->mb_x + sl->mb_y * h->mb_width) < ''' + mb_limit + ''')
-        fprintf(stderr, "FFMVP mb=%04d poc=%d n=%d pw=%d list=%d ref=%d A=%d/{%d,%d} B=%d/{%d,%d} C=%d/{%d,%d} matches=%d out={%d,%d}\\n",
-                sl->mb_x + sl->mb_y*h->mb_width, h->poc.poc_lsb, n, part_width, list, ref,
+        fprintf(stderr, "FFMVP mb=%04d frame=%d poc=%d n=%d pw=%d list=%d ref=%d A=%d/{%d,%d} B=%d/{%d,%d} C=%d/{%d,%d} matches=%d out={%d,%d}\\n",
+                sl->mb_x + sl->mb_y*h->mb_width, h->poc.frame_num, h->poc.poc_lsb, n, part_width, list, ref,
                 left_ref, A[0], A[1], top_ref, B[0], B[1], diagonal_ref, C[0], C[1], match_count, *mx, *my);
     ff_tlog(h->avctx,
             "pred_motion (%2d %2d %2d) (%2d %2d %2d) (%2d %2d %2d) -> (%2d %2d %2d) at %2d %2d %d list %d\\n",
@@ -38,6 +38,8 @@ if 'FFMVP mb=' not in s:
 else:
     s = re.sub(r'(GO264_FFMPEG_MVP_TRACE"\) && \(sl->slice_type_nos == AV_PICTURE_TYPE_B \|\| sl->slice_type_nos == AV_PICTURE_TYPE_P\) && \(sl->mb_x \+ sl->mb_y \* h->mb_width\) < )\d+(\))', rf'\g<1>{mb_limit}\g<2>', s)
     s = s.replace('sl->slice_type_nos == AV_PICTURE_TYPE_B && (sl->mb_x + sl->mb_y * h->mb_width) < ', '(sl->slice_type_nos == AV_PICTURE_TYPE_B || sl->slice_type_nos == AV_PICTURE_TYPE_P) && (sl->mb_x + sl->mb_y * h->mb_width) < ')
+    s = s.replace('"FFMVP mb=%04d poc=%d n=%d pw=%d list=%d ref=%d ', '"FFMVP mb=%04d frame=%d poc=%d n=%d pw=%d list=%d ref=%d ')
+    s = s.replace('sl->mb_x + sl->mb_y*h->mb_width, h->poc.poc_lsb, n, part_width, list, ref,', 'sl->mb_x + sl->mb_y*h->mb_width, h->poc.frame_num, h->poc.poc_lsb, n, part_width, list, ref,')
 p.write_text(s)
 PY
 }

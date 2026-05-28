@@ -309,6 +309,7 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 	for mbIdx := int(hdr.FirstMbInSlice); mbIdx < maxMBs; mbIdx++ {
 		mbX := mbIdx % mbWidth
 		mbY := mbIdx / mbWidth
+		currentMVPPOC = f.POC
 		predMV := bmc.predictSkipL0(mbX*4, mbY*4)
 		directRefL0, directMVL0 := int8(0), predMV
 		directRefL1, directMVL1 := int8(-1), syntax.MotionVector{}

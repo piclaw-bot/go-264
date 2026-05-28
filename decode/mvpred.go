@@ -13,6 +13,8 @@ import (
 	"github.com/rcarmo/go-264/syntax"
 )
 
+var currentMVPPOC = -1
+
 // writeBackInter4x4 fills the 4x4 MV/ref cache for an inter macroblock after
 // decoding. Each luma4x4BlkIdx cell is written with the partition MV and ref.
 func writeBackInter4x4(mv4 []syntax.MotionVector, ref4 []int8, stride4, mbX, mbY int, mb *syntax.MBInter) {
@@ -271,7 +273,7 @@ func predictMotion4x4WithDiag(mv4 []syntax.MotionVector, ref4 []int8, stride4, x
 	}
 	if (os.Getenv("GO264_B_MVP_TRACE") != "" || os.Getenv("GO264_P_MVP_CAND_TRACE") != "") && stride4 > 0 {
 		mb := (y4/4)*(stride4/4) + x4/4
-		fmt.Fprintf(os.Stderr, "GOMVP mb=%04d x4=%d y4=%d pw=%d ref=%d A=%d/{%d,%d} B=%d/{%d,%d} C=%d/{%d,%d} matches=%d out={%d,%d}\n", mb, x4, y4, partWidth4, targetRef, refA, a.X, a.Y, refB, b.X, b.Y, refC, c.X, c.Y, matchCount, out.X, out.Y)
+		fmt.Fprintf(os.Stderr, "GOMVP mb=%04d poc=%d x4=%d y4=%d pw=%d ref=%d A=%d/{%d,%d} B=%d/{%d,%d} C=%d/{%d,%d} matches=%d out={%d,%d}\n", mb, currentMVPPOC, x4, y4, partWidth4, targetRef, refA, a.X, a.Y, refB, b.X, b.Y, refC, c.X, c.Y, matchCount, out.X, out.Y)
 	}
 	return out
 }
