@@ -994,6 +994,18 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 			if t == 0 {
 				continue
 			}
+			// FFmpeg seeds unused-list cache cells for explicit B_8x8 sub-MBs as
+			// LIST_NOT_USED with zero MV before later sub-part MVP prediction.
+			// Leaving them at PART_NOT_AVAILABLE (-2) changes pred_motion's
+			// fallback rule and breaks mixed-list cases like POC34 MB251 sub3.
+			if !syntax.BMBSubUsesL0(t) {
+				fillRef4(ref4, stride4, bx, by, 2, 2, -1)
+				fillMV4(mv4, ref4, stride4, bx, by, 2, 2, syntax.MotionVector{}, -1)
+			}
+			if !syntax.BMBSubUsesL1(t) {
+				fillRef4(ref4L1, stride4, bx, by, 2, 2, -1)
+				fillMV4(mv4L1, ref4L1, stride4, bx, by, 2, 2, syntax.MotionVector{}, -1)
+			}
 			sc := syntax.BMBSubPartCount(t)
 			fillW4, fillH4 := syntax.BMBSubPartFillDims(t)
 			for j := 0; j < sc; j++ {
