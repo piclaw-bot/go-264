@@ -11,7 +11,7 @@ import argparse
 import re
 
 FF_RE = re.compile(
-    r'FFCOLZERO(?P<kind>8?) mb=(?P<mb>\d+)(?: i8=(?P<i8>\d+))?(?: i4=(?P<i4>\d+))?.*?'
+    r'FFCOLZERO(?P<kind>8?) mb=(?P<mb>\d+)(?: poc=(?P<poc>-?\d+))?(?: i8=(?P<i8>\d+))?(?: i4=(?P<i4>\d+))?.*?'
     r'colref0=(?P<ref>-?\d+).*?colmv=\{(?P<x>-?\d+),(?P<y>-?\d+)\}(?: zero=(?P<zero>\d+))? ref0=(?P<ref0>-?\d+) ref1=(?P<ref1>-?\d+)'
     r'(?: mv0=\{(?P<mv0x>-?\d+),(?P<mv0y>-?\d+)\} mv1=\{(?P<mv1x>-?\d+),(?P<mv1y>-?\d+)\})?.*?'
     r'is_b8x8=(?P<is_b8x8>\d+) sub_type=(?P<sub_type>\d+) mb_type=(?P<mb_type>-?\d+)'

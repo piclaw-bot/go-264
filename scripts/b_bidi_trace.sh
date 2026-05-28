@@ -80,25 +80,29 @@ trace = f'''   if( IS_INTER( mb_type ) ) {{
                 sl->mv_cache[0][s3][0], sl->mv_cache[0][s3][1]);
    }}
 '''
+trace_block = trace[len(needle):]
 if 'GO264_FFMPEG_B_MB_TRACE' in s:
-    # Replace an older injected block by locating it after write_back_motion.
-    start = s.find('   if( IS_INTER( mb_type ) ) {\n        h->chroma_pred_mode_table[mb_xy] = 0;\n        write_back_motion(h, sl, mb_type);\n   }\n   if (getenv("GO264_FFMPEG_B_MB_TRACE")')
+    # Refresh any existing injected FFBIDI block regardless of nearby trace
+    # statements that may have been added by other diagnostics.
+    marker = 'if (getenv("GO264_FFMPEG_B_MB_TRACE")'
+    start = s.find(marker)
     if start >= 0:
-        brace = s.find('{', s.find('if (getenv("GO264_FFMPEG_B_MB_TRACE")', start))
+        brace = s.find('{', start)
         depth = 0
         end = None
         for i in range(brace, len(s)):
-            if s[i] == '{': depth += 1
+            if s[i] == '{':
+                depth += 1
             elif s[i] == '}':
                 depth -= 1
                 if depth == 0:
                     end = i + 2
                     break
-        if end is None: raise SystemExit('unterminated existing FFBIDI trace block')
-        # Include the preceding IS_INTER block in replacement.
-        s = s[:start] + trace + s[end:]
+        if end is None:
+            raise SystemExit('unterminated existing FFBIDI trace block')
+        s = s[:start] + trace_block + s[end:]
     else:
-        print('existing GO264_FFMPEG_B_MB_TRACE found but block shape not recognized; leaving as-is')
+        raise SystemExit('existing GO264_FFMPEG_B_MB_TRACE found but block start not recognized')
 else:
     if needle not in s:
         raise SystemExit('FFBIDI write_back_motion hook target not found')

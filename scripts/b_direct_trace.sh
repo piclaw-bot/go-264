@@ -170,7 +170,7 @@ if 'FFCOLZERO mb=' not in s:
     if needle not in s:
         raise SystemExit('ffmpeg h264_direct.c spatial sub-8x8 colocated-zero hook target not found')
     s = s.replace(needle, repl, 1)
-if 'FFCOLZERO8 mb=%04d i8=%d coltype0=' not in s or 'FFCOLZERO mb=%04d i8=%d i4=%d coltype0=' not in s:
+if not re.search(r'FFCOLZERO8 mb=%04d(?: poc=%d)? i8=%d coltype0=', s) or not re.search(r'FFCOLZERO mb=%04d(?: poc=%d)? i8=%d i4=%d coltype0=', s):
     raise SystemExit('ffmpeg h264_direct.c colocated-zero trace postcondition failed')
 p.write_text(s)
 PY

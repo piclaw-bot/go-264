@@ -11,7 +11,7 @@ import argparse
 import re
 
 FF_RE = re.compile(
-    r'FFCOLZERO(?P<kind>8?) mb=(?P<mb>\d+)(?: i8=(?P<part>\d+))?(?: i4=\d+)?.*?'
+    r'FFCOLZERO(?P<kind>8?) mb=(?P<mb>\d+)(?: poc=(?P<poc>-?\d+))?(?: i8=(?P<part>\d+))?(?: i4=\d+)?.*?'
     r'colref0=(?P<ref>-?\d+).*?colmv=\{(?P<x>-?\d+),(?P<y>-?\d+)\} ref0=(?P<ref0>-?\d+) ref1=(?P<ref1>-?\d+)'
 )
 GO_RE = re.compile(
