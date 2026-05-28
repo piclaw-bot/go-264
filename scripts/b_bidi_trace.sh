@@ -223,6 +223,7 @@ s = s.replace('sl->mb_x + sl->mb_y*h->mb_width, i, list, mpx, mpy,', 'sl->mb_x +
 s = s.replace('sl->mb_x + sl->mb_y*h->mb_width, list, mpx, mpy,', 'sl->mb_x + sl->mb_y*h->mb_width, h->poc.frame_num, list, mpx, mpy,')
 s = s.replace('sl->mb_x + sl->mb_y*h->mb_width, i, j, list,\n                                _amvdX', 'sl->mb_x + sl->mb_y*h->mb_width, h->poc.frame_num, i, j, list,\n                                _amvdX')
 s = re.sub(r'(GO264_FFMPEG_CABAC_TRACE"\) && sl->slice_type_nos == AV_PICTURE_TYPE_B && \(sl->mb_x \+ sl->mb_y \* h->mb_width\) < )\d+(\)\n\s*fprintf\(stderr, "FF_B(?:8x8|PART)_MVD)', rf'\g<1>{mb_limit}\g<2>', s)
+s = s.replace('(sl->mb_x + sl->mb_y * h->mb_width) < 8)', f'(sl->mb_x + sl->mb_y * h->mb_width) < {mb_limit})')
 # Let the generic FF MVD component trace cover both B and P slices when present.
 s = s.replace('sl->slice_type_nos == AV_PICTURE_TYPE_B && (sl->mb_x + sl->mb_y * h->mb_width) < ', '(sl->slice_type_nos == AV_PICTURE_TYPE_B || sl->slice_type_nos == AV_PICTURE_TYPE_P) && (sl->mb_x + sl->mb_y * h->mb_width) < ')
 # Refresh older FFREF injections from previous runs: trace B as well as P and

@@ -513,9 +513,15 @@ func writeBackBidiListContext(mv4 []syntax.MotionVector, ref4 []int8, stride4, m
 }
 
 func direct16x16PartMotion(mb *syntax.MBBidi, list, part int) (syntax.MotionVector, int8) {
-	mv, ref := mb.SubMVL0[part*4], mb.RefIdxL0[0]
+	refPart := part
+	if refPart < 0 {
+		refPart = 0
+	} else if refPart > 3 {
+		refPart = 3
+	}
+	mv, ref := mb.SubMVL0[part*4], mb.RefIdxL0[refPart]
 	if list == 1 {
-		mv, ref = mb.SubMVL1[part*4], mb.RefIdxL1[0]
+		mv, ref = mb.SubMVL1[part*4], mb.RefIdxL1[refPart]
 	}
 	return mv, ref
 }
