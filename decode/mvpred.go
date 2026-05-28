@@ -7,6 +7,7 @@ package decode
 import (
 	"fmt"
 	"os"
+	"strconv"
 
 	"github.com/rcarmo/go-264/frame"
 	"github.com/rcarmo/go-264/syntax"
@@ -757,13 +758,18 @@ func applyTemporalDirect(mb *syntax.MBBidi, colocated *frame.Frame, mbX, mbY int
 	if mb == nil || colocated == nil || colocated.MotionStride4 <= 0 {
 		return
 	}
-	if os.Getenv("GO264_TEMPORAL_DIRECT_TRACE") != "" && mbX == 0 && mbY == 0 {
-		fmt.Fprintf(os.Stderr, "GOTEMPDIRECT curpoc=%d colpoc=%d nL0=%d\n", currentPOC, colPOC, len(l0Frames))
+	traceTemporal := os.Getenv("GO264_TEMPORAL_DIRECT_TRACE") != ""
+	tracePOC := 20
+	if v := os.Getenv("GO264_TEMPORAL_DIRECT_TRACE_POC"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			tracePOC = n
+		}
 	}
-	if os.Getenv("GO264_TEMPORAL_DIRECT_TRACE") != "" && currentPOC == 20 {
+	if traceTemporal && mbX == 0 && mbY == 0 && currentPOC == tracePOC {
+		fmt.Fprintf(os.Stderr, "GOTEMPDIRECT curpoc=%d colpoc=%d nL0=%d\n", currentPOC, colPOC, len(l0Frames))
 		for i, f := range l0Frames {
-			if i < 3 {
-				fmt.Fprintf(os.Stderr, "GOTEMPDIRECT_L0 curpoc=20 idx=%d poc=%d\n", i, f.POC)
+			if i < 12 && f != nil {
+				fmt.Fprintf(os.Stderr, "GOTEMPDIRECT_L0 curpoc=%d idx=%d poc=%d frame=%d\n", currentPOC, i, f.POC, f.FrameNum)
 			}
 		}
 	}
@@ -842,7 +848,7 @@ func applyTemporalDirect(mb *syntax.MBBidi, colocated *frame.Frame, mbX, mbY int
 			}
 		}
 
-		if os.Getenv("GO264_TEMPORAL_DIRECT_TRACE") != "" && currentPOC == 20 && mbY == 0 && mbX < 20 {
+		if traceTemporal && currentPOC == tracePOC && mbX < 220 {
 			fmt.Fprintf(os.Stderr, "GOTEMPDIRECT_PART mb=%04d poc=%d part=%d x4=%d y4=%d colref=%d colmv={%d,%d} poc0=%d td=%d tb=%d scale=%d ref0=%d mv0={%d,%d} mv1={%d,%d}\n", mbY*(colocated.MotionStride4/4)+mbX, currentPOC, part, x4, y4, colRef, colMV[0], colMV[1], poc0, td, tb, scale, refL0, mvL0.X, mvL0.Y, mvL1.X, mvL1.Y)
 		}
 		mb.RefIdxL0[part] = refL0
