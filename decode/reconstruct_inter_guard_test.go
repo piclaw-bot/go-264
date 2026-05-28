@@ -52,12 +52,19 @@ func TestReconstructMBBidiUsesPartitionListMapping(t *testing.T) {
 	d := &Decoder{DPB: frame.NewDPB(4)}
 	ref0 := frame.NewFrame(16, 16)
 	ref1 := frame.NewFrame(16, 16)
+	ref0.POC, ref1.POC = 10, 30
+	ref0.IsRef, ref1.IsRef = true, true
 	for i := range ref0.Y {
 		ref0.Y[i] = 20
 		ref1.Y[i] = 80
 	}
+	for i := range ref0.U {
+		ref0.U[i], ref0.V[i] = 40, 90
+		ref1.U[i], ref1.V[i] = 100, 150
+	}
 	d.DPB.Frames = []*frame.Frame{ref0, ref1}
 	f := frame.NewFrame(16, 16)
+	f.POC = 20
 	d.reconstructMBBidi(f, &syntax.MBBidi{MBType: 12}, 0, 0, 26) // B_L0_Bi_16x8
 	for y := 0; y < 8; y++ {
 		for x := 0; x < 16; x++ {
@@ -73,6 +80,20 @@ func TestReconstructMBBidiUsesPartitionListMapping(t *testing.T) {
 			}
 		}
 	}
+	for y := 0; y < 4; y++ {
+		for x := 0; x < 8; x++ {
+			if got := f.U[y*f.StrideC+x]; got != 100 {
+				t.Fatalf("top L0 chroma U (%d,%d) got %d want 100", x, y, got)
+			}
+		}
+	}
+	for y := 4; y < 8; y++ {
+		for x := 0; x < 8; x++ {
+			if got := f.U[y*f.StrideC+x]; got != 70 {
+				t.Fatalf("bottom Bi chroma U (%d,%d) got %d want blend 70", x, y, got)
+			}
+		}
+	}
 }
 
 func TestReconstructMBBidiUsesB8x8SubListMapping(t *testing.T) {
@@ -82,6 +103,10 @@ func TestReconstructMBBidiUsesB8x8SubListMapping(t *testing.T) {
 	for i := range ref0.Y {
 		ref0.Y[i] = 30
 		ref1.Y[i] = 90
+	}
+	for i := range ref0.U {
+		ref0.U[i], ref0.V[i] = 50, 90
+		ref1.U[i], ref1.V[i] = 110, 150
 	}
 	d.DPB.Frames = []*frame.Frame{ref0, ref1}
 	f := frame.NewFrame(16, 16)
@@ -98,6 +123,18 @@ func TestReconstructMBBidiUsesB8x8SubListMapping(t *testing.T) {
 	}
 	if got := f.PixelY(8, 8); got != 60 {
 		t.Fatalf("B8x8 direct fallback sub block got %d want blend 60", got)
+	}
+	if got := f.U[0]; got != 110 {
+		t.Fatalf("B8x8 L0 chroma got %d want 110", got)
+	}
+	if got := f.U[4]; got != 50 {
+		t.Fatalf("B8x8 L1 chroma got %d want 50", got)
+	}
+	if got := f.U[4*f.StrideC]; got != 80 {
+		t.Fatalf("B8x8 Bi chroma got %d want blend 80", got)
+	}
+	if got := f.U[4*f.StrideC+4]; got != 80 {
+		t.Fatalf("B8x8 direct chroma got %d want blend 80", got)
 	}
 }
 

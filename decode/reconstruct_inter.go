@@ -516,31 +516,51 @@ func (d *Decoder) fillChromaInterPred(dst []uint8, plane []uint8, stride, width,
 	if lastPixel < 0 || lastPixel >= len(plane) {
 		return
 	}
-	dx := int(mv.X) >> 3
-	dy := int(mv.Y) >> 3
-	sx0, sy0 := baseX+dx, baseY+dy
-	if sx0 >= 0 && sy0 >= 0 && sx0+8 <= width && sy0+8 <= height {
+	intX := int(mv.X) >> 3
+	intY := int(mv.Y) >> 3
+	fracX := int(mv.X) & 7
+	fracY := int(mv.Y) & 7
+	sx0, sy0 := baseX+intX, baseY+intY
+	if fracX == 0 && fracY == 0 && sx0 >= 0 && sy0 >= 0 && sx0+8 <= width && sy0+8 <= height {
 		for y := 0; y < 8; y++ {
 			copy(dst[y*8:y*8+8], plane[(sy0+y)*stride+sx0:(sy0+y)*stride+sx0+8])
 		}
 		return
 	}
+	sample := func(x, y int) int {
+		if x < 0 {
+			x = 0
+		}
+		if y < 0 {
+			y = 0
+		}
+		if x >= width {
+			x = width - 1
+		}
+		if y >= height {
+			y = height - 1
+		}
+		return int(plane[y*stride+x])
+	}
+	if fracX == 0 && fracY == 0 {
+		for y := 0; y < 8; y++ {
+			for x := 0; x < 8; x++ {
+				dst[y*8+x] = uint8(sample(sx0+x, sy0+y))
+			}
+		}
+		return
+	}
+	wx0, wx1 := 8-fracX, fracX
+	wy0, wy1 := 8-fracY, fracY
 	for y := 0; y < 8; y++ {
 		for x := 0; x < 8; x++ {
 			sx, sy := sx0+x, sy0+y
-			if sx < 0 {
-				sx = 0
-			}
-			if sy < 0 {
-				sy = 0
-			}
-			if sx >= width {
-				sx = width - 1
-			}
-			if sy >= height {
-				sy = height - 1
-			}
-			dst[y*8+x] = plane[sy*stride+sx]
+			a := sample(sx, sy)
+			b := sample(sx+1, sy)
+			c := sample(sx, sy+1)
+			d := sample(sx+1, sy+1)
+			v := wx0*wy0*a + wx1*wy0*b + wx0*wy1*c + wx1*wy1*d
+			dst[y*8+x] = uint8((v + 32) >> 6)
 		}
 	}
 }
@@ -835,6 +855,45 @@ func (d *Decoder) fillBPredByUse(dst []uint8, fallback *frame.Frame, mbX, mbY, d
 	}
 }
 
+func (d *Decoder) fillBChromaByUse(dst []uint8, comp int, fallback *frame.Frame, mbX, mbY, dstX, dstY, w, h int, refIdxL0, refIdxL1 int8, mvL0, mvL1 syntax.MotionVector, useL0, useL1 bool) {
+	if len(dst) < 64 || dstX < 0 || dstY < 0 || w <= 0 || h <= 0 || dstX+w > 8 || dstY+h > 8 {
+		return
+	}
+	var predL0, predL1 [64]uint8
+	fill := func(out []uint8, ref *frame.Frame, mv syntax.MotionVector) {
+		if ref == nil {
+			ref = fallback
+		}
+		if ref == nil {
+			return
+		}
+		plane := ref.U
+		if comp != 0 {
+			plane = ref.V
+		}
+		d.fillChromaInterPredRect(out, plane, ref.StrideC, ref.Width/2, frameChromaHeight(ref), mbX*8+dstX, mbY*8+dstY, dstX, dstY, w, h, mv)
+	}
+	if useL0 {
+		fill(predL0[:], d.refL0(refIdxL0), mvL0)
+	}
+	if useL1 {
+		fill(predL1[:], d.refL1(refIdxL1), mvL1)
+	}
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			idx := (dstY+y)*8 + dstX + x
+			switch {
+			case useL0 && useL1:
+				dst[idx] = uint8((uint16(predL0[idx]) + uint16(predL1[idx]) + 1) >> 1)
+			case useL1:
+				dst[idx] = predL1[idx]
+			case useL0:
+				dst[idx] = predL0[idx]
+			}
+		}
+	}
+}
+
 func coeff8x8NonZero(block [64]int16) bool {
 	for i := range block {
 		if block[i] != 0 {
@@ -915,22 +974,44 @@ func (d *Decoder) reconstructMBBidi(f *frame.Frame, mb *syntax.MBBidi, mbX, mbY,
 		}
 	}
 	var blended [256]uint8
+	var blendedU, blendedV [64]uint8
+	fillChromaRect := func(dstX, dstY, w, h int, refIdxL0, refIdxL1 int8, mvL0, mvL1 syntax.MotionVector, useL0, useL1 bool) {
+		d.fillBChromaByUse(blendedU[:], 0, f, mbX, mbY, dstX, dstY, w, h, refIdxL0, refIdxL1, mvL0, mvL1, useL0, useL1)
+		d.fillBChromaByUse(blendedV[:], 1, f, mbX, mbY, dstX, dstY, w, h, refIdxL0, refIdxL1, mvL0, mvL1, useL0, useL1)
+	}
 	if mb.MBType == syntax.BMBTypeB8x8 {
 		for part := 0; part < 4; part++ {
 			x0 := (part & 1) * 8
 			y0 := (part >> 1) * 8
 			d.fillBSubPrediction(blended[:], mb, f, mbX, mbY, x0, y0, part)
+			t := mb.SubMBType[part]
+			useL0 := syntax.BSubUsesL0(t)
+			useL1 := syntax.BSubUsesL1(t)
+			cx0, cy0 := x0/2, y0/2
+			if t == 0 {
+				fillChromaRect(cx0, cy0, 4, 4, mb.RefIdxL0[part], mb.RefIdxL1[part], mb.SubMVL0[part*4], mb.SubMVL1[part*4], true, true)
+				continue
+			}
+			w4, h4 := syntax.BMBSubPartFillDims(t)
+			parts := syntax.BMBSubPartCount(t)
+			for j := 0; j < parts; j++ {
+				ox4, oy4 := bSubPartOffset4x4(t, j)
+				idx := part*4 + j
+				fillChromaRect(cx0+ox4*2, cy0+oy4*2, w4*2, h4*2, mb.RefIdxL0[part], mb.RefIdxL1[part], mb.SubMVL0[idx], mb.SubMVL1[idx], useL0, useL1)
+			}
 		}
 	} else if bMacroblockPartCount(mb.MBType) == 2 {
 		for part := 0; part < 2; part++ {
 			x0, y0, w, h := bPartRect(mb.MBType, part)
 			d.fillBPartPrediction(blended[:], mb, f, mbX, mbY, x0, y0, w, h, part)
+			fillChromaRect(x0/2, y0/2, w/2, h/2, mb.RefIdxL0[part], mb.RefIdxL1[part], mb.MVL0[part], mb.MVL1[part], syntax.BPartUsesL0(mb.MBType, part), syntax.BPartUsesL1(mb.MBType, part))
 		}
 	} else if mb.MBType == syntax.BMBTypeDirect16x16 && direct16HasSubMVs(mb) {
 		for part := 0; part < 4; part++ {
 			x0 := (part & 1) * 8
 			y0 := (part >> 1) * 8
 			d.fillBPredByUse(blended[:], f, mbX, mbY, x0, y0, 8, 8, mb.RefIdxL0[part], mb.RefIdxL1[part], mb.SubMVL0[part*4], mb.SubMVL1[part*4], true, true)
+			fillChromaRect(x0/2, y0/2, 4, 4, mb.RefIdxL0[part], mb.RefIdxL1[part], mb.SubMVL0[part*4], mb.SubMVL1[part*4], true, true)
 		}
 	} else {
 		var predL0 [256]uint8
@@ -944,10 +1025,13 @@ func (d *Decoder) reconstructMBBidi(f *frame.Frame, mb *syntax.MBBidi, mbX, mbY,
 		useBi := mb.MBType == syntax.BMBTypeBi16x16
 		if useBi {
 			syntax.BiPredBlend(blended[:], predL0[:], predL1[:], 256)
+			fillChromaRect(0, 0, 8, 8, mb.RefIdxL0[0], mb.RefIdxL1[0], mb.MVL0[0], mb.MVL1[0], true, true)
 		} else if syntax.BMBTypeL116x16 == mb.MBType {
 			copy(blended[:], predL1[:])
+			fillChromaRect(0, 0, 8, 8, mb.RefIdxL0[0], mb.RefIdxL1[0], mb.MVL0[0], mb.MVL1[0], false, true)
 		} else {
 			copy(blended[:], predL0[:])
+			fillChromaRect(0, 0, 8, 8, mb.RefIdxL0[0], mb.RefIdxL1[0], mb.MVL0[0], mb.MVL1[0], true, false)
 		}
 	}
 	residualMB := &syntax.MBInter{
@@ -959,6 +1043,8 @@ func (d *Decoder) reconstructMBBidi(f *frame.Frame, mb *syntax.MBBidi, mbX, mbY,
 		ChromaTotalCoeff: mb.ChromaTotalCoeff,
 	}
 	d.writeInterResidual(f, residualMB, blended[:], mbX, mbY, qp)
+	d.writeChromaInterResidual(f, residualMB, blendedU[:], 0, mbX, mbY, qp)
+	d.writeChromaInterResidual(f, residualMB, blendedV[:], 1, mbX, mbY, qp)
 }
 
 func directTraceSubTypes(mb *syntax.MBBidi) (uint32, uint32, uint32, uint32) {

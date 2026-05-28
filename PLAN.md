@@ -100,10 +100,10 @@ Still gated:
 | `testsrc_cabac_p.h264` frame 0 | Y=56.96 U=60.68 V=64.62 dB |
 | `bbb-frame0` CABAC avg PSNR | ~31 dB (est.) |
 | `bbb_annexb.h264` frame 0 | Y=80.33 U=56.14 V=57.08 dB |
-| `bbb_annexb.h264` 300-frame avg | Y=8.17 U=18.97 V=28.81 dB |
-| `bbb_annexb.h264` B POC=2 / POC=6 | Y≈21.8 / 21.5 dB |
-| `bbb_annexb.h264` later B POC=14 / POC=20 | Y≈19.6 / 19.3 dB |
-| `bbb_annexb.h264` 300-frame average PSNR | Y=9.11 U=19.25 V=29.01 dB |
+| `bbb_annexb.h264` 300-frame avg | Y=21.38 U=33.83 V=38.30 dB |
+| `bbb_annexb.h264` B POC=2 / POC=6 | Y≈41.4 / 37.8 dB display-order early B frames |
+| `bbb_annexb.h264` later B/P frames | luma remains quality-gated by remaining inter prediction/reference parity |
+| `bbb_annexb.h264` frame-0 deblocked PSNR | Y=80.33 U=56.14 V=57.08 dB |
 | BBB baseline decode allocations | ~10.9 MB/op, ~1.3k allocs/op |
 | BBB baseline decode sample | ~44-52 ms/op typical recent sample |
 
@@ -148,7 +148,7 @@ Recent completed guardrails and low-level improvements:
 - CAVLC residual decode uses fixed stack arrays for trailing-one signs and levels, including chroma DC, and public residual/VLC helpers guard nil direct-reader use while clamping malformed coefficient counts before fixed-buffer indexing; inter 8×8-transform residuals follow FFmpeg's `zigzag_scan8x8_cavlc` chunk ordering before coefficients are split back into the decoder's four 4×4 storage slots.
 - `pred.InterPred16x16At` has fast paths for interior fractional-MV bilinear interpolation plus horizontal-only/vertical-only fractional interpolation while preserving the clipped edge path.
 - `decode.copyInterSubRect` copies integer-MV P8x8 sub-rectangles directly, preserving fractional fallback semantics.
-- `decode.fillChromaInterPred` has an interior 8×8 row-copy fast path plus malformed-input guards; inter chroma prediction now respects P16x8/P8x16/P8x8 partition boundaries and P8x8 8×4/4×8/4×4 sub-partition MVs at 4:2:0 scale.
+- `decode.fillChromaInterPred` has an interior 8×8 row-copy fast path plus malformed-input guards; inter chroma prediction now respects P16x8/P8x16/P8x8 and B-slice partition boundaries, including P8x8/B8x8 8×4/4×8/4×4 sub-partition MVs at 4:2:0 scale and H.264 chroma interpolation.
 - Inter luma/chroma residual write-back now writes directly to frame rows after the same add + clip operation, avoiding per-pixel setter calls in the hot path; direct helper inputs, frame extents, residual category/coefficient bounds, inter chroma CBP syntax-bit masking, CABAC arithmetic decoder inputs, static CABAC chroma DC scan storage, and CABAC 8×8 residual quadrant/non-zero-context handling are guarded to avoid panics, coefficient scrambling, or stale neighbour context on malformed internal tests/tools.
 - Inter zero-residual paths copy prediction directly for uncoded luma CBP groups, zero-`TotalCoeff` 4×4 blocks, all-zero 8×8 transform groups, chroma CBP=0, and zero chroma 4×4 residual blocks.
 - Decoder and `trace264` now share the same QP wraparound semantics and 4×4 MV/ref-cache source-of-truth model; B-intra QP deltas are read from parsed intra payloads in both decode/trace flows, stale macroblock-level trace MV context was removed, B_8x8 direct sub-MBs are written back to both list caches, two-part B MVP routing is derived from partition shape, P16x8 top motion is written before bottom MVP prediction, and MV cache read/fill helpers reject bad strides, short slices, and negative origins.

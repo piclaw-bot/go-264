@@ -45,7 +45,7 @@ Recent reference values:
 | `bbb_annexb.h264` frame 0 | Y=80.33 U=56.14 V=57.08 dB |
 | `bbb_annexb.h264` B POC=2 / POC=6 | Y≈21.8 / 21.5 dB |
 | `bbb_annexb.h264` later B POC=14 / POC=20 | Y≈19.6 / 19.3 dB |
-| `bbb_annexb.h264` 300-frame average | Y=8.17 U=18.97 V=28.81 dB |
+| `bbb_annexb.h264` 300-frame average | Y=21.38 U=33.83 V=38.30 dB |
 
 ## Package layout
 
@@ -156,7 +156,7 @@ Recent performance/safety work:
 - `decode.copyInterSubRect` copies integer-MV P8x8 sub-rectangles directly instead of predicting a full 16×16 block.
 - `decode.fillChromaInterPred` has an interior 8×8 row-copy fast path with malformed-input guards.
 - Inter residual write-back now writes luma and chroma rows directly into frame planes after the same add + clip operation, avoiding per-pixel setter calls in the hot path; residual category/coefficient bounds and frame extents are validated before writes, and inter chroma CBP is masked to its two syntax bits before CAVLC chroma residual consumption. CABAC chroma DC residuals use a static identity scan table, and CABAC 8×8 residuals mirror FFmpeg by storing the decoded 8×8 coefficient count into all four covered 4×4 non-zero-context slots and by splitting/joining the 8×8 coefficient matrix through true 4×4 quadrants instead of contiguous 16-coefficient chunks.
-- Inter chroma prediction now follows luma partition boundaries for P16x8, P8x16, and P8x8 macroblocks, including P8x8 8×4/4×8/4×4 sub-partition MVs at 4:2:0 scale.
+- Inter chroma prediction now follows luma partition boundaries for P16x8, P8x16, P8x8, and B-slice partition/sub-partition macroblocks, including P8x8/B8x8 8×4/4×8/4×4 sub-partition MVs at 4:2:0 scale and H.264 chroma quarter-sample interpolation.
 - MV/ref caches are the single source of motion-prediction context in the decoder and trace tooling. Cache reads/fills and CABAC MV/ref context helpers reject malformed strides, short slices, and negative origins instead of panicking in direct helper/tool use. CABAC B-slice motion now keeps separate L0/L1 MVD context caches, writes B_8x8 direct sub-MB motion back into both list caches, routes all two-part B MB types through shape-derived 16×8/8×16 directional MVP helpers, and writes P16x8 top-part motion into cache before predicting the bottom part. CABAC MVD context cache write-back mirrors FFmpeg by keeping the full signed MVD for reconstruction while storing `min(abs(mvd),70)` for future context selection.
 - QP updates are centralized through a wraparound helper so both decoder and `trace264` normalize arbitrary signed deltas consistently; SPS/PPS scaling-list wraparound uses the same defensive modulo style for malformed deltas.
 - Inter zero-residual paths copy prediction directly: uncoded luma CBP groups, zero-`TotalCoeff` 4×4 blocks, all-zero 8×8 transform groups, chroma CBP=0, and zero chroma 4×4 residual blocks.
