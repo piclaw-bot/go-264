@@ -563,8 +563,11 @@ func predictBPartMotion4x4(mv4 []syntax.MotionVector, ref4 []int8, stride4, x4, 
 				switch mbType {
 				case 5:
 					if x4+4 >= stride4 {
-						if tl, tlRef := getMV4(mv4, ref4, stride4, x4+1, y4-1); tlRef == targetRef {
-							return tl
+						if top, topRef := getMV4(mv4, ref4, stride4, x4+1, y4-1); topRef == targetRef {
+							return top
+						}
+						if left, leftRef := getMV4(mv4, ref4, stride4, x4+1, y4); leftRef == targetRef {
+							return left
 						}
 					}
 				case 11:
