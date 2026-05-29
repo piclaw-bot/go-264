@@ -570,6 +570,15 @@ func predictBPartMotion4x4(mv4 []syntax.MotionVector, ref4 []int8, stride4, x4, 
 							return left
 						}
 					}
+				case 7:
+					if x4+4 >= stride4 {
+						// FFmpeg's B_L1_8x16 right partition reuses the just-written
+						// left L1 partition at the right picture edge when it has the
+						// target ref.
+						if left, leftRef := getMV4(mv4, ref4, stride4, x4+1, y4); leftRef == targetRef {
+							return left
+						}
+					}
 				case 9, 11:
 					if x4+4 >= stride4 {
 						// At the right picture edge FFmpeg's mixed-list 8x16 right-hand

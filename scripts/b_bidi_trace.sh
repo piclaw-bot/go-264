@@ -390,6 +390,7 @@ s = s.replace('h->poc.frame_num,\n                IS_INTRA(mb_type)', 'h->poc.fr
 s = s.replace('h->poc.frame_num, h->poc.poc_lsb,\n                IS_INTRA(mb_type)', 'h->poc.frame_num, ' + full_poc + ',\n                IS_INTRA(mb_type)')
 # Do not alter the older FFCABAC summary format; it has no poc field.
 s = s.replace("h->poc.frame_num, h->poc.poc_lsb,\n                IS_INTRA(mb_type) ? 'I'", "h->poc.frame_num,\n                IS_INTRA(mb_type) ? 'I'")
+s = s.replace("h->poc.frame_num, " + full_poc + ",\n                IS_INTRA(mb_type) ? 'I'", "h->poc.frame_num,\n                IS_INTRA(mb_type) ? 'I'")
 s = s.replace('FF_B8x8_MVD mb=%04d frame=%d sub=', 'FF_B8x8_MVD mb=%04d frame=%d poc=%d sub=')
 s = s.replace('FF_BPART_MVD mb=%04d frame=%d part=', 'FF_BPART_MVD mb=%04d frame=%d poc=%d part=')
 s = s.replace('h->poc.frame_num, i, j, list,', 'h->poc.frame_num, ' + full_poc + ', i, j, list,')
