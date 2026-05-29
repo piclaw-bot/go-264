@@ -1196,7 +1196,7 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 				}
 				mvd := mb.MVL0[i]
 				mvp := predictBPartMotion4x4(mv4, ref4, stride4, x4, y4, bMBType, i, mb.RefIdxL0[i])
-				if bMBType == 16 && i == 1 && y4 == 0 && mb.RefIdxL0[1] == mb.RefIdxL0[0] {
+				if bMBType == 16 && i == 1 && y4 == 0 && x4+4 < stride4 && mb.RefIdxL0[1] == mb.RefIdxL0[0] {
 					// At the top picture edge FFmpeg's B_Bi_L0_16x8 second L0 partition
 					// reuses the first partition's predictor, not its MVD-adjusted final
 					// MV. This keeps POC56 top-row direct representatives aligned without
