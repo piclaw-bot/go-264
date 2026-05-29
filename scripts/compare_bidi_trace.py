@@ -127,6 +127,17 @@ def ff_uses(row: dict[str, object], list_idx: int, part: int) -> bool:
     return (t & (16384 if part == 0 else 32768)) != 0
 
 def ref_mv_mismatch(f: dict[str, object], g: dict[str, object]) -> bool:
+    # Direct-mode rows can expose a stale/representative first cache cell on one
+    # side while the per-sub representatives and second partition already agree.
+    # Do not treat that trace-presentation difference as a decode mismatch.
+    if (
+        all(int(v) in DIRECT_FLAGS for v in f['sub'])
+        and all(int(v) in DIRECT_FLAGS for v in g['sub'])
+        and normalize_sub_flags(f['sub']) == normalize_sub_flags(g['sub'])
+        and f['p1'] == g['p1']
+        and f['submv'] == g['submv']
+    ):
+        return False
     fr = f['ref_mv']; gr = g['ref_mv']
     # Report use-mask differences before checking values. Unused-list cache cells
     # are intentionally noisy in FFmpeg and Go and should not drive bisection.
