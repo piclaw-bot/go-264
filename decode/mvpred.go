@@ -211,11 +211,27 @@ func cabacMVDAMVD(mvd4 []syntax.MotionVector, stride4, x4, y4 int, component int
 	return absComponent(x4-1, y4) + absComponent(x4, y4-1)
 }
 
+func envInt(name string, fallback int) int {
+	if v := os.Getenv(name); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
+	}
+	return fallback
+}
+
 func tracePMVP(mbX, mbY, poc, part int, ref int8, x4, y4, w4, h4 int, pred, mvd, final syntax.MotionVector) {
-	if os.Getenv("GO264_P_MVP_TRACE") == "" || poc != 28 || mbY != 0 || mbX >= 25 {
+	if os.Getenv("GO264_P_MVP_TRACE") == "" {
 		return
 	}
-	fmt.Fprintf(os.Stderr, "GOPMVP mb=%04d poc=%d part=%d ref=%d x4=%d y4=%d w4=%d h4=%d pred={%d,%d} mvd={%d,%d} final={%d,%d}\n", mbY*40+mbX, poc, part, ref, x4, y4, w4, h4, pred.X, pred.Y, mvd.X, mvd.Y, final.X, final.Y)
+	tracePOC := envInt("GO264_P_MVP_TRACE_POC", 28)
+	traceFromMB := envInt("GO264_P_MVP_TRACE_FROM_MB", 0)
+	traceToMB := envInt("GO264_P_MVP_TRACE_TO_MB", 24)
+	mbAddr := mbY*40 + mbX
+	if poc != tracePOC || mbAddr < traceFromMB || mbAddr > traceToMB {
+		return
+	}
+	fmt.Fprintf(os.Stderr, "GOPMVP mb=%04d poc=%d part=%d ref=%d x4=%d y4=%d w4=%d h4=%d pred={%d,%d} mvd={%d,%d} final={%d,%d}\n", mbAddr, poc, part, ref, x4, y4, w4, h4, pred.X, pred.Y, mvd.X, mvd.Y, final.X, final.Y)
 }
 
 func fillMVD4(mvd4 []syntax.MotionVector, stride4, x4, y4, w4, h4 int, mvd syntax.MotionVector) {
