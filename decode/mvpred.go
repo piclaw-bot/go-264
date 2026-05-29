@@ -448,7 +448,9 @@ func applyMVPredictorsDiag(mb *syntax.MBInter, mv4 []syntax.MotionVector, ref4 [
 					idx := part*4 + j
 					x := baseX + (j & 1)
 					y := baseY + (j >> 1)
-					pred := predictMotion4x4(mv4, ref4, stride4, x, y, 1, ref)
+					// FFmpeg's 4x4 bottom-right sub-partition treats the diagonal
+					// current-MB cell as unavailable and falls back to top-left.
+					pred := predictMotion4x4WithDiag(mv4, ref4, stride4, x, y, 1, ref, j == 3)
 					mvd := mb.SubMV[idx]
 					addMV(&mb.SubMV[idx], pred)
 					tracePMVP(mbX, mbY, poc, idx, ref, x, y, 1, 1, pred, mvd, mb.SubMV[idx])

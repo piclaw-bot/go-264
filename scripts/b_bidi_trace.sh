@@ -81,6 +81,18 @@ trace = f'''   if( IS_INTER( mb_type ) ) {{
                 sl->mv_cache[0][s2][0], sl->mv_cache[0][s2][1],
                 sl->mv_cache[0][s3][0], sl->mv_cache[0][s3][1]);
    }}
+   if (getenv("GO264_FFMPEG_MOTSAVE_TRACE") && (sl->slice_type_nos == AV_PICTURE_TYPE_B || sl->slice_type_nos == AV_PICTURE_TYPE_P) && (sl->mb_x + sl->mb_y * h->mb_width) < {mb_limit}) {{
+        int _base = scan8[0];
+        for (int _yy = 0; _yy < 4; _yy++) {{
+            for (int _xx = 0; _xx < 4; _xx++) {{
+                int _s = _base + _yy * 8 + _xx;
+                fprintf(stderr, "FFMOTSAVE4 frame=%d poc=%d mb=%04d x=%02d y=%02d cell=%d,%d ref0=%d mv0={{%d,%d}} ref1=%d mv1={{%d,%d}} mbtype=%d\\n",
+                        h->poc.frame_num, h->poc.poc_lsb, sl->mb_x + sl->mb_y * h->mb_width, sl->mb_x, sl->mb_y, _xx, _yy,
+                        sl->ref_cache[0][_s], sl->mv_cache[0][_s][0], sl->mv_cache[0][_s][1],
+                        sl->ref_cache[1][_s], sl->mv_cache[1][_s][0], sl->mv_cache[1][_s][1], mb_type);
+            }}
+        }}
+   }}
 '''
 trace_block = trace[len(needle):]
 if 'GO264_FFMPEG_B_MB_TRACE' in s:
@@ -394,6 +406,7 @@ if [[ -n "${GO264_FFMPEG_B_MVD_TRACE:-}" || -n "${GO264_B_CABAC_TRACE:-}" || -n 
 fi
 [[ -n "${GO264_P_TYPE_TRACE:-}" ]] && ff_env+=(GO264_P_TYPE_TRACE=1)
 [[ -n "${GO264_FFMPEG_CBP_TRACE:-}" ]] && ff_env+=(GO264_FFMPEG_CBP_TRACE=1)
+[[ -n "${GO264_FFMPEG_MOTSAVE_TRACE:-}" || -n "${GO264_MOTION_SAVE_DETAIL:-}" ]] && ff_env+=(GO264_FFMPEG_MOTSAVE_TRACE=1)
 [[ -n "${GO264_P_MVP_CAND_TRACE:-}" ]] && ff_env+=(GO264_FFMPEG_MVP_TRACE=1)
 [[ -n "${GO264_P_REF_TRACE:-}" || -n "${GO264_B_REF_TRACE:-}" ]] && ff_env+=(GO264_FFMPEG_REF_TRACE=1)
 [[ -n "${GO264_B_STATE_TRACE:-}" ]] && ff_env+=(GO264_FFMPEG_B_STATE_TRACE=1)
@@ -404,6 +417,7 @@ env "${ff_env[@]}" "$FFMPEG" -y -threads 1 -hide_banner \
 grep '^FFBIDI' "$OUTDIR/ffmpeg/bidi.log" >"$OUTDIR/ffbidi.rows" || true
 grep '^FF_BPART_MVD' "$OUTDIR/ffmpeg/bidi.log" >"$OUTDIR/ffbpart_mvd.rows" || true
 grep '^FFBSTATE' "$OUTDIR/ffmpeg/bidi.log" >"$OUTDIR/ffbstate.rows" || true
+grep '^FFMOTSAVE4' "$OUTDIR/ffmpeg/bidi.log" >"$OUTDIR/ffmotsave.rows" || true
 rm -rf "$OUTDIR/go/frames"
 mkdir -p "$OUTDIR/go/frames" "${GOTMPDIR:-/workspace/tmp/gotmp}"
 go_env=(GOTMPDIR="${GOTMPDIR:-/workspace/tmp/gotmp}" GO264_B_MB_TRACE=1)
@@ -520,6 +534,7 @@ fi
 echo "ffbidi=$OUTDIR/ffbidi.rows"
 echo "ffbpart_mvd=$OUTDIR/ffbpart_mvd.rows"
 echo "ffbstate=$OUTDIR/ffbstate.rows"
+echo "ffmotsave=$OUTDIR/ffmotsave.rows"
 echo "gobidi=$OUTDIR/gobidi.rows"
 echo "gobpart_mvd=$OUTDIR/gobpart_mvd.rows"
 echo "bpart_mvd_diff=$OUTDIR/bpart_mvd.diff"
