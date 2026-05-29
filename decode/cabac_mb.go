@@ -1046,7 +1046,7 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 						mvp := predictMotion4x4(mv4, ref4, stride4, sx, sy, fillW4, mb.RefIdxL0[i])
 						mb.SubMVL0[idx] = syntax.MotionVector{X: mvd.X + mvp.X, Y: mvd.Y + mvp.Y}
 						if traceMVD {
-							fmt.Fprintf(os.Stderr, "GOB8MVD mb=%04d sub=%d j=%d list=0 amvd={%d,%d} mvd={%d,%d} mvp={%d,%d} final={%d,%d} pre=%d/%d post=%d/%d\n", mbY*stride4/4+mbX, i, j, amvdX, amvdY, mvd.X, mvd.Y, mvp.X, mvp.Y, mb.SubMVL0[idx].X, mb.SubMVL0[idx].Y, preLow, preRange, postLow, postRange)
+							fmt.Fprintf(os.Stderr, "GOB8MVD mb=%04d poc=%d sub=%d j=%d list=0 amvd={%d,%d} mvd={%d,%d} mvp={%d,%d} final={%d,%d} pre=%d/%d post=%d/%d\n", mbY*stride4/4+mbX, currentPOC, i, j, amvdX, amvdY, mvd.X, mvd.Y, mvp.X, mvp.Y, mb.SubMVL0[idx].X, mb.SubMVL0[idx].Y, preLow, preRange, postLow, postRange)
 						}
 						fillMV4(mv4, ref4, stride4, sx, sy, fillW4, fillH4, mb.SubMVL0[idx], mb.RefIdxL0[i])
 					} else {
@@ -1065,7 +1065,7 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 						mb.SubMVL1[idx].Y += mvp.Y
 						if traceMVD {
 							postLow, postRange, _ = dec.DebugState()
-							fmt.Fprintf(os.Stderr, "GOB8MVD mb=%04d sub=%d j=%d list=1 amvd={%d,%d} mvd={%d,%d} mvp={%d,%d} final={%d,%d} pre=%d/%d post=%d/%d\n", mbY*stride4/4+mbX, i, j, amvdX, amvdY, mb.SubMVL1[idx].X-mvp.X, mb.SubMVL1[idx].Y-mvp.Y, mvp.X, mvp.Y, mb.SubMVL1[idx].X, mb.SubMVL1[idx].Y, preLow, preRange, postLow, postRange)
+							fmt.Fprintf(os.Stderr, "GOB8MVD mb=%04d poc=%d sub=%d j=%d list=1 amvd={%d,%d} mvd={%d,%d} mvp={%d,%d} final={%d,%d} pre=%d/%d post=%d/%d\n", mbY*stride4/4+mbX, currentPOC, i, j, amvdX, amvdY, mb.SubMVL1[idx].X-mvp.X, mb.SubMVL1[idx].Y-mvp.Y, mvp.X, mvp.Y, mb.SubMVL1[idx].X, mb.SubMVL1[idx].Y, preLow, preRange, postLow, postRange)
 						}
 						fillMV4(mv4L1, ref4L1, stride4, sx, sy, fillW4, fillH4, mb.SubMVL1[idx], mb.RefIdxL1[i])
 					}
@@ -1208,7 +1208,7 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 				mb.MVL0[i].X += mvp.X
 				mb.MVL0[i].Y += mvp.Y
 				if os.Getenv("GO264_B_MVD_TRACE") != "" {
-					fmt.Fprintf(os.Stderr, "GOBPART_MVD mb=%04d part=%d list=0 mvd={%d,%d} mvp={%d,%d} final={%d,%d}\n", mbY*stride4/4+mbX, i, mvd.X, mvd.Y, mvp.X, mvp.Y, mb.MVL0[i].X, mb.MVL0[i].Y)
+					fmt.Fprintf(os.Stderr, "GOBPART_MVD mb=%04d poc=%d part=%d list=0 mvd={%d,%d} mvp={%d,%d} final={%d,%d}\n", mbY*stride4/4+mbX, currentPOC, i, mvd.X, mvd.Y, mvp.X, mvp.Y, mb.MVL0[i].X, mb.MVL0[i].Y)
 				}
 				bx := x4 + cabacBPartX(bMBType, i, parts)
 				by := y4 + cabacBPartY(bMBType, i, parts)
@@ -1228,7 +1228,7 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 				mb.MVL1[i].X += mvp.X
 				mb.MVL1[i].Y += mvp.Y
 				if os.Getenv("GO264_B_MVD_TRACE") != "" {
-					fmt.Fprintf(os.Stderr, "GOBPART_MVD mb=%04d part=%d list=1 mvd={%d,%d} mvp={%d,%d} final={%d,%d}\n", mbY*stride4/4+mbX, i, mvd.X, mvd.Y, mvp.X, mvp.Y, mb.MVL1[i].X, mb.MVL1[i].Y)
+					fmt.Fprintf(os.Stderr, "GOBPART_MVD mb=%04d poc=%d part=%d list=1 mvd={%d,%d} mvp={%d,%d} final={%d,%d}\n", mbY*stride4/4+mbX, currentPOC, i, mvd.X, mvd.Y, mvp.X, mvp.Y, mb.MVL1[i].X, mb.MVL1[i].Y)
 				}
 				bx := x4 + cabacBPartX(bMBType, i, parts)
 				by := y4 + cabacBPartY(bMBType, i, parts)
