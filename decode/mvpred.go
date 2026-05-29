@@ -624,15 +624,14 @@ func colocatedDirect16x16Zero(colocated *frame.Frame, mbX, mbY, currentPOC int) 
 	if idx < 0 || idx >= len(colocated.MotionL0) || idx >= len(colocated.RefIdxL0) {
 		return false
 	}
-	mv := colocated.MotionL0[idx]
-	zero := colocated.RefIdxL0[idx] == 0 && mv[0] >= -1 && mv[0] <= 1 && mv[1] >= -1 && mv[1] <= 1
+	mv, ref, zero := colocatedDirectZeroMotionAt(colocated, idx)
 	if os.Getenv("GO264_DIRECT_COL_TRACE") != "" {
 		fmt.Fprintf(os.Stderr, "GOCOLZERO16 mbx=%02d mby=%02d curpoc=%d colpoc=%d colmbtype=%d colref0=%d colmv={%d,%d} zero=%t\n", mbX, mbY, currentPOC, colocated.POC, func() uint32 {
 			if mbIdx >= 0 && mbIdx < len(colocated.MBType) {
 				return colocated.MBType[mbIdx]
 			}
 			return 0
-		}(), colocated.RefIdxL0[idx], mv[0], mv[1], zero)
+		}(), ref, mv[0], mv[1], zero)
 	}
 	return zero
 }
@@ -680,12 +679,25 @@ func colocatedDirect8x8Zero(colocated *frame.Frame, mbX, mbY, part, currentPOC i
 	if idx < 0 || idx >= len(colocated.MotionL0) || idx >= len(colocated.RefIdxL0) {
 		return false
 	}
-	mv := colocated.MotionL0[idx]
-	zero := colocated.RefIdxL0[idx] == 0 && mv[0] >= -1 && mv[0] <= 1 && mv[1] >= -1 && mv[1] <= 1
+	mv, ref, zero := colocatedDirectZeroMotionAt(colocated, idx)
 	if os.Getenv("GO264_DIRECT_COL_TRACE") != "" {
-		fmt.Fprintf(os.Stderr, "GOCOLZERO mbx=%02d mby=%02d part=%d curpoc=%d colpoc=%d colref0=%d colmv={%d,%d} zero=%t\n", mbX, mbY, part, currentPOC, colocated.POC, colocated.RefIdxL0[idx], mv[0], mv[1], zero)
+		fmt.Fprintf(os.Stderr, "GOCOLZERO mbx=%02d mby=%02d part=%d curpoc=%d colpoc=%d colref0=%d colmv={%d,%d} zero=%t\n", mbX, mbY, part, currentPOC, colocated.POC, ref, mv[0], mv[1], zero)
 	}
 	return zero
+}
+
+func colocatedDirectZeroMotionAt(colocated *frame.Frame, idx int) ([2]int16, int8, bool) {
+	if colocated == nil || idx < 0 || idx >= len(colocated.RefIdxL0) || idx >= len(colocated.MotionL0) {
+		return [2]int16{}, -2, false
+	}
+	ref := colocated.RefIdxL0[idx]
+	mv := colocated.MotionL0[idx]
+	if ref < 0 && idx < len(colocated.RefIdxL1) && idx < len(colocated.MotionL1) {
+		ref = colocated.RefIdxL1[idx]
+		mv = colocated.MotionL1[idx]
+	}
+	zero := ref == 0 && mv[0] >= -1 && mv[0] <= 1 && mv[1] >= -1 && mv[1] <= 1
+	return mv, ref, zero
 }
 
 func predictBDirectSpatialL0Ref(mv4 []syntax.MotionVector, ref4 []int8, stride4, x4, y4 int) int8 {

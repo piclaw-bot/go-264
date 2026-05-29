@@ -247,6 +247,8 @@ func (c bMotionCache) saveL0ToFrame(f *frame.Frame, mbFFTypes []uint32, l0Frames
 	f.MotionStride4 = c.stride4
 	f.MotionL0 = make([][2]int16, len(c.mv[0]))
 	f.RefIdxL0 = append(f.RefIdxL0[:0], c.ref[0]...)
+	f.MotionL1 = make([][2]int16, len(c.mv[1]))
+	f.RefIdxL1 = append(f.RefIdxL1[:0], c.ref[1]...)
 	f.MBType = append(f.MBType[:0], mbFFTypes...)
 	f.RefListL0POC = f.RefListL0POC[:0]
 	f.RefListL0Num = f.RefListL0Num[:0]
@@ -259,6 +261,9 @@ func (c bMotionCache) saveL0ToFrame(f *frame.Frame, mbFFTypes []uint32, l0Frames
 	}
 	for i, mv := range c.mv[0] {
 		f.MotionL0[i] = [2]int16{mv.X, mv.Y}
+	}
+	for i, mv := range c.mv[1] {
+		f.MotionL1[i] = [2]int16{mv.X, mv.Y}
 	}
 }
 

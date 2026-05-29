@@ -53,11 +53,11 @@ func TestBMotionCacheSaveL0ToFrame(t *testing.T) {
 	c.ref4(0)[0] = 1
 	f := &frame.Frame{}
 	c.saveL0ToFrame(f, []uint32{123}, nil)
-	if f.MotionStride4 != 4 || len(f.MotionL0) != 16 || len(f.RefIdxL0) != 16 || len(f.MBType) != 1 {
-		t.Fatalf("unexpected saved frame sizes/stride: stride=%d motion=%d ref=%d mbtype=%d", f.MotionStride4, len(f.MotionL0), len(f.RefIdxL0), len(f.MBType))
+	if f.MotionStride4 != 4 || len(f.MotionL0) != 16 || len(f.RefIdxL0) != 16 || len(f.MotionL1) != 16 || len(f.RefIdxL1) != 16 || len(f.MBType) != 1 {
+		t.Fatalf("unexpected saved frame sizes/stride: stride=%d motion0=%d ref0=%d motion1=%d ref1=%d mbtype=%d", f.MotionStride4, len(f.MotionL0), len(f.RefIdxL0), len(f.MotionL1), len(f.RefIdxL1), len(f.MBType))
 	}
-	if f.MotionL0[0] != [2]int16{7, -2} || f.RefIdxL0[0] != 1 || f.MBType[0] != 123 {
-		t.Fatalf("unexpected saved frame values: mv=%v ref=%d mbtype=%d", f.MotionL0[0], f.RefIdxL0[0], f.MBType[0])
+	if f.MotionL0[0] != [2]int16{7, -2} || f.RefIdxL0[0] != 1 || f.MotionL1[0] != [2]int16{} || f.RefIdxL1[0] != -2 || f.MBType[0] != 123 {
+		t.Fatalf("unexpected saved frame values: mv0=%v ref0=%d mv1=%v ref1=%d mbtype=%d", f.MotionL0[0], f.RefIdxL0[0], f.MotionL1[0], f.RefIdxL1[0], f.MBType[0])
 	}
 }
 
