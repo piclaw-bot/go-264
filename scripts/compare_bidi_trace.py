@@ -36,13 +36,22 @@ def normalize_sub_flags(subs: tuple[int, int, int, int]) -> tuple[int, int, int,
     # real B_8x8 shape mismatch.
     return tuple(12552 if int(v) in DIRECT_FLAGS else int(v) for v in subs)
 
+def normalize_poc(v: int) -> int:
+    # Some local FFmpeg trace patches expose cur_pic_ptr->poc with the internal
+    # H.264 wrap offset (commonly 65536 for this fixture), while older patches
+    # exposed poc_lsb. Normalize the trace key to the compact POC domain used by
+    # Go diagnostics so patched-tree refreshes do not break comparisons.
+    if v >= 32768:
+        return v - 65536
+    return v
+
 def row(m: re.Match[str]) -> dict[str, object]:
     gd = m.groupdict()
     def iv(name: str, default: int = 0) -> int:
         v = gd.get(name)
         return default if v is None else int(v)
     return {
-        'mb': iv('mb'), 'frame': iv('frame'), 'poc': iv('poc', -1), 'mbtype': iv('mbtype'),
+        'mb': iv('mb'), 'frame': iv('frame'), 'poc': normalize_poc(iv('poc', -1)), 'mbtype': iv('mbtype'),
         'ref_mv': (iv('ref0'), iv('ref1'), iv('mv0x'), iv('mv0y'), iv('mv1x'), iv('mv1y')),
         'p1': (iv('ref0p1', iv('ref0')), iv('ref1p1', iv('ref1')), iv('mv0p1x'), iv('mv0p1y'), iv('mv1p1x'), iv('mv1p1y')),
         'sub': (iv('sub0'), iv('sub1'), iv('sub2'), iv('sub3')),

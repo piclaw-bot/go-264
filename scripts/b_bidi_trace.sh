@@ -25,7 +25,7 @@ if 'FFMVP mb=' not in s:
 '''
     repl = '''    if (getenv("GO264_FFMPEG_MVP_TRACE") && (sl->slice_type_nos == AV_PICTURE_TYPE_B || sl->slice_type_nos == AV_PICTURE_TYPE_P) && (sl->mb_x + sl->mb_y * h->mb_width) < ''' + mb_limit + ''')
         fprintf(stderr, "FFMVP mb=%04d frame=%d poc=%d n=%d pw=%d list=%d ref=%d A=%d/{%d,%d} B=%d/{%d,%d} C=%d/{%d,%d} matches=%d out={%d,%d}\\n",
-                sl->mb_x + sl->mb_y*h->mb_width, h->poc.frame_num, h->poc.poc_lsb, n, part_width, list, ref,
+                sl->mb_x + sl->mb_y*h->mb_width, h->poc.frame_num, (h->cur_pic_ptr ? h->cur_pic_ptr->poc : h->poc.poc_lsb), n, part_width, list, ref,
                 left_ref, A[0], A[1], top_ref, B[0], B[1], diagonal_ref, C[0], C[1], match_count, *mx, *my);
     ff_tlog(h->avctx,
             "pred_motion (%2d %2d %2d) (%2d %2d %2d) (%2d %2d %2d) -> (%2d %2d %2d) at %2d %2d %d list %d\\n",
@@ -87,7 +87,7 @@ trace = f'''   if( IS_INTER( mb_type ) ) {{
             for (int _xx = 0; _xx < 4; _xx++) {{
                 int _s = _base + _yy * 8 + _xx;
                 fprintf(stderr, "FFMOTSAVE4 frame=%d poc=%d mb=%04d x=%02d y=%02d cell=%d,%d ref0=%d mv0={{%d,%d}} ref1=%d mv1={{%d,%d}} mbtype=%d\\n",
-                        h->poc.frame_num, h->poc.poc_lsb, sl->mb_x + sl->mb_y * h->mb_width, sl->mb_x, sl->mb_y, _xx, _yy,
+                        h->poc.frame_num, (h->cur_pic_ptr ? h->cur_pic_ptr->poc : h->poc.poc_lsb), sl->mb_x + sl->mb_y * h->mb_width, sl->mb_x, sl->mb_y, _xx, _yy,
                         sl->ref_cache[0][_s], sl->mv_cache[0][_s][0], sl->mv_cache[0][_s][1],
                         sl->ref_cache[1][_s], sl->mv_cache[1][_s][0], sl->mv_cache[1][_s][1], mb_type);
             }}
@@ -375,21 +375,29 @@ if 'FFBSTATE mb=' not in s:
     else:
         s = s.replace('''            sl->last_qscale_diff = 0;\n\n            return 0;\n''', '''            sl->last_qscale_diff = 0;\n\n''' + skip_state + '''            return 0;\n''')
     s = s.replace('''\n    return 0;\n}\n''', '\n' + final_state + '''    return 0;\n}\n''', 1)
-# Add picture POC to FF rows so repeated frame_num B-pictures can be matched
-# without occurrence guessing.
-s = s.replace('h->cur_pic_ptr ? h->cur_pic_ptr->poc : h->cur_pic.poc', 'h->poc.poc_lsb')
+# Add full picture POC to FF rows so repeated frame_num/POC-lsb B-pictures
+# can be matched without occurrence guessing. Older local FFmpeg trees may
+# already be patched with poc_lsb; upgrade those injections in place.
+full_poc = '(h->cur_pic_ptr ? h->cur_pic_ptr->poc : h->poc.poc_lsb)'
+s = s.replace('h->cur_pic_ptr ? h->cur_pic_ptr->poc : h->cur_pic.poc', full_poc)
 s = s.replace('frame=%d type=%d ref0=', 'frame=%d poc=%d type=%d ref0=')
-s = s.replace('h->poc.frame_num, mb_type,', 'h->poc.frame_num, h->poc.poc_lsb, mb_type,')
+s = s.replace('h->poc.frame_num, mb_type,', 'h->poc.frame_num, ' + full_poc + ', mb_type,')
+s = s.replace('h->poc.frame_num, h->poc.poc_lsb, mb_type,', 'h->poc.frame_num, ' + full_poc + ', mb_type,')
 s = s.replace('FFBSTATE mb=%04d x=%02d y=%02d frame=%d kind=', 'FFBSTATE mb=%04d x=%02d y=%02d frame=%d poc=%d kind=')
-s = s.replace('h->poc.frame_num,\n                        (unsigned)sl->cabac.low', 'h->poc.frame_num, h->poc.poc_lsb,\n                        (unsigned)sl->cabac.low')
-s = s.replace('h->poc.frame_num,\n                IS_INTRA(mb_type)', 'h->poc.frame_num, h->poc.poc_lsb,\n                IS_INTRA(mb_type)')
+s = s.replace('h->poc.frame_num,\n                        (unsigned)sl->cabac.low', 'h->poc.frame_num, ' + full_poc + ',\n                        (unsigned)sl->cabac.low')
+s = s.replace('h->poc.frame_num, h->poc.poc_lsb,\n                        (unsigned)sl->cabac.low', 'h->poc.frame_num, ' + full_poc + ',\n                        (unsigned)sl->cabac.low')
+s = s.replace('h->poc.frame_num,\n                IS_INTRA(mb_type)', 'h->poc.frame_num, ' + full_poc + ',\n                IS_INTRA(mb_type)')
+s = s.replace('h->poc.frame_num, h->poc.poc_lsb,\n                IS_INTRA(mb_type)', 'h->poc.frame_num, ' + full_poc + ',\n                IS_INTRA(mb_type)')
 # Do not alter the older FFCABAC summary format; it has no poc field.
 s = s.replace("h->poc.frame_num, h->poc.poc_lsb,\n                IS_INTRA(mb_type) ? 'I'", "h->poc.frame_num,\n                IS_INTRA(mb_type) ? 'I'")
 s = s.replace('FF_B8x8_MVD mb=%04d frame=%d sub=', 'FF_B8x8_MVD mb=%04d frame=%d poc=%d sub=')
 s = s.replace('FF_BPART_MVD mb=%04d frame=%d part=', 'FF_BPART_MVD mb=%04d frame=%d poc=%d part=')
-s = s.replace('h->poc.frame_num, i, j, list,', 'h->poc.frame_num, h->poc.poc_lsb, i, j, list,')
-s = s.replace('h->poc.frame_num, list,', 'h->poc.frame_num, h->poc.poc_lsb, list,')
-s = s.replace('h->poc.frame_num, i, list,', 'h->poc.frame_num, h->poc.poc_lsb, i, list,')
+s = s.replace('h->poc.frame_num, i, j, list,', 'h->poc.frame_num, ' + full_poc + ', i, j, list,')
+s = s.replace('h->poc.frame_num, h->poc.poc_lsb, i, j, list,', 'h->poc.frame_num, ' + full_poc + ', i, j, list,')
+s = s.replace('h->poc.frame_num, list,', 'h->poc.frame_num, ' + full_poc + ', list,')
+s = s.replace('h->poc.frame_num, h->poc.poc_lsb, list,', 'h->poc.frame_num, ' + full_poc + ', list,')
+s = s.replace('h->poc.frame_num, i, list,', 'h->poc.frame_num, ' + full_poc + ', i, list,')
+s = s.replace('h->poc.frame_num, h->poc.poc_lsb, i, list,', 'h->poc.frame_num, ' + full_poc + ', i, list,')
 p.write_text(s)
 PY
 }
