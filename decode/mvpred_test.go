@@ -315,8 +315,8 @@ func TestPredictBPartMotionUsesShapeForAllBTwoPartitionTypes(t *testing.T) {
 		}
 	}
 	got := predictBPartMotion4x4(mv4, ref4, stride, 1, 1, 17, 1, 0)
-	if got != (syntax.MotionVector{X: 6, Y: 6}) {
-		t.Fatalf("type 17 B_Bi_L0_8x16 part1 MVP=%+v want left partition", got)
+	if got != (syntax.MotionVector{X: -3, Y: 2}) {
+		t.Fatalf("type 17 B_Bi_L0_8x16 interior part1 MVP=%+v want diagonal", got)
 	}
 	got = predictBPartMotion4x4(mv4, ref4, stride, 1, 1, 11, 1, 0)
 	if got != (syntax.MotionVector{X: -3, Y: 2}) {

@@ -577,15 +577,11 @@ func predictBPartMotion4x4(mv4 []syntax.MotionVector, ref4 []int8, stride4, x4, 
 						// of the unavailable diagonal shortcut.
 						return predictMotion4x4(mv4, ref4, stride4, x4+2, y4, 2, targetRef)
 					}
-				case 17: // B_Bi_L0_8x16: FFmpeg prefers left, but uses top-left at the right edge.
+				case 17:
 					if x4+4 >= stride4 {
 						if tl, tlRef := getMV4(mv4, ref4, stride4, x4+1, y4-1); tlRef == targetRef {
 							return tl
 						}
-					}
-					left, leftRef := getMV4(mv4, ref4, stride4, x4+1, y4)
-					if leftRef == targetRef {
-						return left
 					}
 				}
 			}
