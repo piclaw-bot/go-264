@@ -561,6 +561,12 @@ func predictBPartMotion4x4(mv4 []syntax.MotionVector, ref4 []int8, stride4, x4, 
 		if cabacBIs8x16(mbType) {
 			if part == 1 {
 				switch mbType {
+				case 5:
+					if x4+4 >= stride4 {
+						if tl, tlRef := getMV4(mv4, ref4, stride4, x4+1, y4-1); tlRef == targetRef {
+							return tl
+						}
+					}
 				case 11:
 					if x4+4 >= stride4 {
 						// At the right picture edge FFmpeg's B_L1_L0_8x16 right-hand
