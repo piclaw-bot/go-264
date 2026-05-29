@@ -45,7 +45,7 @@ Recent reference values:
 | `bbb_annexb.h264` frame 0 | Y=80.33 U=56.14 V=57.08 dB |
 | `bbb_annexb.h264` B POC=2 / POC=6 | Y≈21.8 / 21.5 dB |
 | `bbb_annexb.h264` later B POC=14 / POC=20 | Y≈19.6 / 19.3 dB |
-| `bbb_annexb.h264` 300-frame average | Y=21.38 U=33.83 V=38.30 dB |
+| `bbb_annexb.h264` 300-frame average | Y=21.39 U=33.86 V=38.32 dB |
 
 ## Package layout
 
