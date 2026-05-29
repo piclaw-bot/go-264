@@ -541,10 +541,20 @@ func predictBPartMotion4x4(mv4 []syntax.MotionVector, ref4 []int8, stride4, x4, 
 	parts := cabacBPartsForType(mbType)
 	if parts == 2 {
 		if cabacBIs8x16(mbType) {
-			if mbType == 17 && part == 1 {
-				left, leftRef := getMV4(mv4, ref4, stride4, x4+1, y4)
-				if leftRef == targetRef {
-					return left
+			if part == 1 {
+				switch mbType {
+				case 11:
+					if x4+4 >= stride4 {
+						// At the right picture edge FFmpeg's B_L1_L0_8x16 right-hand
+						// L0 partition falls back to the generic right-half median instead
+						// of the unavailable diagonal shortcut.
+						return predictMotion4x4(mv4, ref4, stride4, x4+2, y4, 2, targetRef)
+					}
+				case 17: // B_Bi_L0_8x16: FFmpeg prefers the just-written left partition.
+					left, leftRef := getMV4(mv4, ref4, stride4, x4+1, y4)
+					if leftRef == targetRef {
+						return left
+					}
 				}
 			}
 			return predict8x16Motion4x4(mv4, ref4, stride4, x4, y4, part, targetRef)
