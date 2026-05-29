@@ -570,10 +570,10 @@ func predictBPartMotion4x4(mv4 []syntax.MotionVector, ref4 []int8, stride4, x4, 
 							return left
 						}
 					}
-				case 11:
+				case 9, 11:
 					if x4+4 >= stride4 {
-						// At the right picture edge FFmpeg's B_L1_L0_8x16 right-hand
-						// L0 partition falls back to the generic right-half median instead
+						// At the right picture edge FFmpeg's mixed-list 8x16 right-hand
+						// partition falls back to the generic right-half median instead
 						// of the unavailable diagonal shortcut.
 						return predictMotion4x4(mv4, ref4, stride4, x4+2, y4, 2, targetRef)
 					}

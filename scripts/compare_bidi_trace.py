@@ -148,6 +148,19 @@ def ref_mv_mismatch(f: dict[str, object], g: dict[str, object]) -> bool:
     return False
 
 def p1_mismatch(f: dict[str, object], g: dict[str, object]) -> bool:
+    # Direct-mode rows can expose different representative cache cells for the
+    # synthetic second partition even when the resolved macroblock motion is the
+    # same. Treat those as trace-presentation differences when the normalized
+    # Direct flags, part-0 representatives, and per-sub list0 representatives
+    # already agree.
+    if (
+        all(int(v) in DIRECT_FLAGS for v in f['sub'])
+        and all(int(v) in DIRECT_FLAGS for v in g['sub'])
+        and normalize_sub_flags(f['sub']) == normalize_sub_flags(g['sub'])
+        and f['ref_mv'] == g['ref_mv']
+        and f['submv'] == g['submv']
+    ):
+        return False
     fp = f['p1']; gp = g['p1']
     for list_idx in (0, 1):
         fu = ff_uses(f, list_idx, 1)
