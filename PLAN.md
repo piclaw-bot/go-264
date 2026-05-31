@@ -98,7 +98,6 @@ Still gated:
 | Baseline CAVLC avg PSNR | 27.65 dB |
 | Baseline YUV PSNR | Y=39.58 U=38.13 V=34.03 dB |
 | `testsrc_cabac_p.h264` frame 0 | Y=56.96 U=60.68 V=64.62 dB |
-| `bbb-frame0` CABAC avg PSNR | ~31 dB (est.) |
 | `bbb_annexb.h264` frame 0 | Y=80.33 U=56.14 V=57.08 dB |
 | `bbb_annexb.h264` 300-frame avg | Y=21.39 U=33.86 V=38.32 dB |
 | `bbb_annexb.h264` B POC=2 / POC=6 | Y≈41.4 / 37.8 dB display-order early B frames |
@@ -219,39 +218,16 @@ Useful levels:
 - Level 4.1: 1080p60
 - Level 5.1: 4K30
 
-## Investigation notes: P-frame CABAC divergence (2026-05-22)
+## Resolved investigation notes: P-frame CABAC divergence (2026-05-22/23)
 
-**Verified correct for POC=12 P-frame:**
-- Bitstream position: byte 5 (bit 40 after align)
-- CABAC init: low=315, range=510
-- Context tables: PB[0] matches FFmpeg exactly (spot-checked 20+ indices)
-- Skip flag: ctx=11, both decode bin=0 (not skipped), range=410
-- mb_type: ctx14=0, ctx15=0, ctx16=0 → P_L0_16x16
-- MVD ctx40 initial bin: pState=0, valMPS=1, both decode bin=1
-- Bins 0-8 verified by simulation against GOBIN trace
+The original P-frame collapse was traced to CABAC arithmetic/table incompatibility with FFmpeg/x264 rather than P-slice syntax. The critical symptom was the first P-frame skip/MVD arithmetic path decoding from the wrong LPS-range model, causing frame-1 quality around 21 dB and cascading inter-frame failures.
 
-**Unresolved:** Go ends mb=0000 with range=268 (18 bins), FFmpeg ends with range=376. Both start from identical state and read the same bitstream. The divergence occurs somewhere in bins 9-17 (MVD suffix/bypass or CBP decode). No further progress without a full per-bin FFmpeg trace comparison.
+Resolved facts:
 
-**Impact:** POC=12 first P-frame already has 21 dB PSNR (should be ~40+ dB for a P-frame referencing a perfect IDR). This cascades to ALL subsequent frames.
+- FFmpeg-compatible CABAC arithmetic is enabled.
+- Signed C table initializers are preserved modulo 256.
+- CABAC initialization uses the unaligned three-byte seed compatible with FFmpeg.
+- Active first-frame MB syntax summaries for `bbb_annexb.h264` and `testsrc_cabac_p.h264` report `NO_DIVERGENCE in compared fields`.
+- P-frame syntax/arithmetic is no longer considered the active multi-frame blocker.
 
-## Critical finding: CABAC LPS range table incompatibility (2026-05-23)
-
-**Root cause of P-frame 21 dB quality gap identified:**
-
-Go's `rangeTabLPS` table (from H.264 spec text) produces different bin values than
-x264/FFmpeg's table at specific pState/qIdx combinations. The first divergent bin
-is the P-frame skip_flag at pState=3, qIdx=3 (range=510, low=315):
-
-- Go table: rangeTabLPS[3][3] = 205 → range_after = 305 < low=315 → **LPS (not skipped)**
-- FFmpeg table: equivalent = 51 → range_after = 459 > low=315 → **MPS (skipped!)**
-
-The tables agree at qIdx=0 and diverge increasingly at qIdx 1-3 for pStates 0-11.
-For high pStates (12-63), both tables produce identical values.
-
-**Cannot simply swap tables:** FFmpeg's table + Go's arithmetic = wrong I-frame decode.
-The two implementations use different internal normalizations that require matching
-table + arithmetic as a unit.
-
-**Fix required:** Port FFmpeg's exact CABAC arithmetic (branchless LPS/MPS decision
-with its specific table layout) to replace Go's spec-compliant implementation.
-This is the single remaining blocker for correct multi-frame decode.
+Current multi-frame quality is instead gated by FFmpeg-style B-slice Direct-mode derivation, reference-list/cache parity, and remaining trace-window disambiguation. The current source-grounded post-motion target is the POC128/134 chain: POC128 now advances past the earlier MB88 Direct-zeroing chain to MB168, which traces upstream into unresolved POC134/window-selection state.
