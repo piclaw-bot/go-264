@@ -453,8 +453,10 @@ if [[ -n "${GO264_P_TYPE_TRACE:-}" ]]; then
 fi
 [[ -n "${GO264_P_CABAC_TRACE:-}" ]] && go_env+=(GO264_P_CABAC_TRACE=1 GO264_CABAC_CBP_TRACE=1)
 [[ -n "${GO264_CABAC_TERMINATE_TRACE:-}" ]] && go_env+=(GO264_CABAC_TERMINATE_TRACE=1)
+[[ -n "${GO264_HEADER_TRACE:-}" ]] && go_env+=(GO264_HEADER_TRACE=1)
 env "${go_env[@]}" go run ./cmd/decode264 -frames "$FRAMES" -f yuv -i "$INPUT" -o "$OUTDIR/go/frames" \
   >"$OUTDIR/go/stdout.log" 2>"$OUTDIR/go/bidi.log"
+grep '^GOHEADER' "$OUTDIR/go/bidi.log" >"$OUTDIR/goheader.rows" || true
 grep '^GOBIDI' "$OUTDIR/go/bidi.log" >"$OUTDIR/gobidi.rows" || true
 grep '^GOBPART_MVD' "$OUTDIR/go/bidi.log" >"$OUTDIR/gobpart_mvd.rows" || true
 grep '^GOBSTATE' "$OUTDIR/go/bidi.log" >"$OUTDIR/gobstate.rows" || true
