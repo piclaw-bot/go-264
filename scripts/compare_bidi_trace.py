@@ -242,6 +242,11 @@ def main() -> None:
         if args.to_mb is not None and mb > args.to_mb:
             continue
         f = ff[key]
+        # FF trace hooks can emit rows for intra MBs in B slices; Go's GOBIDI
+        # post-motion trace is intentionally inter/direct-only. Do not count
+        # missing Go rows for FF intra MBs as BIDI motion mismatches.
+        if int(f['mbtype']) & 0x7:
+            continue
         g = go.get((args.go_poc, args.go_poc, args.go_occurrence, mb))
         rows += 1
         if g is None:
