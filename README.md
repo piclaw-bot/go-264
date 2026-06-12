@@ -44,7 +44,8 @@ Recent reference values:
 | `bbb_annexb.h264` frame 0 | Y=80.33 U=56.14 V=57.08 dB |
 | `bbb_annexb.h264` B POC=2 / POC=6 | Y≈41.4 / 37.8 dB display-order early B frames |
 | `bbb_annexb.h264` later B/P frames | luma quality remains gated by remaining inter prediction/reference parity |
-| `bbb_annexb.h264` 300-frame average | Y=21.39 U=33.86 V=38.32 dB |
+| historical `bbb_annexb.h264` 300-frame average | Y=21.39 U=33.86 V=38.32 dB |
+| regenerated `bootstrap_fixtures.sh` BBB 300-frame average | Y=4.72 U=30.34 V=32.39 dB |
 
 ## Package layout
 

@@ -99,7 +99,8 @@ Still gated:
 | Baseline YUV PSNR | Y=39.58 U=38.13 V=34.03 dB |
 | `testsrc_cabac_p.h264` frame 0 | Y=56.96 U=60.68 V=64.62 dB |
 | `bbb_annexb.h264` frame 0 | Y=80.33 U=56.14 V=57.08 dB |
-| `bbb_annexb.h264` 300-frame avg | Y=21.39 U=33.86 V=38.32 dB |
+| historical `bbb_annexb.h264` 300-frame avg | Y=21.39 U=33.86 V=38.32 dB |
+| regenerated `bootstrap_fixtures.sh` BBB 300-frame avg | Y=4.72 U=30.34 V=32.39 dB |
 | `bbb_annexb.h264` B POC=2 / POC=6 | Y≈41.4 / 37.8 dB display-order early B frames |
 | `bbb_annexb.h264` later B/P frames | luma remains quality-gated by remaining inter prediction/reference parity |
 | `bbb_annexb.h264` frame-0 deblocked PSNR | Y=80.33 U=56.14 V=57.08 dB |
