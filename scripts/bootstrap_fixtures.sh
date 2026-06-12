@@ -43,9 +43,9 @@ if [[ ! -f "$ROOT/bbb_annexb.h264" ]]; then
     -i "$BBB_SRC" -an \
     -vf 'scale=640:360:force_original_aspect_ratio=decrease,pad=640:360:(ow-iw)/2:(oh-ih)/2' \
     -frames:v 300 \
-    -c:v libx264 -profile:v high -preset medium -crf 23 -g 250 -bf 3 \
+    -c:v libx264 -profile:v high -preset medium -crf 23 -g 300 -bf 3 \
     -pix_fmt yuv420p \
-    -x264-params cabac=1:ref=3:b-adapt=1:keyint=250:min-keyint=25:scenecut=40 \
+    -x264-params cabac=1:ref=3:b-adapt=1:keyint=300:min-keyint=300:scenecut=0 \
     -f h264 "$ROOT/bbb_annexb.h264"
 fi
 

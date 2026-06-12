@@ -50,15 +50,16 @@ def row(m: re.Match[str]) -> dict[str, object]:
     def iv(name: str, default: int = 0) -> int:
         v = gd.get(name)
         return default if v is None else int(v)
+    frame = iv('frame')
     return {
-        'mb': iv('mb'), 'frame': iv('frame'), 'poc': normalize_poc(iv('poc', -1)), 'mbtype': iv('mbtype'),
+        'mb': iv('mb'), 'frame': frame, 'poc': normalize_poc(iv('poc', frame)), 'mbtype': iv('mbtype'),
         'ref_mv': (iv('ref0'), iv('ref1'), iv('mv0x'), iv('mv0y'), iv('mv1x'), iv('mv1y')),
         'p1': (iv('ref0p1', iv('ref0')), iv('ref1p1', iv('ref1')), iv('mv0p1x'), iv('mv0p1y'), iv('mv1p1x'), iv('mv1p1y')),
         'sub': (iv('sub0'), iv('sub1'), iv('sub2'), iv('sub3')),
         'submv': ((iv('submv0x'), iv('submv0y')), (iv('submv1x'), iv('submv1y')), (iv('submv2x'), iv('submv2y')), (iv('submv3x'), iv('submv3y'))),
     }
 
-def load(path: str, regex: re.Pattern[str]) -> dict[tuple[int, int, int], dict[str, object]]:
+def load(path: str, regex: re.Pattern[str]) -> dict[tuple[int, int, int, int], dict[str, object]]:
     out = {}
     occurrence: defaultdict[tuple[int, int], int] = defaultdict(int)
     last_mb: dict[tuple[int, int], int] = {}
@@ -75,8 +76,11 @@ def load(path: str, regex: re.Pattern[str]) -> dict[tuple[int, int, int], dict[s
         if group in last_mb and mb <= last_mb[group]:
             occurrence[group] += 1
         last_mb[group] = mb
-        key_occurrence = int(r['poc']) if int(r.get('poc', -1)) >= 0 else occurrence[group]
-        out[(frame, key_occurrence, mb)] = r
+        # Key by both normalized POC and occurrence. Modern x264 streams can
+        # repeat frame_num+poc_lsb groups across IDR/GOP windows; omitting either
+        # POC or occurrence collapses distinct pictures and turns window-selection
+        # into false decode diffs.
+        out[(frame, int(r['poc']), occurrence[group], mb)] = r
     return out
 
 GO_L0 = {
@@ -222,10 +226,15 @@ def main() -> None:
     args = ap.parse_args()
     ff = load(args.ffbidi, FF_RE)
     go = load(args.gobidi, GO_RE)
-    keys = sorted(k for k in ff if k[0] == args.ff_frame and (args.ff_poc is not None or k[1] == args.ff_occurrence) and (args.ff_poc is None or k[1] == args.ff_poc))
+    keys = sorted(
+        k for k, r in ff.items()
+        if k[0] == args.ff_frame
+        and k[2] == args.ff_occurrence
+        and (args.ff_poc is None or k[1] == args.ff_poc)
+    )
     rows = diffs = 0
     for key in keys:
-        _, _, mb = key
+        _, _, _, mb = key
         if args.mb is not None and mb != args.mb:
             continue
         if args.from_mb is not None and mb < args.from_mb:
@@ -233,7 +242,7 @@ def main() -> None:
         if args.to_mb is not None and mb > args.to_mb:
             continue
         f = ff[key]
-        g = go.get((args.go_poc, args.go_occurrence, mb))
+        g = go.get((args.go_poc, args.go_poc, args.go_occurrence, mb))
         rows += 1
         if g is None:
             print(f'mb={mb:04d} missing_go')
