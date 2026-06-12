@@ -173,14 +173,18 @@ if 'FFCBP part=' not in s:
     return cbp;
 }
 ''')
-# Upgrade older local FFCBP injections to include POC without requiring a
-# pristine FFmpeg tree between diagnostic iterations.
+# Upgrade older local FFCBP injections to include POC and make them useful for
+# B-slice debugging without requiring a pristine FFmpeg tree between diagnostic
+# iterations.
+s = s.replace('sl->slice_type_nos == AV_PICTURE_TYPE_P && sl->mb_y == 0 &&', '(sl->slice_type_nos == AV_PICTURE_TYPE_P || sl->slice_type_nos == AV_PICTURE_TYPE_B) &&')
 s = s.replace('"FFCBP part=%s mb=%04d ctx=', '"FFCBP part=%s mb=%04d poc=%d ctx=')
-s = s.replace('(name), sl->mb_x, ctx,', '(name), sl->mb_x, sl->h264->poc.poc_lsb, ctx,')
+s = s.replace('(name), sl->mb_x, ctx,', '(name), sl->mb_x + sl->mb_y * sl->h264->mb_width, sl->h264->poc.poc_lsb, ctx,')
+s = s.replace('(name), sl->mb_x, sl->h264->poc.poc_lsb, ctx,', '(name), sl->mb_x + sl->mb_y * sl->h264->mb_width, sl->h264->poc.poc_lsb, ctx,')
 s = s.replace('"FFCBP part=luma1 mb=%04d ctx=', '"FFCBP part=luma1 mb=%04d poc=%d ctx=')
 s = s.replace('"FFCBP part=luma2 mb=%04d ctx=', '"FFCBP part=luma2 mb=%04d poc=%d ctx=')
 s = s.replace('"FFCBP part=luma3 mb=%04d ctx=', '"FFCBP part=luma3 mb=%04d poc=%d ctx=')
-s = s.replace('\\n", sl->mb_x, ctx, _idx, _state', '\\n", sl->mb_x, sl->h264->poc.poc_lsb, ctx, _idx, _state')
+s = s.replace('\\n", sl->mb_x, ctx, _idx, _state', '\\n", sl->mb_x + sl->mb_y * sl->h264->mb_width, sl->h264->poc.poc_lsb, ctx, _idx, _state')
+s = s.replace('\\n", sl->mb_x, sl->h264->poc.poc_lsb, ctx, _idx, _state', '\\n", sl->mb_x + sl->mb_y * sl->h264->mb_width, sl->h264->poc.poc_lsb, ctx, _idx, _state')
 if 'FFPTYPE mb=' not in s:
     s = s.replace('''        if( get_cabac_noinline( &sl->cabac, &sl->cabac_state[14] ) == 0 ) {
             /* P-type */
@@ -417,6 +421,7 @@ fi
 [[ -n "${GO264_FFMPEG_CBP_TRACE:-}" ]] && ff_env+=(GO264_FFMPEG_CBP_TRACE=1)
 [[ -n "${GO264_FFMPEG_MOTSAVE_TRACE:-}" || -n "${GO264_MOTION_SAVE_DETAIL:-}" ]] && ff_env+=(GO264_FFMPEG_MOTSAVE_TRACE=1)
 [[ -n "${GO264_P_MVP_CAND_TRACE:-}" ]] && ff_env+=(GO264_FFMPEG_MVP_TRACE=1)
+[[ -n "${GO264_FFMPEG_SYNTAX_TRACE:-}" ]] && ff_env+=(GO264_FFMPEG_SYNTAX_TRACE=1)
 [[ -n "${GO264_P_REF_TRACE:-}" || -n "${GO264_B_REF_TRACE:-}" ]] && ff_env+=(GO264_FFMPEG_REF_TRACE=1)
 [[ -n "${GO264_B_STATE_TRACE:-}" ]] && ff_env+=(GO264_FFMPEG_B_STATE_TRACE=1)
 env "${ff_env[@]}" "$FFMPEG" -y -threads 1 -hide_banner \

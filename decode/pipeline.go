@@ -728,6 +728,8 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 					cbpCtx[mbIdx] = mbIntra.CodedBlockPattern
 					mbTypeCtx[mbIdx] = cabacMBTypeFlag(mbIntra.MBType)
 					nonSkipCtx[mbIdx] = true
+					transform8x8Ctx[mbIdx] = mbIntra.Use8x8Transform
+					chromaPredModeCtx[mbIdx] = mbIntra.ChromaPredMode
 					bmc.writeBackIntra(mbX, mbY)
 				} else {
 					cabacLastQScaleDiff = int(mbBidi.QPDelta)

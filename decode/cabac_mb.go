@@ -78,7 +78,7 @@ func decodeCABACPInterMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, numRe
 			leftNZ, topNZ = cabacTraceEdgeNZ(mbX, mbY, leftNZ, topNZ)
 			leftChromaNZ, topChromaNZ = cabacTraceEdgeChromaNZ(mbX, mbY, leftChromaNZ, topChromaNZ)
 		}
-		intra := decodeCABACIntraMBWithParams(dec, models, lastQScaleDiff, leftNZ, topNZ, leftChromaNZ, topChromaNZ, leftCBP, topCBP, leftMBType, topMBType, leftChromaPred, topChromaPred, transform8x8Mode, transform8x8Ctx, leftEdge8x8, topEdge8x8, 17, false)
+		intra := decodeCABACIntraMBWithParams(dec, models, lastQScaleDiff, leftNZ, topNZ, leftChromaNZ, topChromaNZ, leftCBP, topCBP, leftMBType, topMBType, leftChromaPred, topChromaPred, transform8x8Mode, transform8x8Ctx, leftEdge8x8, topEdge8x8, 17, false, fmt.Sprintf("mb=%04d poc=%d", mbY*stride4/4+mbX, currentPOC))
 		return nil, intra, false
 	}
 	if tracePType {
@@ -357,7 +357,7 @@ func cabacInter8x8TransformAllowed(mb *syntax.MBInter) bool {
 	return true
 }
 
-func decodeCABACTransform8x8Flag(dec *cabac.CABACDecoder, models []cabac.CABACCtx, ctx int) bool {
+func decodeCABACTransform8x8Flag(dec *cabac.CABACDecoder, models []cabac.CABACCtx, ctx int, traceTag ...string) bool {
 	idx := 399 + cabacTransform8x8Ctx(ctx)
 	if dec == nil || idx < 0 || idx >= len(models) {
 		return false
@@ -367,7 +367,15 @@ func decodeCABACTransform8x8Flag(dec *cabac.CABACDecoder, models []cabac.CABACCt
 	bin := dec.DecodeBin(&models[idx])
 	postLow, postRange, _ := dec.DebugState()
 	if os.Getenv("GO264_CABAC_SYNTAX_TRACE") != "" {
-		fmt.Fprintf(os.Stderr, "GOSYN part=transform_size_8x8_flag idx=%d state=%d low=%d range=%d bin=%d post_state=%d post_low=%d post_range=%d ctx=%d\n", idx, preState, preLow, preRange, bin, models[idx].DebugPackedState(), postLow, postRange, cabacTransform8x8Ctx(ctx))
+		tag := ""
+		if len(traceTag) > 0 {
+			tag = traceTag[0]
+		}
+		if tag != "" {
+			fmt.Fprintf(os.Stderr, "GOSYN part=transform_size_8x8_flag %s idx=%d state=%d low=%d range=%d bin=%d post_state=%d post_low=%d post_range=%d ctx=%d\n", tag, idx, preState, preLow, preRange, bin, models[idx].DebugPackedState(), postLow, postRange, cabacTransform8x8Ctx(ctx))
+		} else {
+			fmt.Fprintf(os.Stderr, "GOSYN part=transform_size_8x8_flag idx=%d state=%d low=%d range=%d bin=%d post_state=%d post_low=%d post_range=%d ctx=%d\n", idx, preState, preLow, preRange, bin, models[idx].DebugPackedState(), postLow, postRange, cabacTransform8x8Ctx(ctx))
+		}
 	}
 	return bin == 1
 }
@@ -519,10 +527,10 @@ func cabacPredIntraMode(left, top int8) int8 {
 }
 
 func decodeCABACIntraMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx, lastQScaleDiff int, leftNZ, topNZ *[16]int, leftChromaNZ, topChromaNZ *[2][4]int, leftCBP, topCBP uint32, leftMBType, topMBType uint32, leftChromaPred, topChromaPred int8, transform8x8Mode bool, transform8x8Ctx int, leftEdge8x8, topEdge8x8 [2]int8) *syntax.MBIntra {
-	return decodeCABACIntraMBWithParams(dec, models, lastQScaleDiff, leftNZ, topNZ, leftChromaNZ, topChromaNZ, leftCBP, topCBP, leftMBType, topMBType, leftChromaPred, topChromaPred, transform8x8Mode, transform8x8Ctx, leftEdge8x8, topEdge8x8, 3, true)
+	return decodeCABACIntraMBWithParams(dec, models, lastQScaleDiff, leftNZ, topNZ, leftChromaNZ, topChromaNZ, leftCBP, topCBP, leftMBType, topMBType, leftChromaPred, topChromaPred, transform8x8Mode, transform8x8Ctx, leftEdge8x8, topEdge8x8, 3, true, "")
 }
 
-func decodeCABACIntraMBWithParams(dec *cabac.CABACDecoder, models []cabac.CABACCtx, lastQScaleDiff int, leftNZ, topNZ *[16]int, leftChromaNZ, topChromaNZ *[2][4]int, leftCBP, topCBP uint32, leftMBType, topMBType uint32, leftChromaPred, topChromaPred int8, transform8x8Mode bool, transform8x8Ctx int, leftEdge8x8, topEdge8x8 [2]int8, ctxBase int, intraSlice bool) *syntax.MBIntra {
+func decodeCABACIntraMBWithParams(dec *cabac.CABACDecoder, models []cabac.CABACCtx, lastQScaleDiff int, leftNZ, topNZ *[16]int, leftChromaNZ, topChromaNZ *[2][4]int, leftCBP, topCBP uint32, leftMBType, topMBType uint32, leftChromaPred, topChromaPred int8, transform8x8Mode bool, transform8x8Ctx int, leftEdge8x8, topEdge8x8 [2]int8, ctxBase int, intraSlice bool, traceTag string) *syntax.MBIntra {
 	mb := &syntax.MBIntra{}
 	if dec == nil || len(models) < 128 || ctxBase < 0 || ctxBase+5 >= len(models) {
 		return mb
@@ -535,7 +543,11 @@ func decodeCABACIntraMBWithParams(dec *cabac.CABACDecoder, models []cabac.CABACC
 		bin := dec.DecodeBin(&models[idx])
 		postLow, postRange, _ := dec.DebugState()
 		if traceSyntax {
-			fmt.Fprintf(os.Stderr, "GOSYN part=%s idx=%d state=%d low=%d range=%d bin=%d post_state=%d post_low=%d post_range=%d\n", label, idx, preState, preLow, preRange, bin, models[idx].DebugPackedState(), postLow, postRange)
+			if traceTag != "" {
+				fmt.Fprintf(os.Stderr, "GOSYN part=%s %s idx=%d state=%d low=%d range=%d bin=%d post_state=%d post_low=%d post_range=%d\n", label, traceTag, idx, preState, preLow, preRange, bin, models[idx].DebugPackedState(), postLow, postRange)
+			} else {
+				fmt.Fprintf(os.Stderr, "GOSYN part=%s idx=%d state=%d low=%d range=%d bin=%d post_state=%d post_low=%d post_range=%d\n", label, idx, preState, preLow, preRange, bin, models[idx].DebugPackedState(), postLow, postRange)
+			}
 		}
 		return bin
 	}
@@ -590,7 +602,7 @@ func decodeCABACIntraMBWithParams(dec *cabac.CABACDecoder, models []cabac.CABACC
 
 	// Intra 4x4 / 8x8 prediction modes (I_NxN only)
 	if mb.MBType == 0 {
-		if enableCABACI8x8Transform && transform8x8Mode && decodeCABACTransform8x8Flag(dec, models, transform8x8Ctx) {
+		if enableCABACI8x8Transform && transform8x8Mode && decodeCABACTransform8x8Flag(dec, models, transform8x8Ctx, traceTag) {
 			mb.Use8x8Transform = true
 			var localModes [4]int8
 			for i := 0; i < 4; i++ {
@@ -662,7 +674,11 @@ func decodeCABACIntraMBWithParams(dec *cabac.CABACDecoder, models []cabac.CABACC
 
 	// CBP for I_NxN (I_16x16 CBP is in mb_type already)
 	if mb.MBType == 0 {
-		mb.CodedBlockPattern = syntax.DecodeCABACCBP(dec, models, leftCBP, topCBP)
+		if os.Getenv("GO264_CABAC_CBP_TRACE") != "" {
+			mb.CodedBlockPattern = syntax.DecodeCABACCBPWithTrace(dec, models, leftCBP, topCBP, traceTag)
+		} else {
+			mb.CodedBlockPattern = syntax.DecodeCABACCBP(dec, models, leftCBP, topCBP)
+		}
 	}
 
 	// QP delta
@@ -874,7 +890,7 @@ func decodeCABACBidiMB(dec *cabac.CABACDecoder, models []cabac.CABACCtx,
 				leftChromaPred, topChromaPred,
 				transform8x8Mode, transform8x8Ctx,
 				leftEdge8x8, topEdge8x8,
-				32, false)
+				32, false, fmt.Sprintf("mb=%04d poc=%d", mbY*stride4/4+mbX, currentPOC))
 			return nil, intra, false
 		case bits == 14:
 			mb.MBType = 11 // B_L1_L0_8x16
