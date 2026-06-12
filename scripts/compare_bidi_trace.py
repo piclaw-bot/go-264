@@ -265,7 +265,13 @@ def main() -> None:
             ff_8x8_like = any((int(v) & 64) != 0 for v in f['sub'])
             go_8x8_like = int(g['mbtype']) == 22
             if (ff_8x8_like or go_8x8_like) and normalize_sub_flags(f['sub']) != normalize_sub_flags(g['sub']):
-                fields.append('sub')
+                # Some FF rows expose concrete sub-partition shape flags where
+                # Go's post-motion trace only exposes Direct-style representative
+                # cache flags. If the used-list representatives and per-sub list0
+                # representatives already agree, this is trace presentation, not
+                # a motion mismatch.
+                if f['ref_mv'] != g['ref_mv'] or f['p1'] != g['p1'] or f['submv'] != g['submv']:
+                    fields.append('sub')
             # submv fields trace list0 representatives. Ignore direct-looking
             # sub flags when the resolved MB/partition does not use list0;
             # FFmpeg can leave direct sub flags in L1-only rows where list0
