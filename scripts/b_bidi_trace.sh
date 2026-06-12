@@ -421,7 +421,6 @@ fi
 [[ -n "${GO264_FFMPEG_CBP_TRACE:-}" ]] && ff_env+=(GO264_FFMPEG_CBP_TRACE=1)
 [[ -n "${GO264_FFMPEG_MOTSAVE_TRACE:-}" || -n "${GO264_MOTION_SAVE_DETAIL:-}" ]] && ff_env+=(GO264_FFMPEG_MOTSAVE_TRACE=1)
 [[ -n "${GO264_P_MVP_CAND_TRACE:-}" ]] && ff_env+=(GO264_FFMPEG_MVP_TRACE=1)
-[[ -n "${GO264_FFMPEG_SYNTAX_TRACE:-}" ]] && ff_env+=(GO264_FFMPEG_SYNTAX_TRACE=1)
 [[ -n "${GO264_P_REF_TRACE:-}" || -n "${GO264_B_REF_TRACE:-}" ]] && ff_env+=(GO264_FFMPEG_REF_TRACE=1)
 [[ -n "${GO264_B_STATE_TRACE:-}" ]] && ff_env+=(GO264_FFMPEG_B_STATE_TRACE=1)
 env "${ff_env[@]}" "$FFMPEG" -y -threads 1 -hide_banner \
