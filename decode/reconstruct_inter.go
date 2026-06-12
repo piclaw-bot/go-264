@@ -218,37 +218,60 @@ func (d *Decoder) refBidiL1(refIdx int8, currentPOC int) *frame.Frame {
 	if d == nil || d.DPB == nil || len(d.DPB.Frames) == 0 {
 		return nil
 	}
-	// Build ordered L1 list per H.264 §8.2.4.2.3:
-	// 1. Short-term refs with POC > currentPOC, sorted by ascending POC
-	// 2. Short-term refs with POC <= currentPOC, sorted by descending POC
-	var futureFrames, pastFrames []*frame.Frame
+	type orderedRef struct {
+		fr  *frame.Frame
+		poc int
+	}
+	// Build ordered L1 list per H.264 §8.2.4.2.3. Around POC wrap, compact low
+	// POC values after a high current POC are future pictures in the next cycle;
+	// rank by effective unwrapped POC and prefer the newest frame_num for duplicate
+	// compact POCs so colocated Direct uses the current GOP's future reference.
+	var futureRefs, pastRefs []orderedRef
+	maxPOC := d.maxPOCLSB
+	wrapCurrent := maxPOC > 0 && currentPOC > (3*maxPOC)/4
 	for _, fr := range d.DPB.Frames {
-		if fr != nil && fr.IsRef {
-			if fr.POC > currentPOC {
-				futureFrames = append(futureFrames, fr)
-			} else {
-				pastFrames = append(pastFrames, fr)
+		if fr == nil || !fr.IsRef {
+			continue
+		}
+		effPOC := fr.POC
+		if wrapCurrent && fr.POC < maxPOC/4 {
+			effPOC += maxPOC
+		}
+		if effPOC > currentPOC {
+			futureRefs = append(futureRefs, orderedRef{fr: fr, poc: effPOC})
+		} else {
+			pastRefs = append(pastRefs, orderedRef{fr: fr, poc: effPOC})
+		}
+	}
+	for i := 0; i < len(futureRefs)-1; i++ {
+		for j := i + 1; j < len(futureRefs); j++ {
+			if futureRefs[j].poc < futureRefs[i].poc || (futureRefs[j].poc == futureRefs[i].poc && futureRefs[j].fr.FrameNum > futureRefs[i].fr.FrameNum) {
+				futureRefs[i], futureRefs[j] = futureRefs[j], futureRefs[i]
 			}
 		}
 	}
-	// Sort future by ascending POC.
-	for i := 0; i < len(futureFrames)-1; i++ {
-		for j := i + 1; j < len(futureFrames); j++ {
-			if futureFrames[j].POC < futureFrames[i].POC {
-				futureFrames[i], futureFrames[j] = futureFrames[j], futureFrames[i]
+	for i := 0; i < len(pastRefs)-1; i++ {
+		for j := i + 1; j < len(pastRefs); j++ {
+			if pastRefs[j].poc > pastRefs[i].poc || (pastRefs[j].poc == pastRefs[i].poc && pastRefs[j].fr.FrameNum > pastRefs[i].fr.FrameNum) {
+				pastRefs[i], pastRefs[j] = pastRefs[j], pastRefs[i]
 			}
 		}
 	}
-	// Sort past by descending POC.
-	for i := 0; i < len(pastFrames)-1; i++ {
-		for j := i + 1; j < len(pastFrames); j++ {
-			if pastFrames[j].POC > pastFrames[i].POC {
-				pastFrames[i], pastFrames[j] = pastFrames[j], pastFrames[i]
+	l1Refs := append(futureRefs, pastRefs...)
+	if os.Getenv("GO264_REF_LIST_TRACE") != "" {
+		fmt.Fprintf(os.Stderr, "GOBL1LIST curpoc=%d maxpoc=%d wrap=%t", currentPOC, maxPOC, wrapCurrent)
+		for i, r := range l1Refs {
+			if i >= 12 {
+				break
 			}
+			fmt.Fprintf(os.Stderr, " idx%d=poc%d/eff%d/fn%d", i, r.fr.POC, r.poc, r.fr.FrameNum)
 		}
+		fmt.Fprintln(os.Stderr)
 	}
-	// Concatenate: future first, then past.
-	l1 := append(futureFrames, pastFrames...)
+	l1 := make([]*frame.Frame, 0, len(l1Refs))
+	for _, r := range l1Refs {
+		l1 = append(l1, r.fr)
+	}
 	idx := int(refIdx)
 	if idx < 0 {
 		idx = 0

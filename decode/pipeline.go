@@ -74,6 +74,7 @@ type Decoder struct {
 	lumaWeightDenom       uint32
 	lumaWeightL0          [32]int32
 	lumaOffsetL0          [32]int32
+	maxPOCLSB             int
 }
 
 // DecodedFrame is an alias for frame.Frame for CLI convenience.
@@ -217,6 +218,9 @@ func (d *Decoder) decodeSlice(unit nal.Unit) (resultFrame *frame.Frame, resultEr
 	f.IsRef = unit.RefIDC > 0
 	f.FrameNum = int(hdr.FrameNum)
 	f.POC = int(hdr.PicOrderCntLsb)
+	if sps.Log2MaxPocLsb > 0 && sps.Log2MaxPocLsb < 31 {
+		d.maxPOCLSB = 1 << sps.Log2MaxPocLsb
+	}
 
 	mbWidth := int(sps.PicWidthInMbs)
 	mbHeight := int(sps.PicHeightInMapUnits)
